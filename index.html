@@ -3533,14 +3533,14 @@ function resumeClaim(ctx){
 }
 async function captchaResume(){
   let p=null; try{ p=JSON.parse(localStorage.getItem(CAP_KEY)||"null"); }catch(e){}
-  const q=new URLSearchParams(location.search).get("captcha");
+  const qs=new URLSearchParams(location.search), q=qs.get("captcha"), ck=qs.get("ck")||"";
   if(q){ try{ history.replaceState(null,"",location.pathname); }catch(e){} }
   if(!p||!p.sub) return;
   if(Date.now()-p.at>30*60000||p.day!==bogota().key){ try{ localStorage.removeItem(CAP_KEY); }catch(e){} return; }
   if(!q) return;
   toast(t("capChecking"),"ad");
   for(let i=0;i<8;i++){
-    try{ const r=await fetch("/.netlify/functions/captcha?a=status&sub_id="+encodeURIComponent(p.sub),{cache:"no-store"}); const j=await r.json();
+    try{ const r=await fetch("/.netlify/functions/captcha?a=status&sub_id="+encodeURIComponent(p.sub)+"&ck="+encodeURIComponent(ck),{cache:"no-store"}); const j=await r.json();
       if(j.ok){ try{ localStorage.removeItem(CAP_KEY); }catch(e){} resumeClaim(p.ctx); return; }
       if(j.status==="used"||j.status==="unknown"){ break; } }catch(e){}
     await new Promise(r=>setTimeout(r,2000));
