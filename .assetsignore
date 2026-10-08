@@ -1,0 +1,8 @@
+.git
+node_modules
+netlify
+functions
+worker.js
+wrangler.jsonc
+package.json
+netlify.toml
