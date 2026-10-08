@@ -3642,11 +3642,12 @@ function chestAd(n,magic,title,key){
 /* ---------- AdsLab CAPTCHA (server: /api/captcha-*) ---------- */
 const CAPTCHA_ON=()=>!!window.DIAMANTINA_CAPTCHA;
 const CAP_KEY="diamantina-captcha-pending";
+const CAP_API=/workers\.dev$/.test(location.hostname)?"/api/captcha":"https://diamantina.julioduluc07.workers.dev/api/captcha";
 async function captchaGate(ctx,run,btn){
   if(!CAPTCHA_ON()||!ctx) return run();
   if(btn){ btn.disabled=true; btn.textContent=t("capOpening"); }
   try{
-    const r=await fetch("/api/captcha?a=init",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({uid:UID||"anon"})});
+    const r=await fetch(CAP_API+"?a=init",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({uid:UID||"anon",origin:location.origin})});
     let j={}; try{ j=await r.json(); }catch(e){ throw new Error("HTTP "+r.status); } if(!j.ok||!j.token) throw new Error(j.error||("HTTP "+r.status));
     try{ localStorage.setItem(CAP_KEY,JSON.stringify({sub:j.sub_id,ctx,at:Date.now(),day:bogota().key})); }catch(e){}
     const f=document.createElement("form"); f.method="POST"; f.action=j.solve_url||"https://adslab.me/captcha";
@@ -3669,7 +3670,7 @@ async function captchaResume(){
   if(!q) return;
   toast(t("capChecking"),"ad");
   for(let i=0;i<8;i++){
-    try{ const r=await fetch("/api/captcha?a=status&sub_id="+encodeURIComponent(p.sub)+"&ck="+encodeURIComponent(ck),{cache:"no-store"}); const j=await r.json();
+    try{ const r=await fetch(CAP_API+"?a=status&sub_id="+encodeURIComponent(p.sub)+"&ck="+encodeURIComponent(ck),{cache:"no-store"}); const j=await r.json();
       if(j.ok){ try{ localStorage.removeItem(CAP_KEY); }catch(e){} resumeClaim(p.ctx); return; }
       if(j.status==="used"||j.status==="unknown"){ break; } }catch(e){}
     await new Promise(r=>setTimeout(r,2000));
