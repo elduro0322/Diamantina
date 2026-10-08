@@ -2799,7 +2799,7 @@ function renderComp(){
   const rg=$("#refGo"); if(rg) rg.onclick=async()=>{ const c=($("#refIn").value||"").trim().toUpperCase(); if(c.length<4) return; if(await applyRefCode(c,false)) loadComp(); else renderComp(); };
 }
 // Public address of the game. Change it when the game moves to its own domain.
-let GAME_URL="https://claude.ai/artifact/UCCFnRhv4R5ZLgmYcPUj9d";
+let GAME_URL="https://diamantinagame.xyz/";
 const refLink=()=>`${GAME_URL}?ref=${myCode()}`;
 function readRefParam(){
   try{
@@ -2855,7 +2855,7 @@ function renderLevel(){
   el.innerHTML=`<div class="lvbadge"><small>LV</small><b>${v.L}</b></div><div class="lvbody"><div class="lvtop"><b>${fmt(t("levelLabel"),{n:v.L})}</b><span>${v.pct?fmt(t("lvlLine"),{p:v.pct}):t("levelStart")}</span></div>
     <div class="lvprog"><i style="width:${prog}%"></i></div><small>${v.next?fmt(t("levelNext"),{a:nf(v.claims),b:nf(v.next),n:v.L+1,p:v.nextPct}):t("levelMax")}</small></div>`;
 }
-function earn(u){ u=u*coinRate(); const base=u/Math.max(1,mult()); u=Math.round(u+base*(gearPct()+lvlPct()+premPct())/100); /* VIP multiplies only the ad; hero/gear/level/NFT bonuses add on the base ad */ addBal(u); refCommission(u); }
+function earn(u){ u=u*coinRate(); const base=u/Math.max(1,mult()); const bonus=Math.round(base*(gearPct()+lvlPct()+premPct())/100*10000)/10000; /* VIP multiplies only the ad; hero/gear/level/NFT bonuses add on the base ad */ addBal(u+bonus); refCommission(u+bonus); return {main:u,bonus,pct:gearPct()+lvlPct()+premPct()}; }
 async function refCommission(u){
   if(!S.refBy||!(DB&&UID)) return;
   S.refOwed=(S.refOwed||0)+u*REF_PCT/100; save();
@@ -2922,7 +2922,7 @@ let CONTACT="Telegram: t.me/diamantinagame";
 function showTerms(){ const c=CONTACT?escapeHtml(CONTACT):t("termsNoContact"); showModal(t("termsTitle"),`<div class="terms">${t("termsHTML").replace("{c}",c)}</div>`,[[t("close"),"go",closeModal]]); }
 function applyCfg(c){
   if(!c) return;
-  if(c.gameUrl) GAME_URL=c.gameUrl.replace(/[?#].*$/,"");
+  if(c.gameUrl&&!/claude\.ai|netlify|workers\.dev/.test(c.gameUrl)) GAME_URL=c.gameUrl.replace(/[?#].*$/,"");
   if(c.fp) OWNER_PAY.faucetpay=c.fp; if(c.cw) OWNER_PAY.cwallet=c.cw;
   ["BTC","USDT","ETH","BNB","LTC","SOL"].forEach(k=>{ if(typeof c[k]==="string"&&c[k].trim()&&OWNER_WALLETS[k]) OWNER_WALLETS[k].addr=c[k].trim(); });
   if(typeof c.contact==="string"&&c.contact.trim()) CONTACT=c.contact.trim();
@@ -3431,7 +3431,7 @@ async function logout(){ try{ await cloudSave(true); }catch(e){} try{ await FA()
 function renderAcc(){ const b=$("#accBtn"); if(!b) return; b.hidden=!FA(); b.classList.toggle("on",isReg()); b.setAttribute("aria-label",isReg()?au("acct"):au("in")); }
 let csT=null;
 async function cloudSave(now){
-  if(!(DB&&UID)||!isReg()) return;
+  try{ if(!(DB&&UID)||!isReg()) return; }catch(e){ return; }
   const run=async()=>{ try{ await DB.doc(SAVE_PATH()).set({s:JSON.stringify(S),at:Date.now()}); }catch(e){} };
   if(now){ clearTimeout(csT); csT=null; return run(); }
   if(csT) return; csT=setTimeout(()=>{ csT=null; run(); },20000);
@@ -3566,8 +3566,8 @@ function openChest(n,magic){
     const st=$("#stage"); st.classList.add("shake");
     setTimeout(()=>{st.classList.remove("shake");st.classList.add("open");},450);
     let info="";
-    const b0=S.bal||0; earn((AD_UNITS+(c.units||0))*mult()); renderText();
-    const got=(S.bal||0)-b0, pr=LIVE[coin.t], gotTxt=pr?`${nf(got/1e5/pr,6)} ${coin.t}`:`${usd(got)} ${t("inCoin")} ${coin.t}`;
+    const er=earn((AD_UNITS+(c.units||0))*mult()); renderText();
+    const pr=LIVE[coin.t], cTxt=u=>pr?`${nf(u/1e5/pr,6)} ${coin.t}`:`${usd(u)} ${t("inCoin")} ${coin.t}`, gotTxt=cTxt(er.main)+(er.bonus>0?` + Bonus ${cTxt(er.bonus)} (+${nf(er.pct,3)}%)`:"");
     const gotLine=`<span class="gotcoin"><img src="${coin.img}" alt="">+${gotTxt}</span>`;
     const adLine=`<small>${ic("ad",18)} ${t("adDone")}${vipTier()?" · VIP ×"+mult():""}${gearPct()?" · "+fmt(t("bonusLine"),{p:gearPct()}):""}${lvlPct()?" · "+fmt(t("lvlLine"),{p:lvlPct()}):""}</small>`;
     if(c.nft){
@@ -3640,7 +3640,7 @@ function adModal(title,key,extra,onClaim,ctx){
 function cryptoTxt(units){ const c=coinBy(S.payCoin), pr=LIVE[c.t]; return pr?`${nf(units/1e5/pr,6)} ${c.t}`:`${usd(units)} ${t("inCoin")} ${c.t}`; }
 const adUnits=()=>Math.round(AD_UNITS*coinRate()*(mult()+(gearPct()+lvlPct()+premPct())/100));
 const cryptoLine=()=>{ const c=coinBy(S.payCoin); return `<span class="gotcoin"><img src="${c.img}" alt="">+${cryptoTxt(adUnits())}</span>`; };
-function payAd(){ const b0=S.bal||0; earn(AD_UNITS*mult()); return cryptoTxt((S.bal||0)-b0); }
+function payAd(){ const r=earn(AD_UNITS*mult()); return cryptoTxt(r.main)+(r.bonus>0?` + Bonus ${cryptoTxt(r.bonus)} (+${nf(r.pct,3)}%)`:""); }
 function chestAd(n,magic,title,key){
   const c=magic?BW[bwId].chests[n]:CHESTS[n];
   adModal(title,key,`<div class="chestpeek">${chestSVG(c.tier)}<span>${t("chestAdHint")}</span></div>`,()=>{ closeModal(); setTimeout(()=>openChest(n,magic),150); },{kind:"chest",n,magic:!!magic,bw:magic?bwId:null});
