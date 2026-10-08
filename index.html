@@ -3338,7 +3338,7 @@ const startDB=(async()=>{
     if(!window.claude||!window.claude.use){ loadMarket(); return; }
     const [db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")]);
     if(!db||!user){ loadMarket(); return; }
-    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; OWNER=await user.isOwner(); loadCfg(); loadAds(); setTimeout(beat,4000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
+    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); loadCfg(); loadAds(); setTimeout(beat,4000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
     if(UID){ // resend requests saved only on the phone
       for(const p of (S.payouts||[]).filter(p=>!p.synced)){
         try{await DB.doc(`payouts/${UID}`).set({updatedAt:new Date().toISOString(),last:p.date});
@@ -3385,8 +3385,8 @@ async function doAuth(mode){
   try{
     if(mode==="reg"){
       const u=a.currentUser;
-      if(u&&u.isAnonymous){ await u.linkWithCredential(firebase.auth.EmailAuthProvider.credential(em,pw)); S.email=em; save(); await cloudSave(true); closeModal(); renderAcc(); toast(au("welcome"),"trophy"); }
-      else { await a.createUserWithEmailAndPassword(em,pw); S.email=em; save(); location.reload(); }
+      if(u&&u.isAnonymous){ await u.linkWithCredential(firebase.auth.EmailAuthProvider.credential(em,pw)); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; save(); await cloudSave(true); closeModal(); renderAcc(); toast(au("welcome"),"trophy"); }
+      else { await a.createUserWithEmailAndPassword(em,pw); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; save(); location.reload(); }
     } else {
       await a.signInWithEmailAndPassword(em,pw);
       let d=null; try{ d=await firebase.firestore().doc("upgrades/"+a.currentUser.uid+"/save/state").get(); }catch(e){}
@@ -3401,8 +3401,11 @@ async function forgotPw(){ const a=FA(), em=($("#auEmail").value||"").trim(), er
   try{ await a.sendPasswordResetEmail(em); err.textContent=au("sent"); }catch(e){ err.textContent=authErr(e); } }
 function openAcct(){
   if(!isReg()) return openAuth("in");
-  const u=FA().currentUser;
-  showModal(au("acct"),`<p class="hint">${au("logged")}</p><p class="amt" style="font-size:16px;word-break:break-all">${escapeHtml(u.email||"")}</p>`,[[au("logout"),"no",logout],[t("close"),"go",closeModal]]);
+  const u=FA().currentUser, es=S.lang==="es";
+  const vf=u.emailVerified||!(u.providerData||[]).some(p=>p.providerId==="password");
+  showModal(au("acct"),`<p class="hint">${au("logged")}</p><p class="amt" style="font-size:16px;word-break:break-all">${escapeHtml(u.email||"")}</p>
+    <p class="hint" id="vfTxt">${vf?(es?"✅ Correo verificado":"✅ Email verified"):(es?"⚠️ Correo sin verificar. Revisa tu correo (también Spam) y toca el enlace.":"⚠️ Email not verified. Check your inbox (and Spam) and tap the link.")}</p>`,
+    (vf?[]:[[es?"Reenviar correo":"Resend email","go",async()=>{ try{ await u.sendEmailVerification(); $("#vfTxt").textContent=es?"📩 Enviado. Abre el enlace del correo y luego vuelve a abrir el juego.":"📩 Sent. Open the link, then reopen the game."; }catch(e){ $("#vfTxt").textContent=authErr(e); } }]]).concat([[au("logout"),"no",logout],[t("close"),vf?"go":"no",closeModal]]));
 }
 async function logout(){ try{ await cloudSave(true); }catch(e){} try{ await FA().signOut(); }catch(e){}
   try{ localStorage.removeItem(KEY); localStorage.removeItem(CAP_KEY); }catch(e){} location.href=location.pathname; }
