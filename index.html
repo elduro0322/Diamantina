@@ -3030,7 +3030,7 @@ let bannerAt=0;
 function renderSponsorBanner(){
   const el=$("#sponsorBox"); if(!el) return;
   if(Date.now()-bannerAt<30000&&el.innerHTML) return;
-  const a=pickAd(); if(!a){ el.innerHTML=ownBannerHTML(); bannerAt=Date.now(); return; }
+  const a=pickAd(); if(!a){ el.innerHTML=OWN_BANNERS.some(b=>b&&b.on!==false&&(b.img||b.frame))?ownBannerHTML():""; bannerAt=Date.now(); return; }
   bannerAt=Date.now(); el.innerHTML=sponsorCard(a); bindSponsor(el); countAdView(a);
 }
 function adSlotHTML(){ const a=pickAd(); if(!a) return {html:`<div class="adslot">${ic("ad",56)}${t("adSoon")}</div>`,ad:null}; return {html:sponsorCard(a,"inslot"),ad:a}; }
