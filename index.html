@@ -2922,7 +2922,7 @@ let CONTACT="Telegram: t.me/diamantinagame";
 function showTerms(){ const c=CONTACT?escapeHtml(CONTACT):t("termsNoContact"); showModal(t("termsTitle"),`<div class="terms">${t("termsHTML").replace("{c}",c)}</div>`,[[t("close"),"go",closeModal]]); }
 function applyCfg(c){
   if(!c) return;
-  if(c.gameUrl&&!/claude\.ai|netlify|workers\.dev/.test(c.gameUrl)) GAME_URL=c.gameUrl.replace(/[?#].*$/,"");
+  if(c.gameUrl&&/^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+\/?$/i.test(c.gameUrl.trim())&&!/claude\.ai|netlify|workers\.dev/.test(c.gameUrl)) GAME_URL=c.gameUrl.trim().replace(/\/?$/,"/");
   if(c.fp) OWNER_PAY.faucetpay=c.fp; if(c.cw) OWNER_PAY.cwallet=c.cw;
   ["BTC","USDT","ETH","BNB","LTC","SOL"].forEach(k=>{ if(typeof c[k]==="string"&&c[k].trim()&&OWNER_WALLETS[k]) OWNER_WALLETS[k].addr=c[k].trim(); });
   if(typeof c.contact==="string"&&c.contact.trim()) CONTACT=c.contact.trim();
