@@ -2057,6 +2057,7 @@ const KEY="diamantina-faucet-v1";
 let S = {lang:"es",coins:0,hero:"princess",done:0,owned:[],nfts:[]};
 try{ const raw=localStorage.getItem(KEY); if(raw){ S={...S,...JSON.parse(raw)}; if(S.joinedAt===undefined) S.joinedAt=0; } else { S.joinedAt=Date.now(); let nl=(navigator.language||"es").slice(0,2).toLowerCase(); if(nl==="id"||nl==="ms") nl="ind"; if(LANGS.some(l=>l[0]===nl)) S.lang=nl; } }catch(e){}
 if(!LANGS.some(l=>l[0]===S.lang)) S.lang="es";
+if(!S.payCoin) S.payCoin="LTC";
 let viewDay=null, sceneDay=null;
 function syncDay(){const b=bogota(); if(S.doneDate!==b.key){S.done=0;S.done2=0;S.bwp=null;S.doneDate=b.key;magicMode=false;save();} return b;}
 function save(){ S._at=Date.now(); try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} if(typeof cloudSave==="function") cloudSave(); }
@@ -3237,7 +3238,7 @@ const coinBy=tk=>PAY.coins.find(c=>c.t===(tk==="GEM"?"TON":tk==="ENA"?"APT":tk))
 const METHODS={faucetpay:{name:"FaucetPay",img:PAY.fp,hint:"fpHint",ph:"fpPh"},cwallet:{name:"Cwallet",img:PAY.cw,hint:"cwHint",ph:"cwPh"}};
 function validAcct(m,v){v=v.trim(); if(m==="cwallet") return /^\d{5,}$/.test(v)||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); return v.length>=6 && !/\s/.test(v);}
 function renderPay(){
-  if(!S.payCoin) S.payCoin="BTC"; if(S.payCoin==="GEM") S.payCoin="TON"; if(S.payCoin==="ENA") S.payCoin="APT"; if(S.hold&&S.hold.ENA){ S.hold.APT=(S.hold.APT||0)+S.hold.ENA; delete S.hold.ENA; } if(!S.payMethod) S.payMethod="faucetpay"; if(!S.payouts) S.payouts=[];
+  if(!S.payCoin) S.payCoin="LTC"; if(S.payCoin==="GEM") S.payCoin="TON"; if(S.payCoin==="ENA") S.payCoin="APT"; if(S.hold&&S.hold.ENA){ S.hold.APT=(S.hold.APT||0)+S.hold.ENA; delete S.hold.ENA; } if(!S.payMethod) S.payMethod="faucetpay"; if(!S.payouts) S.payouts=[];
   const c=coinBy(S.payCoin), m=METHODS[S.payMethod], key=bogota().key, done=Math.min(S.done,20);
   const already=S.payouts.some(p=>p.date===key&&p.status!=="refunded");
   $("#payProg").style.width=(done/20*100)+"%";
