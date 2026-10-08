@@ -2930,11 +2930,12 @@ async function loadCfg(){ if(!DB) return; try{ const d=await DB.doc("config/main
   try{ const a=await DB.doc("config/ads").get(); if(a.exists) applyAdsCfg(a.data()); }catch(e){} }
 let OWN_BANNERS=[];
 function applyAdsCfg(d){ if(d&&Array.isArray(d.links)&&d.links.length) FAUCETS=d.links.filter(x=>x&&/^https?:\/\//.test(x[1])); if(!FAUCETS.length) FAUCETS=FAUCETS_DEFAULT.slice(); OWN_BANNERS=(d&&Array.isArray(d.banners))?d.banners:[]; }
-const liveBanners=()=>OWN_BANNERS.filter(b=>b&&b.on!==false&&(b.img||b.frame));
+const DEFAULT_BANNERS=[{frame:'<iframe src="https://1pop.online/ad/banner?zone=ZONE_3E08F8D3FFB3687A&size=300x250" width="300" height="250"></iframe>',on:true}];
+const liveBanners=()=>{ const L=OWN_BANNERS.filter(b=>b&&b.on!==false&&(b.img||b.frame)); return L.length?L:DEFAULT_BANNERS; };
 function parseFrame(code){ code=(code||"").trim(); if(!code) return null; const m=code.match(/src\s*=\s*["']?((?:https?:)?\/\/[^"'\s>]+)/i)||code.match(/^((?:https?:)?\/\/\S+)$/i); if(!m) return null;
   let src=m[1]; if(src.startsWith("//")) src="https:"+src; if(!/^https:\/\//.test(src)) return null;
   const w=+((code.match(/width\s*[=:]\s*["']?(\d+)/i)||[])[1]||0)||300, hh=+((code.match(/height\s*[=:]\s*["']?(\d+)/i)||[])[1]||0)||250; return {src,w:Math.min(w,970),h:Math.min(hh,600)}; }
-const frameHTML=f=>`<div class="ownframe"><iframe src="${escapeHtml(f.src)}" width="${f.w}" height="${f.h}" style="width:100%;max-width:${f.w}px;height:${f.h}px" loading="lazy" scrolling="no" referrerpolicy="no-referrer-when-downgrade" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="ad"></iframe></div>`;
+const frameHTML=f=>`<div class="ownframe"><iframe src="${escapeHtml(f.src)}" width="${f.w}" height="${f.h}" style="width:100%;max-width:${f.w}px;height:${f.h}px" loading="lazy" scrolling="no" frameborder="0" title="ad"></iframe></div>`;
 function ownBannerHTML(){ const L=liveBanners(); if(!L.length) return ""; const b=L[Math.floor(Math.random()*L.length)];
   if(b.frame){ const f=parseFrame(b.frame); if(f) return frameHTML(f); }
   return b.url?`<a class="ownbanner" href="${escapeHtml(b.url)}" target="_blank" rel="noopener noreferrer"><img src="${b.img}" alt=""></a>`:`<div class="ownbanner"><img src="${b.img}" alt=""></div>`; }
@@ -3358,6 +3359,7 @@ const AU_T={
 const au=k=>(AU_T[S.lang]||AU_T.en)[k];
 const FA=()=>{ try{ return window.firebase&&firebase.apps&&firebase.apps.length?firebase.auth():null; }catch(e){ return null; } };
 const isReg=()=>{ const a=FA(), u=a&&a.currentUser; return !!(u&&!u.isAnonymous); };
+const OWNER_HINT=/[?&]owner\b/.test(location.search);
 const SAVE_PATH=()=>"upgrades/"+UID+"/save/state";
 function authErr(e){ const c=(e&&e.code)||"";
   if(/email-already-in-use|credential-already-in-use/.test(c)) return au("inUse");
@@ -3399,12 +3401,22 @@ async function doAuth(mode){
 async function forgotPw(){ const a=FA(), em=($("#auEmail").value||"").trim(), err=$("#auErr");
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ err.textContent=au("needEmail"); return; }
   try{ await a.sendPasswordResetEmail(em); err.textContent=au("sent"); }catch(e){ err.textContent=authErr(e); } }
+async function ownerProbe(){
+  const u=FA()&&FA().currentUser; if(!(DB&&u&&!u.isAnonymous)) return {ok:false,why:"login"};
+  try{ await u.reload(); await FA().currentUser.getIdToken(true); }catch(e){}
+  const cu=FA().currentUser; if(!cu.emailVerified) return {ok:false,why:"verify"};
+  try{ await DB.doc("prizes/_owner_check").get(); OWNER=true; $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); return {ok:true}; }
+  catch(e){ return {ok:false,why:"rules"}; }
+}
 function openAcct(){
   if(!isReg()) return openAuth("in");
+  setTimeout(async()=>{ const el=$("#ownTxt"); if(!el) return; const r=await ownerProbe(); const es=S.lang==="es";
+    if(r.ok){ el.innerHTML=(es?"✅ Eres el dueño. ":"✅ You are the owner. ")+`<button class="btn go" id="goAdm" type="button" style="margin-top:8px;width:100%">⚙️ ${es?"Abrir panel":"Open panel"}</button>`; const g=$("#goAdm"); if(g) g.onclick=()=>{ closeModal(); goView("admin"); }; }
+    else if(OWNER_HINT) el.textContent=r.why==="verify"?"❌ Panel: falta verificar el correo.":r.why==="rules"?"❌ Panel: este correo no es el que está en las reglas de Firebase.":"❌ Panel: inicia sesión."; },0);
   const u=FA().currentUser, es=S.lang==="es";
   const vf=u.emailVerified||!(u.providerData||[]).some(p=>p.providerId==="password");
   showModal(au("acct"),`<p class="hint">${au("logged")}</p><p class="amt" style="font-size:16px;word-break:break-all">${escapeHtml(u.email||"")}</p>
-    <p class="hint" id="vfTxt">${vf?(es?"✅ Correo verificado":"✅ Email verified"):(es?"⚠️ Correo sin verificar. Revisa tu correo (también Spam) y toca el enlace.":"⚠️ Email not verified. Check your inbox (and Spam) and tap the link.")}</p>`,
+    <p class="hint" id="ownTxt"></p><p class="hint" id="vfTxt">${vf?(es?"✅ Correo verificado":"✅ Email verified"):(es?"⚠️ Correo sin verificar. Revisa tu correo (también Spam) y toca el enlace.":"⚠️ Email not verified. Check your inbox (and Spam) and tap the link.")}</p>`,
     (vf?[]:[[es?"Reenviar correo":"Resend email","go",async()=>{ try{ await u.sendEmailVerification(); $("#vfTxt").textContent=es?"📩 Enviado. Abre el enlace del correo y luego vuelve a abrir el juego.":"📩 Sent. Open the link, then reopen the game."; }catch(e){ $("#vfTxt").textContent=authErr(e); } }]]).concat([[au("logout"),"no",logout],[t("close"),vf?"go":"no",closeModal]]));
 }
 async function logout(){ try{ await cloudSave(true); }catch(e){} try{ await FA().signOut(); }catch(e){}
