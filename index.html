@@ -583,6 +583,7 @@ nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justif
 nav.bottom button{flex:1;max-width:150px;border:0;background:transparent;color:#C9D6FF;border-radius:14px;padding:6px 4px;
   font-weight:900;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px}
 nav.bottom button .ic{width:28px;height:28px}
+nav.bottom{gap:2px!important;padding-left:4px!important;padding-right:4px!important}nav.bottom button{min-width:0;padding:6px 1px!important}nav.bottom button b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:9.5px;letter-spacing:-.2px}nav.bottom button .ic{width:25px!important;height:25px!important}@media (min-width:600px){nav.bottom button b{font-size:11px}nav.bottom button .ic{width:28px!important;height:28px!important}}
 nav.bottom button:not(.on) .ic{filter:saturate(.75) brightness(.95)}
 nav.bottom button.on{background:rgba(255,201,60,.18);color:var(--gold)}
 
@@ -1075,6 +1076,8 @@ main{overscroll-behavior-y:contain}
   <button data-v="shop"><svg class="ic" aria-hidden="true"><use href="#i-shop"/></svg><b data-t="navShop"></b></button>
   <button data-v="comp"><svg class="ic" aria-hidden="true"><use href="#i-trophy"/></svg><b data-t="navRank"></b></button>
   <button data-v="bag"><svg class="ic" aria-hidden="true"><use href="#i-bag"/></svg><b data-t="navBag"></b></button>
+  <button data-v="shop" data-sm="stake"><svg class="ic" aria-hidden="true"><use href="#i-stake"/></svg><b data-t="stakeTab"></b></button>
+  <button data-v="shop" data-sm="swap"><svg class="ic" aria-hidden="true"><use href="#i-swap"/></svg><b data-t="swapTab"></b></button>
   <button data-v="pay"><svg class="ic" aria-hidden="true"><use href="#i-pay"/></svg><b data-t="navPay"></b></button>
 </nav>
 
@@ -2305,7 +2308,7 @@ function renderHeroes(){
   });
 }
 let shopCat=-1, shopMode="gear";
-function renderShop(){
+function renderShop(){ if(typeof navSync==="function") setTimeout(()=>navSync(),0);
   const modes=[["keys","magic"],["ads","ad"],["dmt","dmt"],["prem","heroes"],["gear","shop"],["market","gem"],["vip","vip"],["stake","stake"],["swap","swap"]];
   $("#shopMode").innerHTML=modes.map(([m,i])=>`<button class="${shopMode===m?"on":""}" data-m="${m}" aria-pressed="${shopMode===m}">${ic(i,26)}<span>${t(m+"Tab")}</span></button>`).join("");
   $("#shopMode").querySelectorAll("button").forEach(b=>b.onclick=()=>{shopMode=b.dataset.m;renderShop();if(shopMode==="market")loadMarket();});
@@ -3927,7 +3930,7 @@ if("IntersectionObserver" in window){ new IntersectionObserver(es=>{ sceneVisibl
 document.addEventListener("visibilitychange",syncScene);
 function goView(v){
   setTimeout(syncScene,0);
-  document.querySelectorAll("nav.bottom button").forEach(x=>x.classList.toggle("on",x.dataset.v===v));
+  navSync(v);
   document.querySelectorAll(".view").forEach(el=>el.classList.toggle("on",el.id==="v-"+v));
   window.scrollTo({top:0});
   if(v==="pay"){ refreshPayouts(); renderDeposit(); collectCredits(); }
@@ -3936,7 +3939,9 @@ function goView(v){
   if(v==="bag"||(v==="shop"&&shopMode==="market")) loadMarket();
   if(v==="shop") renderShop();
 }
-document.querySelectorAll("nav.bottom button").forEach(b=>b.onclick=()=>goView(b.dataset.v));
+function navSync(v){ v=v||((document.querySelector(".view.on")||{}).id||"").slice(2); const sm=(v==="shop"&&(shopMode==="stake"||shopMode==="swap"))?shopMode:"";
+  document.querySelectorAll("nav.bottom button").forEach(x=>x.classList.toggle("on",x.dataset.v===v&&(x.dataset.sm||"")===sm)); }
+document.querySelectorAll("nav.bottom button").forEach(b=>b.onclick=()=>{ if(b.dataset.v==="shop"){ if(b.dataset.sm) shopMode=b.dataset.sm; else if(shopMode==="stake"||shopMode==="swap") shopMode="gear"; } goView(b.dataset.v); });
 $("#coinBtn").onclick=()=>{shopMode="gear";goView("shop");};
 $("#payCoinBtn").onclick=()=>goView("pay");
 $("#accBtn").onclick=openAcct;
