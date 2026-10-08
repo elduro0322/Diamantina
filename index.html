@@ -3229,7 +3229,9 @@ function coinAmount(tk){const pr=LIVE[tk]; return pr?((S.bal||0)/1e5)/pr+holdOf(
 const WITHDRAW_MIN=200;   // $0.002
 const wdUnits=()=>(S.bal||0)+(LIVE[S.payCoin]?Math.round(holdOf(S.payCoin)*LIVE[S.payCoin]*1e5):0);
 const coinRate=()=>S.payCoin==="USDT"?1:0.5;   // USDT ads pay $0.0001, other coins $0.00005
-const wdMin=()=>Math.round(WITHDRAW_MIN*coinRate());
+const COIN_MIN={BTC:0.000001};   // FaucetPay minimum per coin (in coin units)
+const coinMinUnits=()=>{ const m=COIN_MIN[S.payCoin], pr=LIVE[S.payCoin]; return m&&pr?Math.ceil(m*pr*1e5):0; };
+const wdMin=()=>Math.max(Math.round(WITHDRAW_MIN*coinRate()),coinMinUnits());
 const canWithdraw=()=>wdUnits()>=wdMin();
 const coinBy=tk=>PAY.coins.find(c=>c.t===(tk==="GEM"?"TON":tk==="ENA"?"APT":tk))||PAY.coins[0];
 const METHODS={faucetpay:{name:"FaucetPay",img:PAY.fp,hint:"fpHint",ph:"fpPh"},cwallet:{name:"Cwallet",img:PAY.cw,hint:"cwHint",ph:"cwPh"}};
@@ -3237,7 +3239,7 @@ function validAcct(m,v){v=v.trim(); if(m==="cwallet") return /^\d{5,}$/.test(v)|
 function renderPay(){
   if(!S.payCoin) S.payCoin="BTC"; if(S.payCoin==="GEM") S.payCoin="TON"; if(S.payCoin==="ENA") S.payCoin="APT"; if(S.hold&&S.hold.ENA){ S.hold.APT=(S.hold.APT||0)+S.hold.ENA; delete S.hold.ENA; } if(!S.payMethod) S.payMethod="faucetpay"; if(!S.payouts) S.payouts=[];
   const c=coinBy(S.payCoin), m=METHODS[S.payMethod], key=bogota().key, done=Math.min(S.done,20);
-  const already=S.payouts.some(p=>p.date===key);
+  const already=S.payouts.some(p=>p.date===key&&p.status!=="refunded");
   $("#payProg").style.width=(done/20*100)+"%";
   $("#payProgTxt").textContent=fmt(t("missionsDone"),{d:done});
   $("#coinGrid").innerHTML=`<button class="cbtn soon" id="dmtSoon" title="DIAMANTINA">${ic("dmt",40)}DMT<small class="px">$${DMT_PRICE.toFixed(2)}</small></button>`+PAY.coins.map(x=>`<button class="cbtn ${x.t===S.payCoin?"on":""}" data-t="${x.t}" aria-pressed="${x.t===S.payCoin}" title="${x.n}"><img src="${x.img}" alt="">${x.t}<small class="px">${LIVE[x.t]?"$"+nf(LIVE[x.t],5):"—"}</small></button>`).join("");
@@ -3255,13 +3257,13 @@ function renderPay(){
   $("#mapClaim").innerHTML=`<img src="${c.img}" alt="">${done>=20&&!already?t("requestBtn"):`${usd(S.bal||0)} · ${c.t} · ${done}/20`}`;
   $("#histList").innerHTML=S.payouts.length?S.payouts.slice().reverse().map(p=>{const pc=coinBy(p.coin);
     const eta=new Date(new Date(p.createdAt||Date.now()).getTime()+72*3600000).toLocaleString(LOC(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
-    const st=p.status==="paid"?`<span class="badge paid">${t("paid")}</span>`:(p.synced?`<span class="badge" title="${fmt(t("etaBy"),{d:eta})}">${t("pending")}<br><small style="font-weight:700;opacity:.85">${fmt(t("etaBy"),{d:eta})}</small></span>`:`<span class="badge local">${t("localOnly")}</span>`);
+    const st=p.status==="refunded"?`<span class="badge local">${S.lang==="es"?"Devuelto":"Refunded"}</span>`:p.status==="paid"?`<span class="badge paid">${t("paid")}</span>`:(p.synced?`<span class="badge" title="${fmt(t("etaBy"),{d:eta})}">${t("pending")}<br><small style="font-weight:700;opacity:.85">${fmt(t("etaBy"),{d:eta})}</small></span>`:`<span class="badge local">${t("localOnly")}</span>`);
     return `<div class="req"><img src="${pc.img}" alt=""><div class="grow">${p.date} · ${p.amountUsd?"$"+escapeHtml(p.amountUsd)+" · ":""}${pc.t} · ${METHODS[p.method].name}<br><span style="color:var(--muted)">${escapeHtml(p.account)}</span></div>${st}</div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("noHistory")}</p>`;
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function updateReqBtn(){
   const nt=$("#payTimeNote"); if(nt) nt.innerHTML=`${ic("pay",20)}<span>${t("payTime")}</span>`;
-  const key=bogota().key, done=Math.min(S.done,20), already=(S.payouts||[]).some(p=>p.date===key);
+  const key=bogota().key, done=Math.min(S.done,20), already=(S.payouts||[]).some(p=>p.date===key&&p.status!=="refunded");
   const okAcct=validAcct(S.payMethod,(S.payAcct||{})[S.payMethod]||""), btn=$("#reqBtn"), msg=$("#reqMsg");
   btn.innerHTML=`<img src="${coinBy(S.payCoin).img}" alt="">${t("requestBtn")}`;
   btn.disabled=already||done<20||!okAcct||!canWithdraw();
@@ -3273,7 +3275,7 @@ function updateReqBtn(){
 }
 async function submitPayout(){
   const key=bogota().key;
-  if(S.done<20||!canWithdraw()||(S.payouts||[]).some(p=>p.date===key)) return;
+  if(S.done<20||!canWithdraw()||(S.payouts||[]).some(p=>p.date===key&&p.status!=="refunded")) return;
   const req={date:key,coin:S.payCoin,method:S.payMethod,account:((S.payAcct||{})[S.payMethod]||"").trim(),amountUsd:usd((S.bal||0)+(LIVE[S.payCoin]?Math.round(holdOf(S.payCoin)*LIVE[S.payCoin]*1e5):0)).slice(1),units:S.bal,holdCoin:holdOf(S.payCoin),priceUsd:LIVE[S.payCoin]||null,amountCoin:coinAmount(S.payCoin),world:WORLDS[bogota().day].id,hero:S.hero,createdAt:new Date().toISOString(),status:"pending"};
   $("#reqBtn").disabled=true;
   let synced=false;
@@ -3284,7 +3286,7 @@ async function submitPayout(){
       synced=true;
     }catch(e){ synced=false; }
   }
-  S.payouts.push({...req,synced}); S.bal=0; if(S.hold) S.hold[S.payCoin]=0; save(); renderPay();
+  S.payouts=S.payouts.filter(p=>!(p.date===key&&p.status==="refunded")); S.payouts.push({...req,synced}); S.bal=0; if(S.hold) S.hold[S.payCoin]=0; save(); renderPay();
   $("#reqMsg").textContent=synced?t("requested"):t("offline");
   toast(synced?t("requested"):t("localOnly"),"pay");
 }
@@ -3308,11 +3310,11 @@ async function loadAdmin(){
     const users=await DB.collection("payouts").get();
     for(const u of users.docs){
       const rs=await DB.doc(`payouts/${u.id}`).collection("requests").get();
-      rs.docs.forEach(r=>{const d=r.data(); if(d.status!=="paid") rows.push({uid:u.id,id:r.id,...d});});
+      rs.docs.forEach(r=>{const d=r.data(); if(d.status!=="paid"&&d.status!=="refunded") rows.push({uid:u.id,id:r.id,...d});});
     }
   }catch(e){}
   list.innerHTML=rows.length?rows.map((r,i)=>{const pc=coinBy(r.coin);
-    return `<div class="req"><img src="${pc.img}" alt=""><div class="grow">${escapeHtml(r.date)} · ${pc.t} · ${METHODS[r.method]?.name||""} · $${escapeHtml(r.amountUsd)}${r.amountCoin?` ≈ ${nf(r.amountCoin,8)} ${pc.t}`:""}<br><span style="color:var(--muted)">${escapeHtml(r.account)}</span></div><button class="mini" data-i="${i}">${t("markPaid")}</button></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("noPending")}</p>`;
+    return `<div class="req"><img src="${pc.img}" alt=""><div class="grow">${escapeHtml(r.date)} · ${pc.t} · ${METHODS[r.method]?.name||""} · $${escapeHtml(r.amountUsd)}${r.amountCoin?` ≈ ${nf(r.amountCoin,8)} ${pc.t}`:""}<br><span style="color:var(--muted)">${escapeHtml(r.account)}</span></div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini" data-i="${i}">${t("markPaid")}</button><button class="mini wdref" data-r="${i}" style="background:#5a2a3a">${S.lang==="es"?"Devolver saldo":"Refund"}</button></div></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("noPending")}</p>`;
   list.insertAdjacentHTML("afterbegin",`<div class="req">${ic("swap",32)}<div class="grow">${fmt(t("exFees"),{p:SWAP_FEE})}<br><span style="color:var(--muted)">${fmt(t("exCount"),{n:exN})}</span></div><b>$${nf(exSum,4)}</b></div>`);
   list.insertAdjacentHTML("afterbegin",`<div class="req">${ic("gem",32)}<div class="grow">${fmt(t("feesTotal"),{p:FEE_PCT})}<br><span style="color:var(--muted)">${fmt(t("feesCount"),{n:feeN})}</span></div><b>${usd(feeSum)}</b></div>`);
   try{
@@ -3332,7 +3334,10 @@ async function loadAdmin(){
   }catch(e){}
   await adminPrizes(list);
   await adminAds(list);
-  list.querySelectorAll(".mini:not(.vipok):not(.ordok):not(.prizeok):not(.adok):not(.adno)").forEach(b=>b.onclick=async()=>{const r=rows[+b.dataset.i]; b.disabled=true;
+  list.querySelectorAll(".wdref").forEach(b=>b.onclick=async()=>{ const r=rows[+b.dataset.r]; if(!confirm((S.lang==="es"?"¿Devolver $":"Refund $")+r.amountUsd+(S.lang==="es"?" al saldo de este jugador?":" to this player's balance?"))) return; b.disabled=true;
+    try{ const units=Math.max(1,Math.round(parseFloat(r.amountUsd||"0")*1e5)); await DB.doc("credits/"+r.uid).set({updatedAt:Date.now()}); await DB.doc("credits/"+r.uid).collection("list").doc("refund-"+r.id+"-"+Date.now().toString(36)).set({type:"refund",item:r.id,units,at:Date.now()});
+      await DB.doc(`payouts/${r.uid}`).collection("requests").doc(r.id).update({status:"refunded",refundedAt:new Date().toISOString()}); toast(S.lang==="es"?"Saldo devuelto ✓":"Refunded ✓","pay"); loadAdmin(); }catch(e){ b.disabled=false; toast(t("mkErr")); } });
+  list.querySelectorAll(".mini:not(.vipok):not(.ordok):not(.prizeok):not(.adok):not(.adno):not(.wdref)").forEach(b=>b.onclick=async()=>{const r=rows[+b.dataset.i]; b.disabled=true;
     try{await DB.doc(`payouts/${r.uid}`).collection("requests").doc(r.id).update({status:"paid",paidAt:new Date().toISOString()}); await publishProof(r); loadAdmin();}catch(e){b.disabled=false;}});
 }
 const startDB=(async()=>{
@@ -3866,6 +3871,8 @@ async function collectCredits(){
     const cs=await DB.doc("credits/"+UID).collection("list").get(); S.claimed=S.claimed||[]; let n=0;
     for(const d of cs.docs){ if(S.claimed.includes(d.id)) continue; const x=d.data();
       if(x.type==="deposit"){ S.bal=(S.bal||0)+(x.units||0); toast(fmt(t("depOk"),{x:usd(x.units||0)}),"pay"); }
+      else if(x.type==="refund"){ S.bal=(S.bal||0)+(x.units||0); (S.payouts||[]).forEach(p=>{ if(p.date===x.item) p.status="refunded"; });
+        showModal(S.lang==="es"?"Retiro devuelto":"Withdrawal returned",`<p>${S.lang==="es"?`Tu retiro de <b>${usd(x.units||0)}</b> no se pudo pagar en esa moneda y se devolvió a tu saldo. Elige otra moneda en <b>Retirar</b> y pídelo de nuevo.`:`Your withdrawal of <b>${usd(x.units||0)}</b> couldn't be paid in that coin and was returned to your balance. Choose another coin in <b>Withdraw</b> and request it again.`}</p>`,[[t("close"),"go",closeModal]]); }
       else if(x.type==="key"&&x.item){ S.keys=S.keys||{}; S.keys[x.item]=true; toast(fmt(t("keyGot"),{w:t(BW[x.item].name)}),BW[x.item].icon); }
       else if(x.type==="hero"&&premBy(x.item)){ S.prem=S.prem||{}; S.prem[x.item]=true; S.ph=x.item; renderHeroes(); renderMap(); toast(fmt(t("premGot"),{x:premName(x.item),p:premBy(x.item).pct}),"heroes"); }
       else if(x.type==="xp"&&XP_PACKS[+x.item]){ grantXP(+x.item); }
