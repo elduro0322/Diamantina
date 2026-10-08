@@ -1146,11 +1146,23 @@ const HEROES = [
    it:[["Báculo del Pantano","Swamp Staff"],["Escudo de Pantano","Swamp Shield"],["Armadura de Pantano","Swamp Armor"],["Corona del Pantano","Swamp Crown"]]}
 ];
 const PRICES = [100, 80, 120, 60]; // weapon, shield, armor, accessory (in DMT points)
+/* ---------- Gear for the 5 premium warriors ---------- */
+const PGEAR=[
+  {id:"pice",c:"#3CCBFF",es:"Soldado de Hielo",en:"Ice Soldier",prem:true,it:[["Lanza de Hielo","Ice Spear"],["Escudo Glacial","Glacier Shield"],["Armadura de Hielo","Ice Armor"],["Corona de Escarcha","Frost Crown"]]},
+  {id:"pguard",c:"#8C99AD",es:"Guardián del Castillo",en:"Castle Guardian",prem:true,it:[["Espada del Castillo","Castle Sword"],["Escudo de Torre","Tower Shield"],["Armadura del Guardián","Guardian Armor"],["Yelmo Real","Royal Helm"]]},
+  {id:"psorc",c:"#A855F7",es:"El Hechicero",en:"The Sorcerer",prem:true,it:[["Báculo Arcano","Arcane Staff"],["Escudo Místico","Mystic Shield"],["Túnica del Hechicero","Sorcerer Robe"],["Corona Mágica","Magic Crown"]]},
+  {id:"pdragon",c:"#F97316",es:"Dios Dragón",en:"Dragon God",prem:true,it:[["Espada del Dragón","Dragon Sword"],["Escudo de Escamas","Scale Shield"],["Armadura del Dragón","Dragon Armor"],["Corona del Dragón","Dragon Crown"]]},
+  {id:"pfusion",c:"#F6C453",es:"Fusión Fuego + Dorado",en:"Fire + Gold Fusion",prem:true,it:[["Espada de Fuego Dorado","Golden Fire Sword"],["Escudo Fénix","Phoenix Shield"],["Armadura de Fusión","Fusion Armor"],["Corona de Fuego","Fire Crown"]]}];
+const GEAR_HEROES=[...HEROES,...PGEAR];
+const GEAR_SHAPE=[0,1,2,3,4,5,6,4,2,6,1,3];
+const PPRICES=[150,120,180,90];   // premium gear costs a bit more
+const isPGear=id=>String(id).split(":")[0].startsWith("p")&&!!PGEAR.find(g=>g.id===String(id).split(":")[0]);
+const pPrice=id=>(isPGear(id)?PPRICES:PRICES)[+String(id).split(":")[1]];
 const POINT_USD = 0.01;            // 1 point = 0.01 USD (USDT)
 const COMBOS={ws:{parts:[0,1],off:22},all:{parts:[0,1,2,3],off:30}};  // weapon+shield -22%, full set -30%
 const isCombo=id=>String(id).startsWith("combo:");
 const comboParts=id=>{const [,hid,k]=id.split(":"); return COMBOS[k].parts.map(ci=>hid+":"+ci);};
-const comboFull=id=>comboParts(id).filter(pid=>!S.owned.includes(pid)).reduce((a,pid)=>a+PRICES[+pid.split(":")[1]],0);
+const comboFull=id=>comboParts(id).filter(pid=>!S.owned.includes(pid)).reduce((a,pid)=>a+pPrice(pid),0);
 const comboMissing=id=>comboParts(id).filter(pid=>!S.owned.includes(pid));
 const FLASH_OFF=40, FLASH_MS=72*3600000;   // 72-hour flash offer on a full set
 function flashWin(){
@@ -1163,8 +1175,8 @@ function flashWin(){
 function flashId(){ const order=[S.hero,...HEROES.map(x=>x.id).filter(x=>x!==S.hero)]; const hid=order.find(x=>comboMissing(`combo:${x}:all`).length); return hid?`combo:${hid}:all`:null; }
 const flashOn=id=>!!flashWin()&&flashId()===id;
 const offFor=id=>flashOn(id)?FLASH_OFF:COMBOS[id.split(":")[2]].off;
-const comboPrice=id=>{const sum=comboMissing(id).reduce((a,pid)=>a+PRICES[+pid.split(":")[1]],0); return Math.round(sum*(100-offFor(id))/100);};
-const piecePrice=id=>isCombo(id)?comboPrice(id):PRICES[+id.split(":")[1]];
+const comboPrice=id=>{const sum=comboMissing(id).reduce((a,pid)=>a+pPrice(pid),0); return Math.round(sum*(100-offFor(id))/100);};
+const piecePrice=id=>isCombo(id)?comboPrice(id):pPrice(id);
 
 /* ---------- Path (from the drawing) ---------- */
 const PTS = [[85,75],[245,50],[420,40],[475,130],[330,155],[205,200],[62,205],[78,300],[190,350],[315,285],
@@ -1242,7 +1254,12 @@ const GEAR_PAL=[ // light, main, dark, accent(gem), emblem
   ["#FFF4B8","#FFC93C","#A86A00","#FF5A5A","crown"],    // gold
   ["#DDF7FF","#3FB8F5","#1452B8","#9FF0FF","drop"],     // water
   ["#FFF6A8","#FFD82E","#2A2A35","#FFF06A","bolt"],     // lightning
-  ["#D8F5B0","#7CC452","#4A3218","#B8FF6A","leaf"]      // swamp
+  ["#D8F5B0","#7CC452","#4A3218","#B8FF6A","leaf"],     // swamp
+  ["#F0FDFF","#8BE3FF","#1F6FB2","#D6F7FF","diamond"],  // ice soldier
+  ["#FFFFFF","#AEB8C8","#3D4757","#F6C453","star"],     // castle guardian
+  ["#F5D0FE","#A855F7","#3B0764","#F0ABFC","star"],     // sorcerer
+  ["#FFE0A3","#F97316","#7C1D06","#FFD54A","flame"],    // dragon god
+  ["#FFF1B8","#F6C453","#B3121E","#FF7A2E","crown"]     // fire+gold fusion
 ];
 const EMBLEM={
   diamond:'<path d="M-9 -4 L-4 -10 H4 L9 -4 L0 10Z" fill="#fff"/><path d="M-9 -4 H9 M-4 -10 L0 10 L4 -10" stroke="#9BD8FF" stroke-width="1.2" fill="none"/>',
@@ -1255,7 +1272,7 @@ const EMBLEM={
 };
 let gearSeq=0;
 function gearSVG(hi,cat){
-  const [L,M,D,G,em]=GEAR_PAL[hi], u="g"+(++gearSeq);
+  const [L,M,D,G,em]=GEAR_PAL[hi], u="g"+(++gearSeq); hi=GEAR_SHAPE[hi]??hi;
   const defs=`<defs><linearGradient id="${u}m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${L}"/><stop offset=".55" stop-color="${M}"/><stop offset="1" stop-color="${D}"/></linearGradient>
     <linearGradient id="${u}v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${L}"/><stop offset="1" stop-color="${D}"/></linearGradient>
     <linearGradient id="${u}s" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".0"/><stop offset=".5" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
@@ -2066,8 +2083,8 @@ function syncDay(){const b=bogota(); if(S.doneDate!==b.key){S.done=0;S.done2=0;S
 function save(){ S._at=Date.now(); try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} if(typeof cloudSave==="function") cloudSave(); }
 const t=k=>{ const L=T[S.lang]; const v=L?L[k]:undefined; return v!==undefined?v:(T.en[k]!==undefined?T.en[k]:T.es[k]); };
 const fmt=(s,o)=>s.replace(/\{(\w)\}/g,(_,k)=>o[k]);
-const heroOf=id=>HEROES.find(h=>h.id===id);
-const hIdx=id=>HEROES.findIndex(h=>h.id===id);
+const heroOf=id=>GEAR_HEROES.find(h=>h.id===id);
+const hIdx=id=>GEAR_HEROES.findIndex(h=>h.id===id);
 
 /* ---------- Render ---------- */
 const $=s=>document.querySelector(s);
@@ -2325,15 +2342,15 @@ function renderShop(){ if(typeof navSync==="function") setTimeout(()=>navSync(),
   const cats=[t("all"),...t("cat")];
   $("#shopTabs").innerHTML=cats.map((c,i)=>`<button class="tab ${shopCat===i-1?"on":""}" data-c="${i-1}">${c}</button>`).join("");
   document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{shopCat=+b.dataset.c;renderShop();});
-  $("#shopList").innerHTML=flashBanner()+`<div class="bonusbar">${ic("shop",30)}<div><b>${fmt(t("gearBonus"),{p:gearPct()})}</b><small>${fmt(t("gearBonusSub"),{p:GEAR_BONUS,n:(S.owned||[]).length,m:HEROES.length*4})}</small></div></div>`+HEROES.map((h,hi)=>{
+  $("#shopList").innerHTML=flashBanner()+`<div class="bonusbar">${ic("shop",30)}<div><b>${fmt(t("gearBonus"),{p:gearPct()})}</b><small>${fmt(t("gearBonusSub"),{p:GEAR_BONUS,n:(S.owned||[]).length,m:GEAR_HEROES.length*4})}</small></div></div>`+GEAR_HEROES.map((h,hi)=>{
     const idx=shopCat<0?[0,1,2,3]:[shopCat];
     const combos=shopCat<0?Object.keys(COMBOS).map(k=>{ const cid=`combo:${h.id}:${k}`, miss=comboMissing(cid), own=!miss.length, pr=comboPrice(cid);
       return `<div class="combo" style="--c:${h.c}"><span class="offtag ${flashOn(cid)?"flash":""}">${flashOn(cid)?fmt(t("flashTag"),{p:FLASH_OFF})+` · <span class="flashleft" data-until="${flashWin().until}">${leftStr(flashWin().until-Date.now())}</span>`:t("offer")+" -"+COMBOS[k].off+"%"}</span><div class="combopieces">${COMBOS[k].parts.map(ci=>gearSVG(hi,ci)).join("")}</div>
         <div class="combobody"><b>${t(k==="ws"?"comboWS":"comboAll")}</b><small>${fmt(t("comboBonus"),{p:GEAR_BONUS*COMBOS[k].parts.length})}</small>
         <button class="buy ${own?"owned":""}" data-id="${cid}" ${own?"disabled":""}>${own?t("owned"):pendingItem(cid)?t("inReview"):`<s>$${(comboFull(cid)*POINT_USD).toFixed(2)}</s> $${(pr*POINT_USD).toFixed(2)}`}</button></div></div>`; }).join(""):"";
-    return `<div class="shopgroup" style="--c:${h.c}"><h3><img src="${A.heroes[hi]}" alt="">${h[S.lang]}</h3>${combos}<div class="items">`+
+    return `<div class="shopgroup" style="--c:${h.c}"><h3><img src="${h.prem?premImg(h.id):A.heroes[hi]}" alt="">${h.prem?`👑 ${premName(h.id)}`:h[S.lang]}</h3>${combos}<div class="items">`+
       idx.map(ci=>{
-        const id=h.id+":"+ci, own=S.owned.includes(id), price=PRICES[ci], name=h.it[ci][S.lang==="es"?0:1];
+        const id=h.id+":"+ci, own=S.owned.includes(id), price=pPrice(id), name=h.it[ci][S.lang==="es"?0:1];
         return `<div class="item" style="--c:${h.c}">${gearSVG(hi,ci)}<div class="cat">${t("cat")[ci]} · <span class="gbon">${fmt(t("itemBonus"),{p:GEAR_BONUS})}</span></div><div class="in">${name}</div>
           <button class="buy ${own?"owned":""}" data-id="${id}" ${own?"disabled":""}>${own?t("owned"):pendingItem(id)?t("inReview"):`$${(price*POINT_USD).toFixed(2)}`}</button></div>`;
       }).join("")+`</div></div>`;
@@ -2347,7 +2364,7 @@ function renderBag(){
   if(S.owned.length){
     h+=`<div class="shopgroup" style="--c:var(--gold)"><h3>${t("items")} · <span class="gbon">${fmt(t("bonusLine"),{p:gearPct()})}</span></h3><div class="items">`+
       S.owned.map(id=>{const [hid,ci]=id.split(":");const hi=hIdx(hid);
-        return `<div class="item" style="--c:${HEROES[hi].c}">${gearSVG(hi,+ci)}<div class="cat">${t("cat")[+ci]}</div><div class="in">${HEROES[hi].it[+ci][S.lang==="es"?0:1]}</div></div>`;}).join("")+`</div></div>`;
+        return `<div class="item" style="--c:${GEAR_HEROES[hi].c}">${gearSVG(hi,+ci)}<div class="cat">${t("cat")[+ci]}</div><div class="in">${GEAR_HEROES[hi].it[+ci][S.lang==="es"?0:1]}</div></div>`;}).join("")+`</div></div>`;
   }
   $("#bagList").innerHTML=h||`<div class="empty">${t("emptyBag")}</div>`;
   bindBagNft();
@@ -3728,13 +3745,13 @@ function openNode(n){
     },{kind:"node",n});
 }
 /* ---------- Crypto payments: buy gear + add balance (FaucetPay / Cwallet) ---------- */
-const itemName=id=>{ if(isCombo(id)){ const [,hid,k]=id.split(":"); return `${t(k==="ws"?"comboWS":"comboAll")} · ${heroOf(hid)[S.lang]}`; } const [hid,ci]=id.split(":"); return heroOf(hid).it[+ci][S.lang==="es"?0:1];};
+const itemName=id=>{ if(isCombo(id)){ const [,hid,k]=id.split(":"); return `${t(k==="ws"?"comboWS":"comboAll")} · ${premBy(hid)?premName(hid):(heroOf(hid)[S.lang]||heroOf(hid).en)}`; } const [hid,ci]=id.split(":"); return heroOf(hid).it[+ci][S.lang==="es"?0:1];};
 const pendingItem=id=>(S.orders||[]).some(o=>o.type==="gear"&&o.item===id&&o.status==="pending");
 const livePrice=tk=>(liveStatus==="est"||liveStatus==="loading")?null:LIVE[tk];
 function coinQuote(usdAmt){const c=coinBy(S.payCoin), pr=livePrice(c.t); return pr?`${nf(usdAmt/pr,8)} ${c.t}`:null;}
 function buyDialog(id){
   const combo=isCombo(id), hid=combo?id.split(":")[1]:id.split(":")[0], ci=combo?0:id.split(":")[1], hi=hIdx(hid), pts=piecePrice(id), usdAmt=pts*POINT_USD, units=Math.round(usdAmt*1e5), q=coinQuote(usdAmt);
-  showModal(itemName(id),`${combo?`<div class="combopieces" style="--c:${HEROES[hi].c}">${comboParts(id).map(x=>gearSVG(hi,+x.split(":")[1])).join("")}</div><p class="offerline"><s>$${(comboFull(id)*POINT_USD).toFixed(2)}</s> · ${fmt(t("saveOff"),{p:offFor(id)})}</p>`:`<div class="item" style="--c:${HEROES[hi].c};max-width:180px;margin:0 auto 8px">${gearSVG(hi,+ci)}</div>`}
+  showModal(itemName(id),`${combo?`<div class="combopieces" style="--c:${GEAR_HEROES[hi].c}">${comboParts(id).map(x=>gearSVG(hi,+x.split(":")[1])).join("")}</div><p class="offerline"><s>$${(comboFull(id)*POINT_USD).toFixed(2)}</s> · ${fmt(t("saveOff"),{p:offFor(id)})}</p>`:`<div class="item" style="--c:${GEAR_HEROES[hi].c};max-width:180px;margin:0 auto 8px">${gearSVG(hi,+ci)}</div>`}
     <p class="amt">$${usdAmt.toFixed(2)} USD<small>${q?"≈ "+q+" · CoinGecko":t("payNoLive")}</small></p>
     <div class="vipbtns paylist">
       <button class="gold" id="pBal" ${(S.bal||0)>=units?"":"disabled"}>${ic("pay",24)}${t("payBal")} (${usd(S.bal||0)})</button>
@@ -3920,7 +3937,7 @@ async function collectCredits(){
 }
 function buy(id){
   if(isCombo(id)){ const pr=comboPrice(id); if(S.coins<pr) return toast(fmt(t("noCoins"),{n:pr-S.coins})); S.coins-=pr; grantItem(id); return; }
-  const ci=+id.split(":")[1], price=PRICES[ci];
+  const ci=+id.split(":")[1], price=pPrice(id);
   if(S.coins<price) return toast(fmt(t("noCoins"),{n:price-S.coins}));
   S.coins-=price; S.owned.push(id); save(); setTimeout(()=>toast(fmt(t("bonusLine"),{p:gearPct()}),"shop"),1900);
   const [hid]=id.split(":"); const h=heroOf(hid);
