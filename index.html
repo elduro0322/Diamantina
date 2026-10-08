@@ -837,7 +837,7 @@ main{overscroll-behavior-y:contain}
 .ownframe{display:flex;justify-content:center;overflow:hidden;border-radius:12px}.ownframe iframe{border:0;display:block;background:transparent}.aaframe{min-height:64px;font-family:ui-monospace,monospace;font-size:12px}
 .aalinks{min-height:260px;font-family:ui-monospace,monospace;font-size:12px;line-height:1.5;white-space:pre;overflow:auto;resize:vertical}
 
-.legal{text-align:center;padding:18px 16px 8px}.livebox{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 16px}.livebox b{font-size:24px}.livebox small{width:100%;color:var(--muted)}.livedot{width:12px;height:12px;border-radius:50%;background:#2ee66b;box-shadow:0 0 0 0 rgba(46,230,107,.7);animation:livep 1.6s infinite}@keyframes livep{70%{box-shadow:0 0 0 10px rgba(46,230,107,0)}100%{box-shadow:0 0 0 0 rgba(46,230,107,0)}}.xbans{display:flex;flex-direction:column;align-items:center;gap:12px;margin:4px 0 12px}.xbans iframe{border:0;display:block;width:300px;height:250px;max-width:100%;overflow:hidden;background:transparent}.socials{display:flex;justify-content:center;gap:12px;margin:0 0 10px}.soc{display:flex;align-items:center;gap:8px;padding:6px 14px 6px 6px;border-radius:999px;background:rgba(41,169,235,.14);border:1px solid rgba(41,169,235,.45);color:#fff;font-weight:800;font-size:14px;text-decoration:none}.soc:focus-visible{outline:2px solid #FDE68A;outline-offset:3px}.legal button{all:unset;cursor:pointer;color:var(--muted);font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.legal{text-align:center;padding:18px 16px 8px}.acc{position:relative}.acc:not(.on)::after{content:"";position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:#ff4d6d;border:2px solid #fff}.acc.on{border-color:#2ee66b;color:#2ee66b}.authbox{display:flex;flex-direction:column;gap:10px;text-align:left}.authbox .hint{margin:0}.authseg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--panel-2);border-radius:999px;padding:4px}.authseg button{border:0;border-radius:999px;padding:10px;font:inherit;font-weight:900;background:transparent;color:var(--ink)}.authseg button.on{background:var(--gold);color:#3A2400}.aulink{border:0;background:none;color:var(--muted);text-decoration:underline;font:inherit;font-size:13px;padding:0;align-self:flex-start}.auerr{min-height:18px;margin:0;color:#ff8fa3;font-weight:800;font-size:14px}.livebox{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 16px}.livebox b{font-size:24px}.livebox small{width:100%;color:var(--muted)}.livedot{width:12px;height:12px;border-radius:50%;background:#2ee66b;box-shadow:0 0 0 0 rgba(46,230,107,.7);animation:livep 1.6s infinite}@keyframes livep{70%{box-shadow:0 0 0 10px rgba(46,230,107,0)}100%{box-shadow:0 0 0 0 rgba(46,230,107,0)}}.xbans{display:flex;flex-direction:column;align-items:center;gap:12px;margin:4px 0 12px}.xbans iframe{border:0;display:block;width:300px;height:250px;max-width:100%;overflow:hidden;background:transparent}.socials{display:flex;justify-content:center;gap:12px;margin:0 0 10px}.soc{display:flex;align-items:center;gap:8px;padding:6px 14px 6px 6px;border-radius:999px;background:rgba(41,169,235,.14);border:1px solid rgba(41,169,235,.45);color:#fff;font-weight:800;font-size:14px;text-decoration:none}.soc:focus-visible{outline:2px solid #FDE68A;outline-offset:3px}.legal button{all:unset;cursor:pointer;color:var(--muted);font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
 .legal button:focus-visible{outline:2px solid #FDE68A;outline-offset:3px;border-radius:4px}
 .terms{max-height:62vh;overflow:auto;padding-right:6px;font-size:14px;line-height:1.55;text-align:left}.terms h3{font-family:var(--display);font-weight:600;font-size:16px;margin:16px 0 4px;color:#FDE68A}.terms p{margin:0 0 8px}.terms .tdate{color:var(--muted);font-size:12px}
 </style>
@@ -966,6 +966,7 @@ main{overscroll-behavior-y:contain}
   <button class="coins paycoin" id="payCoinBtn" aria-label="Retirar"><img id="payCoinImg" alt=""><b id="payCoinAmt">$0</b></button>
   <button class="sound" id="soundBtn" aria-pressed="true" aria-label="Música"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><g id="sndOn" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 7a7 7 0 0 1 0 10"/></g><g id="sndOff" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M16 9.5l5 5M21 9.5l-5 5"/></g></svg></button>
   <button class="sound" id="adminBtn" hidden aria-label="Panel"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.6 4.9-1.9-.3a6.9 6.9 0 0 1-.6 1.5l1.1 1.6-1.6 1.6-1.6-1.1c-.5.3-1 .5-1.5.6l-.3 1.9h-2.3l-.3-1.9a6.9 6.9 0 0 1-1.5-.6l-1.6 1.1-1.6-1.6 1.1-1.6a6.9 6.9 0 0 1-.6-1.5l-1.9-.3v-2.3l1.9-.3c.1-.5.3-1 .6-1.5L5.2 6.9l1.6-1.6 1.6 1.1c.5-.3 1-.5 1.5-.6l.3-1.9h2.3l.3 1.9c.5.1 1 .3 1.5.6l1.6-1.1 1.6 1.6-1.1 1.6c.3.5.5 1 .6 1.5l1.9.3z" fill="currentColor"/></svg></button>
+  <button class="sound acc" id="accBtn" hidden aria-label="Cuenta"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="currentColor"/></svg></button>
   <button class="lang" id="langBtn" aria-label="Language"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2.5 12h19M12 2.5c3 3 3 16 0 19M12 2.5c-3 3-3 16 0 19" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span id="langCode">ES</span></button>
 </header>
 
@@ -2057,7 +2058,7 @@ try{ const raw=localStorage.getItem(KEY); if(raw){ S={...S,...JSON.parse(raw)}; 
 if(!LANGS.some(l=>l[0]===S.lang)) S.lang="es";
 let viewDay=null, sceneDay=null;
 function syncDay(){const b=bogota(); if(S.doneDate!==b.key){S.done=0;S.done2=0;S.bwp=null;S.doneDate=b.key;magicMode=false;save();} return b;}
-function save(){ try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} }
+function save(){ S._at=Date.now(); try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} if(typeof cloudSave==="function") cloudSave(); }
 const t=k=>{ const L=T[S.lang]; const v=L?L[k]:undefined; return v!==undefined?v:(T.en[k]!==undefined?T.en[k]:T.es[k]); };
 const fmt=(s,o)=>s.replace(/\{(\w)\}/g,(_,k)=>o[k]);
 const heroOf=id=>HEROES.find(h=>h.id===id);
@@ -3337,7 +3338,7 @@ const startDB=(async()=>{
     if(!window.claude||!window.claude.use){ loadMarket(); return; }
     const [db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")]);
     if(!db||!user){ loadMarket(); return; }
-    DB=db; UID=await user.id(); OWNER=await user.isOwner(); loadCfg(); loadAds(); setTimeout(beat,4000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
+    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; OWNER=await user.isOwner(); loadCfg(); loadAds(); setTimeout(beat,4000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
     if(UID){ // resend requests saved only on the phone
       for(const p of (S.payouts||[]).filter(p=>!p.synced)){
         try{await DB.doc(`payouts/${UID}`).set({updatedAt:new Date().toISOString(),last:p.date});
@@ -3349,6 +3350,85 @@ const startDB=(async()=>{
   }catch(e){}
 });
 if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",startDB,{once:true}); else startDB();
+
+/* ---------- Accounts: email + password (game is visible, actions ask to register) ---------- */
+const AU_T={
+  es:{reg:"Registrarse",in:"Entrar",regTitle:"Crea tu cuenta gratis",inTitle:"Entra a tu cuenta",regSub:"Regístrate para jugar, ganar y retirar tus criptomonedas. Tu progreso queda guardado.",inSub:"Entra con tu correo y contraseña para seguir donde ibas.",email:"Correo electrónico",pass:"Contraseña (mínimo 6)",pass2:"Repite la contraseña",forgot:"¿Olvidaste tu contraseña?",regBtn:"Crear cuenta",inBtn:"Entrar",badEmail:"Escribe un correo válido.",short:"La contraseña debe tener mínimo 6 caracteres.",noMatch:"Las contraseñas no son iguales.",wait:"Un momento…",welcome:"¡Cuenta creada! Ya puedes jugar",inUse:"Ese correo ya tiene cuenta. Toca «Entrar».",wrong:"Correo o contraseña incorrectos.",many:"Muchos intentos. Espera unos minutos.",net:"Sin conexión. Revisa tu internet.",off:"El registro aún no está activo. Intenta más tarde.",err:"No se pudo. Intenta de nuevo.",sent:"Te enviamos un correo para cambiar la contraseña.",needEmail:"Escribe tu correo arriba y toca otra vez.",acct:"Mi cuenta",logout:"Cerrar sesión",logged:"Conectado como"},
+  en:{reg:"Sign up",in:"Log in",regTitle:"Create your free account",inTitle:"Log in to your account",regSub:"Sign up to play, earn and withdraw your crypto. Your progress is saved.",inSub:"Log in with your email and password to continue.",email:"Email",pass:"Password (min 6)",pass2:"Repeat password",forgot:"Forgot your password?",regBtn:"Create account",inBtn:"Log in",badEmail:"Enter a valid email.",short:"Password must be at least 6 characters.",noMatch:"Passwords don't match.",wait:"One moment…",welcome:"Account created! You can play now",inUse:"That email already has an account. Tap “Log in”.",wrong:"Wrong email or password.",many:"Too many attempts. Wait a few minutes.",net:"No connection. Check your internet.",off:"Sign up is not active yet. Try later.",err:"Something went wrong. Try again.",sent:"We sent you an email to reset your password.",needEmail:"Type your email above and tap again.",acct:"My account",logout:"Log out",logged:"Logged in as"}};
+const au=k=>(AU_T[S.lang]||AU_T.en)[k];
+const FA=()=>{ try{ return window.firebase&&firebase.apps&&firebase.apps.length?firebase.auth():null; }catch(e){ return null; } };
+const isReg=()=>{ const a=FA(), u=a&&a.currentUser; return !!(u&&!u.isAnonymous); };
+const SAVE_PATH=()=>"upgrades/"+UID+"/save/state";
+function authErr(e){ const c=(e&&e.code)||"";
+  if(/email-already-in-use|credential-already-in-use/.test(c)) return au("inUse");
+  if(/wrong-password|user-not-found|invalid-credential|invalid-login|invalid-email/.test(c)) return au("wrong");
+  if(/too-many-requests/.test(c)) return au("many"); if(/network/.test(c)) return au("net");
+  if(/operation-not-allowed|admin-restricted/.test(c)) return au("off"); if(/weak-password/.test(c)) return au("short");
+  return au("err")+(c?" ("+c+")":""); }
+function openAuth(mode){
+  mode=mode||"reg"; const R=mode==="reg";
+  showModal(au(R?"regTitle":"inTitle"),`<div class="authbox"><div class="authseg"><button type="button" class="${R?"on":""}" data-m="reg">${au("reg")}</button><button type="button" class="${R?"":"on"}" data-m="in">${au("in")}</button></div>
+    <p class="hint">${au(R?"regSub":"inSub")}</p>
+    <input class="field" id="auEmail" type="email" inputmode="email" autocomplete="email" placeholder="${au("email")}">
+    <input class="field" id="auPass" type="password" autocomplete="${R?"new-password":"current-password"}" placeholder="${au("pass")}">
+    ${R?`<input class="field" id="auPass2" type="password" autocomplete="new-password" placeholder="${au("pass2")}">`:`<button class="aulink" id="auForgot" type="button">${au("forgot")}</button>`}
+    <p class="auerr" id="auErr" role="alert"></p></div>`,[[au(R?"regBtn":"inBtn"),"go",()=>doAuth(mode)],[t("close"),"no",closeModal]]);
+  setTimeout(()=>{ document.querySelectorAll(".authseg button").forEach(b=>b.onclick=()=>openAuth(b.dataset.m)); const f=$("#auForgot"); if(f) f.onclick=forgotPw; },0);
+}
+async function doAuth(mode){
+  const a=FA(), err=$("#auErr"), em=($("#auEmail").value||"").trim(), pw=$("#auPass").value||"", btns=document.querySelectorAll("#mFoot .btn");
+  if(!a){ err.textContent=au("net"); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ err.textContent=au("badEmail"); return; }
+  if(pw.length<6){ err.textContent=au("short"); return; }
+  if(mode==="reg"&&pw!==$("#auPass2").value){ err.textContent=au("noMatch"); return; }
+  btns.forEach(b=>b.disabled=true); err.textContent=au("wait");
+  try{
+    if(mode==="reg"){
+      const u=a.currentUser;
+      if(u&&u.isAnonymous){ await u.linkWithCredential(firebase.auth.EmailAuthProvider.credential(em,pw)); S.email=em; save(); await cloudSave(true); closeModal(); renderAcc(); toast(au("welcome"),"trophy"); }
+      else { await a.createUserWithEmailAndPassword(em,pw); S.email=em; save(); location.reload(); }
+    } else {
+      await a.signInWithEmailAndPassword(em,pw);
+      let d=null; try{ d=await firebase.firestore().doc("upgrades/"+a.currentUser.uid+"/save/state").get(); }catch(e){}
+      if(d&&d.exists&&d.data().s){ try{ localStorage.setItem(KEY,d.data().s); }catch(e){} } else { S.email=em; save(); }
+      try{ sessionStorage.setItem("diamantina-synced","1"); }catch(e){}
+      location.href=location.pathname;
+    }
+  }catch(e){ btns.forEach(b=>b.disabled=false); err.textContent=authErr(e); }
+}
+async function forgotPw(){ const a=FA(), em=($("#auEmail").value||"").trim(), err=$("#auErr");
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ err.textContent=au("needEmail"); return; }
+  try{ await a.sendPasswordResetEmail(em); err.textContent=au("sent"); }catch(e){ err.textContent=authErr(e); } }
+function openAcct(){
+  if(!isReg()) return openAuth("in");
+  const u=FA().currentUser;
+  showModal(au("acct"),`<p class="hint">${au("logged")}</p><p class="amt" style="font-size:16px;word-break:break-all">${escapeHtml(u.email||"")}</p>`,[[au("logout"),"no",logout],[t("close"),"go",closeModal]]);
+}
+async function logout(){ try{ await cloudSave(true); }catch(e){} try{ await FA().signOut(); }catch(e){}
+  try{ localStorage.removeItem(KEY); localStorage.removeItem(CAP_KEY); }catch(e){} location.href=location.pathname; }
+function renderAcc(){ const b=$("#accBtn"); if(!b) return; b.hidden=!FA(); b.classList.toggle("on",isReg()); b.setAttribute("aria-label",isReg()?au("acct"):au("in")); }
+let csT=null;
+async function cloudSave(now){
+  if(!(DB&&UID)||!isReg()) return;
+  const run=async()=>{ try{ await DB.doc(SAVE_PATH()).set({s:JSON.stringify(S),at:Date.now()}); }catch(e){} };
+  if(now){ clearTimeout(csT); csT=null; return run(); }
+  if(csT) return; csT=setTimeout(()=>{ csT=null; run(); },20000);
+}
+async function cloudLoad(){
+  if(!(DB&&UID)||!isReg()) return false;
+  try{ if(sessionStorage.getItem("diamantina-synced")){ sessionStorage.removeItem("diamantina-synced"); return false; } }catch(e){}
+  try{ const d=await DB.doc(SAVE_PATH()).get(); if(!d.exists){ cloudSave(true); return false; }
+    const c=JSON.parse(d.data().s||"{}"); if((c._at||0)>(S._at||0)+5000){ try{ localStorage.setItem(KEY,d.data().s); sessionStorage.setItem("diamantina-synced","1"); }catch(e){} location.reload(); return true; }
+  }catch(e){} return false;
+}
+document.addEventListener("visibilitychange",()=>{ if(document.hidden&&csT) cloudSave(true); });
+const AUTH_FREE="nav.bottom,#langBtn,#soundBtn,#accBtn,#termsBtn,.socials,.xbans,#modal,.brand,#adminBtn,.legal";
+window.addEventListener("click",e=>{
+  if(!FA()||isReg()||/[?&]owner\b/.test(location.search)) return;
+  const el=e.target.closest&&e.target.closest("button,a,[role=button],.node,select,label,input"); if(!el) return;
+  if(el.closest(AUTH_FREE)) return;
+  e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); openAuth("reg");
+},true);
 
 /* ---------- Live players + external banners ---------- */
 const LIVE_MS=150000;
@@ -3813,6 +3893,7 @@ function goView(v){
 document.querySelectorAll("nav.bottom button").forEach(b=>b.onclick=()=>goView(b.dataset.v));
 $("#coinBtn").onclick=()=>{shopMode="gear";goView("shop");};
 $("#payCoinBtn").onclick=()=>goView("pay");
+$("#accBtn").onclick=openAcct;
 $("#mapClaim").onclick=()=>goView("pay");
 
 $("#depMapBtn").onclick=openDeposit; $("#depPayBtn").onclick=openDeposit;
