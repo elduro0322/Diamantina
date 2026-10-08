@@ -1,0 +1,8 @@
+{
+  "name": "diamantina",
+  "main": "worker.js",
+  "compatibility_date": "2025-06-01",
+  "workers_dev": true,
+  "keep_vars": true,
+  "assets": { "directory": ".", "binding": "ASSETS" }
+}
