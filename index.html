@@ -849,6 +849,15 @@ main{overscroll-behavior-y:contain}
 .t3 .vipbadge{margin-left:3px;padding:0 5px 0 1px}.t3 .vipbadge b{display:none}.acctbox{display:flex;flex-direction:column;gap:8px;margin:10px 0;padding:12px;border-radius:14px;background:var(--panel-2);text-align:left}.acctbox h4{margin:0 0 2px;font-size:16px}.acctbox label{display:flex;flex-direction:column;gap:4px;font-weight:800;font-size:13px}.acctbox label span{display:flex;align-items:center;gap:6px}.acctbox label img{width:18px;height:18px;border-radius:50%}.acctbox select.field{padding:10px}.authbox{display:flex;flex-direction:column;gap:10px;text-align:left}.authbox .hint{margin:0}.authseg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--panel-2);border-radius:999px;padding:4px}.authseg button{border:0;border-radius:999px;padding:10px;font:inherit;font-weight:900;background:transparent;color:var(--ink)}.authseg button.on{background:var(--gold);color:#3A2400}.aulink{border:0;background:none;color:var(--muted);text-decoration:underline;font:inherit;font-size:13px;padding:0;align-self:flex-start}.auerr{min-height:18px;margin:0;color:#ff8fa3;font-weight:800;font-size:14px}.livebox{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 16px}.livebox b{font-size:24px}.livebox small{width:100%;color:var(--muted)}.livedot{width:12px;height:12px;border-radius:50%;background:#2ee66b;box-shadow:0 0 0 0 rgba(46,230,107,.7);animation:livep 1.6s infinite}@keyframes livep{70%{box-shadow:0 0 0 10px rgba(46,230,107,0)}100%{box-shadow:0 0 0 0 rgba(46,230,107,0)}}.xbans{display:flex;flex-direction:column;align-items:center;gap:12px;margin:4px 0 12px}.xbans iframe{border:0;display:block;width:300px;height:250px;max-width:100%;overflow:hidden;background:transparent}.socials{display:flex;justify-content:center;gap:12px;margin:0 0 10px}.soc{display:flex;align-items:center;gap:8px;padding:6px 14px 6px 6px;border-radius:999px;background:rgba(41,169,235,.14);border:1px solid rgba(41,169,235,.45);color:#fff;font-weight:800;font-size:14px;text-decoration:none}.soc:focus-visible{outline:2px solid #FDE68A;outline-offset:3px}.legal button{all:unset;cursor:pointer;color:var(--muted);font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
 .legal button:focus-visible{outline:2px solid #FDE68A;outline-offset:3px;border-radius:4px}
 .terms{max-height:62vh;overflow:auto;padding-right:6px;font-size:14px;line-height:1.55;text-align:left}.terms h3{font-family:var(--display);font-weight:600;font-size:16px;margin:16px 0 4px;color:#FDE68A}.terms p{margin:0 0 8px}.terms .tdate{color:var(--muted);font-size:12px}
+.dealfloat{position:fixed;left:50%;bottom:84px;z-index:30;width:min(360px,calc(100vw - 24px));transform:translate(-50%,140%);transition:transform .45s cubic-bezier(.2,1.3,.4,1);display:flex;align-items:center;gap:10px;padding:12px 12px 12px 10px;border-radius:18px;background:linear-gradient(135deg,#3b1d7a,#7a2ea8 55%,#d1427a);border:2px solid #ffd76a;box-shadow:0 10px 30px rgba(0,0,0,.55),0 0 22px rgba(255,215,106,.35);color:#fff}
+.dealfloat.in{transform:translate(-50%,0)}
+.dealfloat .dealic{flex:0 0 52px;height:52px;display:grid;place-items:center;background:rgba(255,255,255,.12);border-radius:14px}.dealfloat .dealic svg{width:44px;height:44px}
+.dealfloat .dealbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;position:relative}
+.dealfloat .dealbody b{font-size:14px;line-height:1.2;padding-right:4px}.dealfloat .dealbody small{font-size:12px;opacity:.95}.dealfloat s{opacity:.7}.dealfloat em{font-style:normal;color:#ffd76a;font-weight:800;font-size:14px}
+.dealfloat .dealtag{align-self:flex-start;background:#ffd76a;color:#5a2a00;font-weight:900;font-size:12px;padding:1px 8px;border-radius:999px;animation:dealpulse 1.2s infinite}
+@keyframes dealpulse{50%{transform:scale(1.12)}}
+.dealfloat .dealgo{flex:0 0 auto;border:0;border-radius:12px;padding:10px 12px;font-weight:900;background:#ffd76a;color:#3b1d00;font-size:13px}
+.dealfloat .dealx{position:absolute;top:-10px;right:-8px;width:28px;height:28px;border-radius:50%;border:2px solid #ffd76a;background:#1a0f3a;color:#fff;font-size:14px;line-height:1;display:grid;place-items:center;padding:0}
 </style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -1690,7 +1699,7 @@ function openMagic(n){
     async()=>{ if(!await gate(n+off)) return;
       closeModal(); const g=payAd(); renderText(); completeMagic(n); toast(`${t("adDone")} · +${g}`,w.icon); },{kind:"magic",n,bw:id});
 }
-function completeMagic(n){ const id=bwId; setProg(id,n); countAd(); save(); renderMap(); renderPay(); if(n===20) setTimeout(()=>toast(t("magicDone"),BW[id].icon),1200); }
+function completeMagic(n){ const id=bwId; setProg(id,n); countAd(); save(); dealTick(); renderMap(); renderPay(); if(n===20) setTimeout(()=>toast(t("magicDone"),BW[id].icon),1200); }
 function queueMagicOpen(){
   const show=()=>{ if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; }
     showModal(t("magicOpenT"),`<div class="promo vipp" style="padding-top:8px"><div class="unlock"><div class="ukey">${KEY_SVG}</div><svg viewBox="-50 -66 100 106" width="110" height="110">${padlockSVG(true,0,4,1.6)}</svg></div><p>${t("magicOpenB")}</p></div>`,[[t("close"),"no",closeModal],[t("magicEnter"),"go",()=>{ closeModal(); bwId="magic"; magicMode=true; renderMap(); window.scrollTo({top:0,behavior:"smooth"}); }]]); };
@@ -2765,12 +2774,15 @@ function bindBagNft(){
 const OFFER_PCT=30, OFFER_MS=72*3600000;
 function firstOffer(){ if(vipTier()||S.vipReq||(S.orders||[]).length) return false; if(!S.offerStart){ S.offerStart=Date.now(); save(); } return Date.now()-S.offerStart<OFFER_MS; }
 const offerLeft=()=>Math.max(0,(S.offerStart||Date.now())+OFFER_MS-Date.now());
-const vipT=v=>{ const off=firstOffer(); return {...v,full:v.usd,usd:off?Math.round(v.usd*(100-OFFER_PCT))/100:v.usd,off}; };
+const DEAL_PCT=20, DEAL_MS=15*60000;
+const dealOn=()=>(S.dealUntil||0)>Date.now();
+const vipOffPct=()=>firstOffer()?OFFER_PCT:dealOn()?DEAL_PCT:0;
+const vipT=v=>{ const p=vipOffPct(), off=p>0; return {...v,full:v.usd,usd:off?Math.round(v.usd*(100-p))/100:v.usd,off,pct:p}; };
 function vipCompareHTML(){ const es=S.lang==="es", per=AD_UNITS*coinRate(), rows=[{n:0,m:1},...VIP_TIERS];
   return `<div class="vipcmp"><h4>📊 ${es?"¿Cuánto ganas con VIP?":"How much do you earn with VIP?"}</h4><small>${es?"Con los 20 anuncios del día · en":"With the 20 daily ads · in"} ${S.payCoin}</small>
     <table><tr><th></th><th>${es?"Por día":"Per day"}</th><th>${es?"Por mes":"Per month"}</th></tr>${rows.map(r=>`<tr class="${r.n===4?"best":""}"><td>${r.n?`VIP ${r.n} <b>×${r.m}</b>`:(es?"Sin VIP":"No VIP")}</td><td>${cryptoTxt(per*r.m*20)}</td><td>${cryptoTxt(per*r.m*20*30)}</td></tr>`).join("")}</table>
     <small>${es?"+ bonus de héroes, NFT y nivel. VIP dura 1 año.":"+ hero, NFT and level bonus. VIP lasts 1 year."}</small></div>`; }
-function offerHTML(){ if(!firstOffer()) return ""; const es=S.lang==="es", h=Math.ceil(offerLeft()/3600000);
+function offerHTML(){ if(!firstOffer()){ if(!dealOn()||vipTier()>=4) return ""; const es=S.lang==="es"; return `<div class="firstoff">⚡ <b>${es?`¡Oferta especial -${DEAL_PCT}%!`:`Special deal -${DEAL_PCT}%!`}</b><span>${es?"Termina en":"Ends in"} <span class="dealleft">${leftStr(S.dealUntil-Date.now())}</span></span></div>`; } const es=S.lang==="es", h=Math.ceil(offerLeft()/3600000);
   return `<div class="firstoff">🎁 <b>${es?`¡Primera compra -${OFFER_PCT}%!`:`First purchase -${OFFER_PCT}%!`}</b><span>${es?`Solo para nuevos jugadores · quedan ${h} h`:`New players only · ${h} h left`}</span></div>`; }
 function vipEnd(u){ if(window.__OWNER||!(u>Date.now())) return S.lang==="en"?"Owner · permanent":S.lang==="pt"?"Dono · permanente":"Dueño · permanente"; return dateStr(u); }
 function dateStr(ms){return new Date(ms).toLocaleDateString(LOC(),{day:"numeric",month:"short",year:"numeric"});}
@@ -3718,7 +3730,39 @@ function showModal(title,body,buttons){
 }
 const closeModal=()=>{ modal.close(); if(typeof depTarget!=="undefined") depTarget=null; };
 function addCoins(n){S.coins+=n;save();renderText();toast(fmt(t("gotCoins"),{n}));}
-function complete(n){S.done=n;countAd();save();renderMap();renderPay(); if(n===5||n===10) queuePromo(n===5?"offer":"vip"); if(n===20) queueMagicOpen();}
+
+/* ===== Floating deal every 3 circles ===== */
+let dealTimer=null;
+function dealTick(){ if((S.claims||0)%3!==0) return; setTimeout(showDeal,1600); }
+function dealTxt(es,pt,en){ return S.lang==="es"?es:S.lang==="pt"?pt:en; }
+function showDeal(){
+  hideDeal(); const cur=window.__OWNER?0:vipTier(); let html="", go=null;
+  if(cur<4){
+    if(!firstOffer()){ S.dealUntil=Date.now()+DEAL_MS; save(); }
+    const v=VIP_TIERS[Math.min(3,cur)], T=vipT(v), until=firstOffer()?(S.offerStart+OFFER_MS):S.dealUntil;
+    html=`<div class="dealic">${ic("vip",44)}</div><div class="dealbody"><span class="dealtag">-${T.pct}%</span>
+      <b>${cur?dealTxt(`¡Sube a VIP ${v.n} con descuento!`,`Suba para VIP ${v.n} com desconto!`,`Upgrade to VIP ${v.n} on sale!`):dealTxt("¡Oferta VIP solo para ti!","Oferta VIP só para você!","VIP deal just for you!")}</b>
+      <small>VIP ${v.n} ×${v.m} · <s>$${T.full.toFixed(2)}</s> <em>$${T.usd.toFixed(2)}</em></small>
+      <small class="dealtime">⏱ ${dealTxt("Termina en","Termina em","Ends in")} <span class="dealleft" data-u="${until}">${leftStr(until-Date.now())}</span></small></div>`;
+    go=()=>{ vipSel=Math.min(3,cur); shopMode="vip"; goView("shop"); };
+  } else {
+    const id=flashId(); if(!id) return; const hid=id.split(":")[1], hi=hIdx(hid), full=comboFull(id), pr=comboPrice(id); if(!(full>pr)) return;
+    html=`<div class="dealic">${gearSVG(hi,0)}</div><div class="dealbody"><span class="dealtag">-${offFor(id)}%</span>
+      <b>${dealTxt("¡Set completo con descuento!","Conjunto completo com desconto!","Full gear set on sale!")}</b>
+      <small>${escapeHtml(itemName(id))} · <s>${full}</s> <em>${pr} DMT</em></small></div>`;
+    go=()=>{ shopMode="gear"; goView("shop"); setTimeout(()=>buyDialog(id),250); };
+  }
+  const d=document.createElement("div"); d.id="dealFloat"; d.className="dealfloat";
+  d.innerHTML=`<button class="dealx" aria-label="Cerrar">✕</button>${html}<button class="dealgo">${dealTxt("Comprar","Comprar","Buy now")}</button>`;
+  document.body.appendChild(d); requestAnimationFrame(()=>d.classList.add("in"));
+  d.querySelector(".dealx").onclick=e=>{ e.stopPropagation(); hideDeal(); };
+  d.querySelector(".dealgo").onclick=e=>{ e.stopPropagation(); hideDeal(); go(); };
+  clearInterval(dealTimer); dealTimer=setInterval(()=>{ const el=d.querySelector(".dealleft"); if(!document.body.contains(d)){ clearInterval(dealTimer); return; } if(el){ const ms=+el.dataset.u-Date.now(); if(ms<=0){ hideDeal(); return; } el.textContent=leftStr(ms); } },1000);
+}
+function hideDeal(){ const d=$("#dealFloat"); if(d) d.remove(); clearInterval(dealTimer); }
+setInterval(()=>{ document.querySelectorAll(".firstoff .dealleft").forEach(el=>{ const ms=(S.dealUntil||0)-Date.now(); if(ms<=0){ try{ renderVip(); }catch(e){} } else el.textContent=leftStr(ms); }); },1000);
+
+function complete(n){S.done=n;countAd();save();dealTick();renderMap();renderPay(); if(n===5||n===10) queuePromo(n===5?"offer":"vip"); if(n===20) queueMagicOpen();}
 const leftStr=ms=>{const s=Math.max(0,Math.floor(ms/1000));return `${String(Math.floor(s/3600)).padStart(2,"0")}:${String(Math.floor(s%3600/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;};
 function flashBanner(){
   const f=ensureFlash(); if(!f) return "";
