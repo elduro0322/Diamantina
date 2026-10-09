@@ -16,6 +16,43 @@ async function adslabInit(env, subId, returnUrl, key) {
   const text = await r.text(); let d = {}; try { d = JSON.parse(text); } catch (e) {}
   return { r, d, text };
 }
+
+/* ===== AdsLab Tasks postback -> credit the player in Firebase =====
+   Cloudflare variables needed:
+   TASKS_TOKEN = secret word that goes in the postback URL (/api/tasks/<TASKS_TOKEN>)
+   FB_EMAIL / FB_PASS = owner account (the one in the Firestore rules)
+   TASK_SHARE (optional) = part of the reward for the player, default 0.7 (70%) */
+const FB_KEY = "AIzaSyBjRFR9IpFjcV_rJGJ_jWPOB2rrFNXSS40", FB_PROJECT = "diamantinagame-d2c79";
+const FS = "https://firestore.googleapis.com/v1/projects/" + FB_PROJECT + "/databases/(default)/documents/";
+async function fbToken(env) {
+  const r = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + FB_KEY, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: env.FB_EMAIL, password: env.FB_PASS, returnSecureToken: true }) });
+  const d = await r.json(); if (!d.idToken) throw new Error("login " + ((d.error && d.error.message) || r.status)); return d.idToken;
+}
+const fv = v => typeof v === "number" ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v }) : { stringValue: String(v) };
+async function fsSet(tok, path, obj) {
+  const fields = {}; for (const k in obj) fields[k] = fv(obj[k]);
+  const r = await fetch(FS + path, { method: "PATCH", headers: { "content-type": "application/json", authorization: "Bearer " + tok }, body: JSON.stringify({ fields }) });
+  if (!r.ok) throw new Error("firestore " + r.status + " " + (await r.text()).slice(0, 120));
+}
+async function tasksPostback(request, env, token) {
+  if (!env.TASKS_TOKEN || token !== env.TASKS_TOKEN) return new Response("forbidden", { status: 403 });
+  const q = new URL(request.url).searchParams;
+  const uid = (q.get("uid") || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 64);
+  const txid = (q.get("txid") || "").replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 80);
+  const reward = parseFloat(q.get("reward") || "0") || 0, vcur = parseFloat(q.get("vCurrency") || "0") || 0;
+  if (!uid || !txid) return new Response("missing uid/txid", { status: 400 });
+  const share = Math.min(1, Math.max(0, parseFloat(env.TASK_SHARE || "0.7") || 0.7));
+  const usd = Math.min(reward, 1) * share;                    // safety cap: max $1 per task
+  const units = Math.max(0, Math.round(usd * 1e5));            // game units ($0.00001)
+  const tok = await fbToken(env), now = Date.now();
+  const rec = { type: "task", units, reward, vCurrency: vcur, txid, pid: q.get("pid") || "", ttype: q.get("type") || "", sig: q.get("signature") || "", at: now };
+  await fsSet(tok, "credits/" + uid, { updatedAt: now });
+  await fsSet(tok, "credits/" + uid + "/list/task_" + txid, rec);
+  return new Response("OK");
+}
+
 async function handle(request, env) {
   try {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -56,6 +93,7 @@ export default {
   async fetch(request, env) {
     const u = new URL(request.url);
     if (u.pathname === "/api/captcha") return handle(request, env);
+    if (u.pathname.startsWith("/api/tasks/")) { try { return await tasksPostback(request, env, u.pathname.slice(11)); } catch (e) { return new Response("error: " + String((e && e.message) || e).slice(0, 150), { status: 500 }); } }
     return env.ASSETS.fetch(request);
   }
 };

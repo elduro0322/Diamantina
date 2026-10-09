@@ -861,6 +861,9 @@ main{overscroll-behavior-y:contain}
 #worldBar{flex-wrap:wrap;row-gap:6px}#worldBar .wbbreak{flex-basis:100%;height:0;border-top:1px solid rgba(255,255,255,.12)}#worldBar .resetrow{font-size:12px}#worldBar b.resetrow{color:#7CF0C2}
 .tixbar{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0 0 12px;border-radius:16px;background:linear-gradient(135deg,rgba(236,72,153,.25),rgba(245,158,11,.25));border:2px dashed #FDE047}.tixbar b{display:block;font-size:15px;color:#FDE047}.tixbar small{display:block;font-size:12px;opacity:.95}.tixbar svg{flex:0 0 auto}
 .otherbal{margin:10px 0;padding:10px 12px;border-radius:14px;background:rgba(124,240,194,.08);border:1px solid rgba(124,240,194,.35);font-size:13px}.otherbal small{display:block;opacity:.85;margin:4px 0 8px}
+.taskcard{display:flex;align-items:center;gap:12px;width:100%;margin:0 0 12px;padding:12px 14px;border-radius:16px;border:2px solid #34d399;background:linear-gradient(135deg,rgba(16,185,129,.28),rgba(59,130,246,.22));color:#fff;text-align:left;cursor:pointer}
+.taskcard .tkic{font-size:30px}.taskcard .tktx{flex:1;display:flex;flex-direction:column}.taskcard b{font-size:16px}.taskcard small{opacity:.9;font-size:12px}.taskcard .tkgo{font-size:28px;font-weight:900;color:#34d399}
+#modal.wide{width:min(720px,98vw)}.taskwall{width:100%;height:68vh;border:0;border-radius:12px;background:#fff}
 </style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -1004,6 +1007,7 @@ main{overscroll-behavior-y:contain}
     <h1 class="title" id="worldTitle"></h1>
     <p class="sub" id="worldSub"></p>
     <div class="worldbar" id="worldBar"></div>
+    <button class="taskcard" id="taskBtn" type="button"></button>
     <div class="bwbar" id="bwBar"></div>
     <div class="mapcard"><svg class="scene" id="scene" viewBox="0 0 582 880" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="map" viewBox="0 0 582 880" role="group"></svg></div>
     <div class="legend">
@@ -2518,7 +2522,7 @@ function renderBag(){
 }
 function renderDepBtns(){ const lbl=`${ic("pay",28)}<span>${t("depositBtn")}</span><small>FaucetPay · Cwallet · BTC · USDT · ETH · BNB · LTC · SOL</small>`; ["#depMapBtn","#depPayBtn"].forEach(s=>{const e=$(s); if(e) e.innerHTML=lbl;}); }
 document.addEventListener("click",e=>{ if(e.target&&e.target.id==="termsBtn") showTerms(); });
-function renderAll(){renderDepBtns();if(typeof renderCardPanel==="function")renderCardPanel();renderLevel();if(typeof renderProofs==="function")renderProofs();renderText();renderMap();renderHeroes();renderShop();renderBag();renderPay();renderVip();renderDeposit();if(typeof renderTop3==="function")renderTop3();}
+function renderAll(){ try{ renderTaskBtn(); }catch(e){} renderDepBtns();if(typeof renderCardPanel==="function")renderCardPanel();renderLevel();if(typeof renderProofs==="function")renderProofs();renderText();renderMap();renderHeroes();renderShop();renderBag();renderPay();renderVip();renderDeposit();if(typeof renderTop3==="function")renderTop3();}
 
 /* ---------- 100 unique Diamantina NFTs + player market ---------- */
 const NFT_BASE={common:750,rare:2250,epic:5500,legendary:15000,mythic:45000}; // start price in 0.00001 USD
@@ -3613,6 +3617,10 @@ async function loadAdmin(){
   }catch(e){}
   list.innerHTML=rows.length?rows.map((r,i)=>{const pc=coinBy(r.coin);
     return `<div class="req"><img src="${pc.img}" alt=""><div class="grow">${escapeHtml(r.date)} · ${pc.t} · ${METHODS[r.method]?.name||""} · $${escapeHtml(r.amountUsd)}${r.amountCoin?` ≈ ${nf(r.amountCoin,8)} ${pc.t}`:""}<br><span style="color:var(--muted)">${escapeHtml(r.account)}</span></div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini" data-i="${i}">${t("markPaid")}</button><button class="mini wdref" data-r="${i}" style="background:#5a2a3a">${S.lang==="es"?"Devolver saldo":"Refund"}</button></div></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("noPending")}</p>`;
+  try{ const cr=await DB.collection("credits").get(); let tn=0, tu=0, tr=0, last=[];
+    for(const u of cr.docs){ const ls=await DB.doc("credits/"+u.id).collection("list").get(); ls.docs.forEach(d=>{ const x=d.data(); if(x.type==="task"){ tn++; tu+=x.units||0; tr+=x.reward||0; last.push({...x,uid:u.id}); } }); }
+    if(tn){ last.sort((a,b)=>(b.at||0)-(a.at||0)); const es=S.lang==="es";
+      list.insertAdjacentHTML("afterbegin",`<div class="req">📋<div class="grow">${es?"Tareas AdsLab":"AdsLab tasks"} · ${tn}<br><span style="color:var(--muted)">${es?"Pagado a jugadores":"Paid to players"}: ${usd(tu)} · reward: ${nf(tr,6)}<br>${last.slice(0,5).map(x=>`ID ${codeOf(x.uid)} · ${escapeHtml(x.ttype||"")} · reward ${x.reward} · vCur ${x.vCurrency} → ${usd(x.units||0)}`).join("<br>")}</span></div></div>`); } }catch(e){}
   list.insertAdjacentHTML("afterbegin",`<div class="req">${ic("swap",32)}<div class="grow">${fmt(t("exFees"),{p:SWAP_FEE})}<br><span style="color:var(--muted)">${fmt(t("exCount"),{n:exN})}</span></div><b>$${nf(exSum,4)}</b></div>`);
   list.insertAdjacentHTML("afterbegin",`<div class="req">${ic("gem",32)}<div class="grow">${fmt(t("feesTotal"),{p:FEE_PCT})}<br><span style="color:var(--muted)">${fmt(t("feesCount"),{n:feeN})}</span></div><b>${usd(feeSum)}</b></div>`);
   try{
@@ -3783,6 +3791,24 @@ document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ beat();
 function renderXBans(){ const box=$("#xBans"); if(!box) return; box.innerHTML=XB.map(c=>codeHTML(c)).join(""); }
 function loadXBans(){ const box=$("#xBans"); if(!box||box.dataset.on) return; box.dataset.on="1"; renderXBans(); }
 if(document.readyState==="complete") setTimeout(loadXBans,800); else window.addEventListener("load",()=>setTimeout(loadXBans,800),{once:true});
+
+
+/* ===== AdsLab task wall (offerwall) ===== */
+const TASK_WALL="https://adslab.me/task-JUSNhF6EVGis/";
+function renderTaskBtn(){ const b=$("#taskBtn"); if(!b) return; const es=S.lang==="es";
+  b.innerHTML=`<span class="tkic">📋</span><span class="tktx"><b>${es?"Tareas pagadas":S.lang==="pt"?"Tarefas pagas":"Paid tasks"}</b><small>${es?"Gana mucho más: Telegram, PTC, encuestas…":S.lang==="pt"?"Ganhe muito mais: Telegram, PTC, pesquisas…":"Earn much more: Telegram, PTC, surveys…"}</small></span><span class="tkgo">›</span>`;
+  b.onclick=openTasks; }
+let taskPoll=null;
+function openTasks(){
+  if(!(DB&&UID)||!isReg()){ try{ return openAuth("up"); }catch(e){ return; } }
+  const es=S.lang==="es";
+  showModal(es?"📋 Tareas pagadas":"📋 Paid tasks",`<p class="hint" style="margin:0 0 8px">${es?"Completa tareas y el premio se suma solo a tu saldo (puede tardar unos minutos).":"Complete tasks and the reward is added to your balance automatically (it may take a few minutes)."}</p>
+    <iframe class="taskwall" src="${TASK_WALL}${encodeURIComponent(UID)}" title="tasks" allow="clipboard-write"></iframe>`,[[t("close"),"no",()=>{ closeModal(); clearInterval(taskPoll); collectCredits(); }]]);
+  document.getElementById("modal").classList.add("wide");
+  modal.addEventListener("close",()=>{ document.getElementById("modal").classList.remove("wide"); clearInterval(taskPoll); },{once:true});
+  clearInterval(taskPoll); taskPoll=setInterval(()=>{ try{ collectCredits(); }catch(e){} },45000);
+}
+setInterval(()=>{ try{ if(!document.hidden) collectCredits(); }catch(e){} },180000);
 
 /* ---------- Actions ---------- */
 const modal=$("#modal");
@@ -4256,6 +4282,7 @@ async function collectCredits(){
         showModal(S.lang==="es"?"Compra rechazada":"Purchase rejected",`<p>${S.lang==="es"?"No encontramos tu pago para esta compra, por eso fue <b>rechazada</b>. Si ya pagaste, escríbenos por Telegram con el comprobante (TX).":"We couldn't find your payment for this purchase, so it was <b>rejected</b>. If you already paid, contact us on Telegram with your proof (TX)."}</p>`,[[t("close"),"go",closeModal]]); S.claimed.push(d.id); n++; continue; }
       else if(x.type==="refund"){ S.bal=(S.bal||0)+(x.units||0); (S.payouts||[]).forEach(p=>{ if(p.date===x.item) p.status="refunded"; });
         showModal(S.lang==="es"?"Retiro devuelto":"Withdrawal returned",`<p>${S.lang==="es"?`Tu retiro de <b>${usd(x.units||0)}</b> no se pudo pagar en esa moneda y se devolvió a tu saldo. Elige otra moneda en <b>Retirar</b> y pídelo de nuevo.`:`Your withdrawal of <b>${usd(x.units||0)}</b> couldn't be paid in that coin and was returned to your balance. Choose another coin in <b>Withdraw</b> and request it again.`}</p>`,[[t("close"),"go",closeModal]]); }
+      else if(x.type==="task"){ S.bal=(S.bal||0)+(x.units||0); toast((S.lang==="es"?"✅ Tarea completada: +":"✅ Task completed: +")+cryptoTxt(x.units||0),"pay"); }
       else if(x.type==="key"&&x.item){ giveKey(x.item); toast(fmt(t("keyGot"),{w:t(BW[x.item].name)}),BW[x.item].icon); }
       else if(x.type==="hero"&&premBy(x.item)){ S.prem=S.prem||{}; S.prem[x.item]=true; S.ph=x.item; renderHeroes(); renderMap(); toast(fmt(t("premGot"),{x:premName(x.item),p:premBy(x.item).pct}),"heroes"); }
       else if(x.type==="xp"&&XP_PACKS[+x.item]){ grantXP(+x.item); }
