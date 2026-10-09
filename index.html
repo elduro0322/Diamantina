@@ -3185,7 +3185,8 @@ function applyCfg(c){
   if(c.USDTnet) OWNER_WALLETS.USDT.net=c.USDTnet;
 }
 async function loadCfg(){ if(!DB) return; try{ const d=await DB.doc("config/main").get(); if(d.exists) applyCfg(d.data()); }catch(e){}
-  try{ const a=await DB.doc("config/ads").get(); if(a.exists) applyAdsCfg(a.data()); }catch(e){} }
+  try{ const a=await DB.doc("config/ads").get(); if(a.exists) applyAdsCfg(a.data()); }catch(e){}
+  try{ const x=await DB.doc("config/xbans").get(); if(x.exists&&Array.isArray(x.data().xb)) applyAdsCfg({xb:x.data().xb,links:FAUCETS,banners:OWN_BANNERS}); }catch(e){} }
 let OWN_BANNERS=[];
 const XB_DEFAULT=['<iframe src="https://serve.adslab.me/api/banner/iframe?id=unit-cnn2ctwlc" width="300" height="250" frameborder="0" scrolling="no"></iframe>','<script>atOptions={"key":"50ad20da5618433d3d4b94ba24bd2805","format":"iframe","height":250,"width":300,"params":{}};<\/script><script src="https://www.highrevenueformat.com/50ad20da5618433d3d4b94ba24bd2805/invoke.js"><\/script>'];
 let XB=XB_DEFAULT.slice();
@@ -3232,7 +3233,7 @@ function renderAdmAds(){
   $("#aaLinks").oninput=()=>{ sync(); $("#aaCount").textContent=fmt(t("aaCount"),{n:A2.links.length}); };
   const add=$("#aaAdd"); if(add) add.onclick=()=>{ sync(); A2.banners.push({frame:"",on:true}); renderAdmAds(); };
   { const xr=$("#xbReset"); if(xr) xr.onclick=()=>{ sync(); A2.xb=XB_DEFAULT.slice(); renderAdmAds(); }; }
-  box.querySelectorAll("[data-bf],[data-xb]").forEach(ta=>ta.onchange=()=>{ sync(); renderAdmAds(); });
+  let pvT=null; box.querySelectorAll("[data-bf],[data-xb]").forEach(ta=>ta.oninput=()=>{ clearTimeout(pvT); pvT=setTimeout(()=>{ sync(); const pv=ta.closest(".aab")&&ta.closest(".aab").querySelector(".aaprev"); if(pv) pv.innerHTML=codeHTML(ta.value)||`<span>${S.lang==="es"?"Vista previa":"Preview"}</span>`; },700); });
   box.querySelectorAll("[data-bd]").forEach(b=>b.onclick=()=>{ sync(); A2.banners.splice(+b.dataset.bd,1); renderAdmAds(); });
   box.querySelectorAll("[data-bi]").forEach(inp=>inp.onchange=async()=>{ const f=inp.files[0]; if(!f) return; sync(); try{ A2.banners[+inp.dataset.bi].img=await shrinkImg(f); renderAdmAds(); }catch(e){ toast(t("mkErr")); } });
   $("#aaReset").onclick=()=>{ sync(); A2.links=FAUCETS_DEFAULT.map(x=>x.slice()); renderAdmAds(); };
@@ -3241,7 +3242,14 @@ function renderAdmAds(){
     if(!A2.links.length){ $("#aaMsg").textContent=t("aaNeedLink"); return; }
     const doc={links:A2.links,banners:A2.banners.filter(b=>b.img||b.frame),xb:A2.xb.map(x=>x||""),at:Date.now()};
     if(JSON.stringify(doc).length>240000){ $("#aaMsg").textContent=t("aaTooBig"); return; }
-    try{ await DB.doc("config/ads").set(doc); applyAdsCfg(doc); ADM_ADS=null; renderAdmAds(); $("#aaMsg").textContent=t("cfgSaved"); toast(t("cfgSaved"),"ad"); }catch(e){ $("#aaMsg").textContent=t("mkErr"); }
+    const es=S.lang==="es", btn=$("#aaSave"); if(btn) btn.disabled=true; $("#aaMsg").textContent=es?"Guardando…":"Saving…";
+    let ok=false, err="";
+    try{ await DB.doc("config/ads").set(doc); ok=true; }catch(e){ err=(e&&(e.code||e.message))||"error";
+      try{ await DB.doc("config/ads").set({links:doc.links,banners:doc.banners,at:doc.at}); ok=true; err=""; }catch(e2){ err=(e2&&(e2.code||e2.message))||err; } }
+    try{ await DB.doc("config/xbans").set({xb:doc.xb,at:doc.at}); }catch(e){ if(!ok) err=err||((e&&(e.code||e.message))||"error"); }
+    if(btn) btn.disabled=false;
+    if(ok){ applyAdsCfg(doc); ADM_ADS=null; renderAdmAds(); $("#aaMsg").textContent=t("cfgSaved"); toast(t("cfgSaved"),"ad"); }
+    else { $("#aaMsg").textContent=(es?"No se pudo guardar: ":"Could not save: ")+err+(/permission/i.test(err)?(es?" (revisa que entraste como dueño con ?owner)":" (make sure you are signed in as owner)"):""); toast(t("mkErr")); }
   };
 }
 
