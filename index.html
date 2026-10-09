@@ -858,6 +858,7 @@ main{overscroll-behavior-y:contain}
 @keyframes dealpulse{50%{transform:scale(1.12)}}
 .dealfloat .dealgo{flex:0 0 auto;border:0;border-radius:12px;padding:10px 12px;font-weight:900;background:#ffd76a;color:#3b1d00;font-size:13px}
 .dealfloat .dealx{position:absolute;top:-10px;right:-8px;width:28px;height:28px;border-radius:50%;border:2px solid #ffd76a;background:#1a0f3a;color:#fff;font-size:14px;line-height:1;display:grid;place-items:center;padding:0}
+#worldBar{flex-wrap:wrap;row-gap:6px}#worldBar .wbbreak{flex-basis:100%;height:0;border-top:1px solid rgba(255,255,255,.12)}#worldBar .resetrow{font-size:12px}#worldBar b.resetrow{color:#7CF0C2}
 </style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -1259,9 +1260,12 @@ const WEEK_ORDER = [1,2,3,4,5,6,0];
 const BOGOTA_OFFSET = -5*3600*1000;
 function bogota(){
   const d = new Date(Date.now()+BOGOTA_OFFSET);
-  const key = d.toISOString().slice(0,10);
+  /* Game day (ads, circles, bonus villages) resets at 00:00 UTC = 7:00 pm Colombia.
+     The village of the day (day/msLeft) still changes at midnight Colombia. */
+  const u = new Date(), key = u.toISOString().slice(0,10);
+  const resetLeft = 86400000 - (u.getUTCHours()*3600000 + u.getUTCMinutes()*60000 + u.getUTCSeconds()*1000 + u.getUTCMilliseconds());
   const msLeft = 86400000 - (d.getUTCHours()*3600000 + d.getUTCMinutes()*60000 + d.getUTCSeconds()*1000 + d.getUTCMilliseconds());
-  return {day:d.getUTCDay(), key, msLeft, hh:d.getUTCHours(), mm:d.getUTCMinutes()};
+  return {day:d.getUTCDay(), key, msLeft, resetLeft, hh:d.getUTCHours(), mm:d.getUTCMinutes()};
 }
 
 /* ---------- Scene helpers (SVG + SMIL, viewBox 582 x 880) ---------- */
@@ -2293,7 +2297,8 @@ function updateClock(){
     return;
   }
   const s=Math.floor(b.msLeft/1000), hh=String(Math.floor(s/3600)).padStart(2,"0"), mm=String(Math.floor(s%3600/60)).padStart(2,"0"), ss=String(s%60).padStart(2,"0");
-  bar.innerHTML=`<span>${t("todayW")}: ${DAYS[S.lang][b.day]} ${String(b.hh).padStart(2,"0")}:${String(b.mm).padStart(2,"0")}<br>${t("nextWorld")}</span><b>${hh}:${mm}:${ss}</b>`;
+  const rs=Math.floor(b.resetLeft/1000), rTxt=`${String(Math.floor(rs/3600)).padStart(2,"0")}:${String(Math.floor(rs%3600/60)).padStart(2,"0")}:${String(rs%60).padStart(2,"0")}`, rLbl=S.lang==="es"?"🔄 Anuncios nuevos (7:00 pm) en":S.lang==="pt"?"🔄 Novos anúncios (19:00 Colômbia) em":"🔄 New ads (00:00 UTC) in";
+  bar.innerHTML=`<span>${t("todayW")}: ${DAYS[S.lang][b.day]} ${String(b.hh).padStart(2,"0")}:${String(b.mm).padStart(2,"0")}<br>${t("nextWorld")}</span><b>${hh}:${mm}:${ss}</b><i class="wbbreak"></i><span class="resetrow">${rLbl}</span><b class="resetrow">${rTxt}</b>`;
 }
 /* ---------- Premium heroes (locked, for sale) ---------- */
 const PREMIUM=[
@@ -4244,13 +4249,14 @@ renderAll();
 setTimeout(captchaResume,600);
 loadPrices(); setInterval(loadPrices,60000);
 soundUI();
-let lastKey=bogota().key;
+let lastKey=bogota().key, lastDay=bogota().day;
 setInterval(()=>{
   const b=bogota();
-  if(b.key!==lastKey){lastKey=b.key; viewDay=null; syncDay(); renderAll(); toast(WORLDS[b.day][S.lang],WORLDS[b.day].id);}
+  if(b.key!==lastKey){lastKey=b.key; lastDay=b.day; viewDay=null; syncDay(); renderAll(); toast(S.lang==="es"?"🔄 ¡Anuncios nuevos disponibles!":"🔄 New ads available!");}
+  else if(b.day!==lastDay){lastDay=b.day; viewDay=null; renderAll(); toast(WORLDS[b.day][S.lang],WORLDS[b.day].id);}
   else updateClock();
 },1000);
-document.addEventListener("visibilitychange",()=>{if(!document.hidden){const b=bogota(); if(b.key!==lastKey){lastKey=b.key;viewDay=null;syncDay();renderAll();}}});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){const b=bogota(); if(b.key!==lastKey||b.day!==lastDay){const nk=b.key!==lastKey; lastKey=b.key; lastDay=b.day; viewDay=null; if(nk) syncDay(); renderAll();}}});
 </script>
 </body>
 </html>
