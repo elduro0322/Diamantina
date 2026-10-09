@@ -2689,6 +2689,9 @@ async function loadMarket(){
   try{
     const [nf,mk]=await Promise.all([DB.collection(NFT_COL).get(),DB.collection(MARKET_COL).where("status","==","open").get()]);
     MY_NFTS=[]; NFT_TAKEN=0; nf.docs.forEach(d=>{const x=d.data(); if(x) NFT_TRADES[+d.id]=x.trades||0; if(x&&x.owner){NFT_TAKEN++; if(x.owner===UID) MY_NFTS.push(+d.id);}});
+    const ownerOf={}; nf.docs.forEach(d=>{const x=d.data(); if(x&&x.owner) ownerOf[+d.id]=x.owner;});
+    for(const id of (S.nft500||[])){ if(MY_NFTS.includes(id)) continue; const o=ownerOf[id];
+      if(!o){ MY_NFTS.push(id); NFT_TAKEN++; DB.doc(NFT_COL+"/"+id).set({id,owner:UID,claimedAt:Date.now()},{merge:true}).catch(()=>{}); } }
     MARKET=mk.docs.map(d=>({...d.data(),docId:d.id}));
     const now=Date.now(); MARKET.sort((a,b)=>((b.promotedUntil||0)>now)-((a.promotedUntil||0)>now)||(b.at||0)-(a.at||0));
   }catch(e){}
@@ -3854,7 +3857,7 @@ function openChest(n,magic){
     const gotLine=`<span class="gotcoin"><img src="${coin.img}" alt="">+${gotTxt}</span>`;
     const adLine=`<small>${ic("ad",18)} ${t("adDone")}${vipTier()?" · VIP ×"+mult():""}</small>${bonusInfo()}`;
     if(c.nft){
-      if(nftId){ const nn=nftBy(nftId); if(!MY_NFTS.includes(nftId)) MY_NFTS.push(nftId); renderBag();
+      if(nftId){ const nn=nftBy(nftId); if(!MY_NFTS.includes(nftId)) MY_NFTS.push(nftId); if(!(S.nft500||[]).includes(nftId)){ S.nft500=[...(S.nft500||[]),nftId]; save(); } renderBag();
         info=`<p class="amt">NFT #${String(nftId).padStart(3,"0")} · ${nftCharName(nn)}<small>${RAR_NAME[S.lang][nn.rar]} · ${t("nftUnique")}</small>${gotLine}${adLine}</p>`; }
       else { earn(10*mult()); info=`<p class="amt">${t("nftSoldOut")}${gotLine}${adLine}</p>`; }
     } else if(c.key){
