@@ -2756,8 +2756,8 @@ async function buyListing(l){
     await ref.update({status:"sold",buyer:UID,soldAt:Date.now()});
     const prev=await DB.doc(NFT_COL+"/"+d.nft).get(), tr=((prev.exists&&prev.data().trades)||0)+1;
     await DB.doc(NFT_COL+"/"+d.nft).set({id:d.nft,owner:UID,claimedAt:Date.now(),from:d.seller,trades:tr});
-    await DB.collection("sales").add({nft:d.nft,seller:d.seller,buyer:UID,units:d.units,fee,sellerGets,at:Date.now(),claimed:false});
-    S.bal-=d.units; save(); renderPay(); closeModal(); toast(fmt(t("boughtNft"),{n:String(d.nft).padStart(3,"0")}),"gem"); loadMarket();
+    S.bal-=d.units; S.feeMk=(S.feeMk||0)+fee; S.feeMkN=(S.feeMkN||0)+1; save(); try{ pushLb(); }catch(e){}
+    try{ await DB.collection("sales").add({nft:d.nft,seller:d.seller,buyer:UID,units:d.units,fee,sellerGets,at:Date.now(),claimed:false}); }catch(e){} renderPay(); closeModal(); toast(fmt(t("boughtNft"),{n:String(d.nft).padStart(3,"0")}),"gem"); loadMarket();
   }catch(e){ toast(t("mkErr")); }
 }
 async function sellDialog(id){
@@ -2945,7 +2945,8 @@ function renderSwap(){
     if(swapFrom==="USD") S.bal=Math.max(0,(S.bal||0)-Math.round(q.a*1e5)); else S.hold[swapFrom]=Math.max(0,held(swapFrom)-q.a);
     if(swapTo==="USD") S.bal=(S.bal||0)+Math.round(q.out*1e5); else S.hold[swapTo]=held(swapTo)+q.out;
     save(); renderPay();
-    if(DB&&UID){ try{ await DB.collection("exfees").add({from:swapFrom,to:swapTo,usd:q.usdv,feeUsd:q.fee,user:UID,at:Date.now()}); }catch(e){} }
+    S.feeEx=(S.feeEx||0)+q.fee; S.feeExN=(S.feeExN||0)+1; save();
+    if(DB&&UID){ try{ pushLb(); }catch(e){} try{ await DB.collection("exfees").add({from:swapFrom,to:swapTo,usd:q.usdv,feeUsd:q.fee,user:UID,at:Date.now()}); }catch(e){} }
     toast(fmt(t("swapOk"),{x:nf(q.out,8)+" "+swapTo}),"swap"); renderSwap();};
 }
 
@@ -2971,7 +2972,7 @@ function wkAds(){const k=weekInfo().key; if(!S.wk||S.wk.week!==k) S.wk={week:k,a
 async function pushLb(){
   if(!(DB&&UID)) return; const w=wkAds();
   const stUsd=(S.stakes||[]).filter(s=>(s.asset||"USD")==="USD").reduce((a,s)=>a+s.amt+s.rew,0);
-  try{ await DB.doc("lbads/"+UID).set({week:w.week,ads:w.ads,nick:myNick().slice(0,20),code:myCode(),hero:curHero(),at:Date.now(),bal:Math.round(S.bal||0),staked:Math.round(stUsd),dmt:S.dmtPre||0,day:bogota().key,td:S.doneDate===bogota().key?(S.done||0):0,stk:(S.stakes||[]).filter(x=>(x.end||0)>Date.now()).slice(0,20).map(x=>({a:x.asset||"USD",amt:x.amt,rew:x.rew||0,end:x.end})),seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier()}); }catch(e){}
+  try{ await DB.doc("lbads/"+UID).set({week:w.week,ads:w.ads,nick:myNick().slice(0,20),code:myCode(),hero:curHero(),at:Date.now(),bal:Math.round(S.bal||0),staked:Math.round(stUsd),dmt:S.dmtPre||0,day:bogota().key,td:S.doneDate===bogota().key?(S.done||0):0,stk:(S.stakes||[]).filter(x=>(x.end||0)>Date.now()).slice(0,20).map(x=>({a:x.asset||"USD",amt:x.amt,rew:x.rew||0,end:x.end})),seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier(),fx:S.feeEx||0,fxn:S.feeExN||0,fm:S.feeMk||0,fmn:S.feeMkN||0}); }catch(e){}
 }
 function countAd(){ const before=lvlInfo().L; wkAds().ads++; S.claims=(S.claims||0)+1; save(); pushLb(); renderLevel(); const v=lvlInfo(); if(v.L>before) setTimeout(()=>toast(fmt(t("levelUp"),{n:v.L,p:v.pct}),"trophy"),900); }
 async function loadComp(){
@@ -3400,7 +3401,7 @@ async function loadAccounting(){
   const A0={dep:0,gear:0,vip:0,tok:0,tokN:0,spent:0,paid:0,paidN:0,pend:0,pendN:0,owed:0,staked:0,dmtOwed:0,fees:0,exf:0,prizes:0,players:0};
   try{
     const users=new Set();
-    const [ord,pay,cred,lb,sales,ex]=await Promise.all([DB.collection("orders").get(),DB.collection("payouts").get(),DB.collection("credits").get(),DB.collection("lbads").get(),DB.collection("sales").get(),DB.collection("exfees").get()]);
+    const E0={docs:[]}, g=c=>DB.collection(c).get().catch(()=>E0); const [ord,pay,cred,lb,sales,ex]=await Promise.all([g("orders"),g("payouts"),g("credits"),g("lbads"),g("sales"),g("exfees")]);
     for(const u of ord.docs){ const ls=await DB.doc("orders/"+u.id).collection("list").get();
       ls.docs.forEach(d=>{ const o=d.data(), v=parseFloat(o.usd||0); if(o.status!=="approved") return;
         if(o.method==="balance"){ A0.spent+=v; if(o.type==="token"){A0.tok+=0; A0.tokN+=o.tokens||0;} return; }
@@ -3410,6 +3411,7 @@ async function loadAccounting(){
     for(const u of cred.docs){ const cs=await DB.doc("credits/"+u.id).collection("list").get(); cs.docs.forEach(d=>{ const x=d.data(); if(x.note==="weekly prize") A0.prizes+=(x.units||0)/1e5; }); }
     lb.docs.forEach(d=>{ const x=d.data(); A0.players++; A0.owed+=(x.bal||0)/1e5; A0.staked+=(x.staked||0)/1e5; A0.dmtOwed+=(x.dmt||0); });
     sales.docs.forEach(d=>A0.fees+=(d.data().fee||0)/1e5); ex.docs.forEach(d=>A0.exf+=d.data().feeUsd||0);
+    { let fx=0, fm=0; lb.docs.forEach(d=>{ const x=d.data(); fx+=x.fx||0; fm+=(x.fm||0)/1e5; }); A0.exf=Math.max(A0.exf,fx); A0.fees=Math.max(A0.fees,fm); }
   }catch(e){}
   const inTot=A0.dep+A0.gear+A0.vip+A0.tok, owe=A0.pend+A0.owed+A0.staked, net=inTot-A0.paid-owe;
   const $$=(v,d=2)=>"$"+Number(v).toFixed(v!==0&&Math.abs(v)<1?4:d);
@@ -3581,6 +3583,8 @@ async function loadAdmin(){
   const list=$("#adminList"); const rows=[]; let feeSum=0, feeN=0;
   try{ const ss=await DB.collection("sales").get(); ss.docs.forEach(d=>{const x=d.data(); feeSum+=x.fee||0; feeN++;}); }catch(e){}
   let exSum=0, exN=0; try{ const ex=await DB.collection("exfees").get(); ex.docs.forEach(d=>{exSum+=d.data().feeUsd||0; exN++;}); }catch(e){}
+  try{ const lb=await DB.collection("lbads").get(); let fx=0,fxn=0,fm=0,fmn=0; lb.docs.forEach(d=>{const x=d.data(); fx+=x.fx||0; fxn+=x.fxn||0; fm+=x.fm||0; fmn+=x.fmn||0;});
+    if(fx>exSum){ exSum=fx; exN=Math.max(exN,fxn); } if(fm>feeSum){ feeSum=fm; feeN=Math.max(feeN,fmn); } }catch(e){}
   try{
     const users=await DB.collection("payouts").get();
     for(const u of users.docs){
