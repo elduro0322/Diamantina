@@ -2772,16 +2772,17 @@ function vipCompareHTML(){ const es=S.lang==="es", per=AD_UNITS*coinRate(), rows
     <small>${es?"+ bonus de héroes, NFT y nivel. VIP dura 1 año.":"+ hero, NFT and level bonus. VIP lasts 1 year."}</small></div>`; }
 function offerHTML(){ if(!firstOffer()) return ""; const es=S.lang==="es", h=Math.ceil(offerLeft()/3600000);
   return `<div class="firstoff">🎁 <b>${es?`¡Primera compra -${OFFER_PCT}%!`:`First purchase -${OFFER_PCT}%!`}</b><span>${es?`Solo para nuevos jugadores · quedan ${h} h`:`New players only · ${h} h left`}</span></div>`; }
+function vipEnd(u){ if(window.__OWNER||!(u>Date.now())) return S.lang==="en"?"Owner · permanent":S.lang==="pt"?"Dono · permanente":"Dueño · permanente"; return dateStr(u); }
 function dateStr(ms){return new Date(ms).toLocaleDateString(LOC(),{day:"numeric",month:"short",year:"numeric"});}
 function renderVip(){
   const p=$("#vipPanel"), chip=$("#vipChip"); if(!p) return;
   const until=Math.max(S.vipUntil||0,VIP_UNTIL), cur=vipTier();
-  chip.innerHTML=cur?`${ic("vip",24)}VIP ${cur} ×${VIP_TIERS[cur-1].m} · ${dateStr(until)}`:`${ic("vip",24)}${t("vipChip")}`;
+  chip.innerHTML=cur?`${ic("vip",24)}VIP ${cur} ×${VIP_TIERS[cur-1].m} · ${vipEnd(until)}`:`${ic("vip",24)}${t("vipChip")}`;
   chip.onclick=()=>{shopMode="vip";goView("shop");renderShop();};
   if(vipSel<cur) vipSel=Math.min(3,cur);
   const T0=vipT(VIP_TIERS[vipSel]), units=Math.round(T0.usd*1e5), pend=S.vipReq&&S.vipReq.status==="pending", maxed=cur===4;
   p.innerHTML=`<h2>${ic("vip",30)} ${t("vipTitle")}</h2>
-    ${cur?`<div class="payto" style="color:#7CF0C2;margin-bottom:8px">${fmt(t("vipNow"),{n:cur,m:VIP_TIERS[cur-1].m,d:dateStr(until)})}</div>`:""}
+    ${cur?`<div class="payto" style="color:#7CF0C2;margin-bottom:8px">${(window.__OWNER?(S.lang==="es"?`Eres el dueño: VIP ${cur} ×${VIP_TIERS[cur-1].m} permanente`:S.lang==="pt"?`Você é o dono: VIP ${cur} ×${VIP_TIERS[cur-1].m} permanente`:`You are the owner: VIP ${cur} ×${VIP_TIERS[cur-1].m} permanent`):fmt(t("vipNow"),{n:cur,m:VIP_TIERS[cur-1].m,d:vipEnd(until)}))}</div>`:""}
     ${offerHTML()}<ul><li>${t("vipB1")}</li><li>${t("vipB2")}</li><li>${t("vipB3")}</li><li>${t("vipWorlds")}</li></ul>
     <div class="vtiers">${VIP_TIERS.map((v,i)=>{const own=cur>=v.n; return `<button class="vtier ${vipSel===i?"on":""} ${own?"own":""}" data-vt="${i}" ${own?"disabled":""}>
       <span class="vtn">VIP ${v.n}</span><b>×${v.m}</b><small>${fmt(t("vipTimes"),{m:v.m})}</small><span class="vtp">${(()=>{const vv=vipT(v); return vv.off?`<s>$${v.usd.toFixed(2)}</s> $${vv.usd.toFixed(2)}`:`$${v.usd.toFixed(2)}`;})()}</span>${own?`<em>${t("vipYour")}</em>`:""}</button>`;}).join("")}</div>
