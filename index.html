@@ -864,6 +864,10 @@ main{overscroll-behavior-y:contain}
 .taskcard{display:flex;align-items:center;gap:12px;width:100%;margin:10px 0 12px;padding:12px 14px;border-radius:16px;border:2px solid #34d399;background:linear-gradient(135deg,rgba(16,185,129,.28),rgba(59,130,246,.22));color:#fff;text-align:left;cursor:pointer}
 .taskcard .tkic{font-size:30px}.taskcard .tktx{flex:1;display:flex;flex-direction:column}.taskcard b{font-size:16px}.taskcard small{opacity:.9;font-size:12px}.taskcard .tkgo{font-size:28px;font-weight:900;color:#34d399}
 #modal.wide{width:min(720px,98vw)}.taskwall{width:100%;height:68vh;border:0;border-radius:12px;background:#fff}
+.reftiers{display:flex;gap:6px;margin:10px 0 0;flex-wrap:wrap}.reftiers span{flex:1;min-width:52px;text-align:center;padding:6px 4px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid var(--stroke);font-size:11px;display:flex;flex-direction:column}.reftiers span b{font-size:16px;color:#FFC93C}.reftiers span.on{border-color:#FFC93C;background:rgba(255,201,60,.15)}
+.myrefs{margin:14px 0;padding:12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--stroke)}.myrefs h3{margin:0 0 8px;font-size:16px}
+.reflist{max-height:260px;overflow:hidden}.reflist.open{max-height:420px;overflow-y:auto}.refrow{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)}.refrow small{display:block;opacity:.75;font-size:11px}.refrow .rgot{font-size:12px;color:#7CF0C2;white-space:nowrap}.rdot{width:9px;height:9px;border-radius:50%;background:#555;flex:0 0 9px}.rdot.on{background:#2ee66b}
+.buyref{margin:6px 0 4px;background:linear-gradient(135deg,#7c3aed,#db2777)!important;color:#fff!important}
 </style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -2986,7 +2990,7 @@ async function loadComp(){
     const F=fortInfo(); const [all,refs]=await Promise.all([DB.collection("lbads").get(),DB.collection("refs").get()]);
     const names={}, heroes={}; const ads=[];
     const vips={}; all.docs.forEach(d=>{const x=d.data(); names[d.id]=x.nick||("Hero-"+(x.code||"")); heroes[d.id]=x.hero; if(x.vipNow) vips[d.id]=x.vipNow; if(x.week===k&&x.ads>0) ads.push({uid:d.id,n:x.ads});});
-    const cnt={}; refs.docs.forEach(d=>{const x=d.data(); if(x.by&&inFort(x.at,F)) cnt[x.by]=(cnt[x.by]||0)+1;});
+    const cnt={}; refs.docs.forEach(d=>{const x=d.data(); if(x.via==="bought") return; if(x.by&&inFort(x.at,F)) cnt[x.by]=(cnt[x.by]||0)+1;});
     COMP={ads:ads.sort((a,b)=>b.n-a.n),refs:Object.entries(cnt).map(([uid,n])=>({uid,n})).sort((a,b)=>b.n-a.n),names,heroes,vips,loaded:true};
     const me=await DB.doc("refs/"+UID).get(); if(me.exists){ const by=me.data().by; S.refBy=by; S.refByName=names[by]||me.data().code; save(); }
   }catch(e){ COMP.loaded=true; }
@@ -3023,16 +3027,18 @@ function renderComp(){
     return `<div class="lbrow ${r.uid===UID?"me":""}">${medal(i)}<img src="${hsrc}" alt=""><div class="grow"><span class="nmrow"><b>${escapeHtml(r.uid===UID?myNick()+" ("+t("you")+")":(COMP.names[r.uid]||"Hero"))}</b>${vipBadge(vipOf(r.uid),true)}</span><small>${r.n} ${unit}</small></div><span class="prize">$${(PRIZES[i]/1e5).toFixed(2)}</span></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("notRanked")}</p>`}
     ${myIdx>=10?`<div class="lbrow me">${medal(myIdx)}<div class="grow"><b>${fmt(t("myPos"),{n:myIdx+1,c:list[myIdx].n+" "+unit})}</b></div></div>`:""}</div>`;
   html+=`<div class="panel"><h2>${t("nick")}</h2><div class="amtrow"><input class="field" id="nickIn" maxlength="20" value="${escapeHtml(myNick())}"><button class="maxbtn" id="nickSave">${t("save")}</button></div></div>`;
-  html+=`<div class="panel"><h2>${ic("heroes",28)} ${t("inviteTitle")}</h2><div class="reflife">${ic("heroes",34)}<div><b>${fmt(t("refLife"),{p:REF_PCT})}</b><small>${fmt(t("refStats"),{n:REF_COUNT,x:usd(S.refEarned||0)})}</small></div></div><p class="hint" style="margin-top:8px">${t("inviteSub")}</p>
+  html+=`<div class="panel"><h2>${ic("heroes",28)} ${t("inviteTitle")}</h2><div class="reflife">${ic("heroes",34)}<div><b>${fmt(t("refLife"),{p:refPct()})}</b><small>${fmt(t("refStats"),{n:REF_COUNT,x:usd(S.refEarned||0)})}</small></div></div>${refTiersHTML()}<p class="hint" style="margin-top:8px">${t("inviteSub")}</p>
     <div class="codebox"><small>${t("myLink")}</small><div class="reflink" id="refLinkTxt">${escapeHtml(refLink())}</div></div>
     <div class="vipbtns" style="grid-template-columns:1fr 1fr"><button id="cpLink" class="gold">${t("copyLink")}</button><button id="shCode">${t("share")}</button></div>
     <div class="codebox small"><small>${t("myCode")}</small><b>${myCode()}</b><button class="mini gray" id="cpCode">${t("copy")}</button></div>
+    ${myRefsHTML()}
+    <button class="claimbtn buyref" id="buyRefBtn">👥 Buy referrals</button>
     ${refBannersHTML()}
     ${S.refBy?`<p class="hint" style="font-weight:900;margin-top:10px">${fmt(t("codeDone"),{x:escapeHtml(S.refByName||"")})}</p>`:`<label class="hint" for="refIn" style="display:block;margin:12px 0 4px">${t("haveCode")}</label><div class="amtrow"><input class="field" id="refIn" maxlength="6" style="text-transform:uppercase" autocomplete="off"><button class="maxbtn" id="refGo">${t("applyCode")}</button></div>`}</div>`;
   box.innerHTML=html;
   box.querySelectorAll("[data-b]").forEach(b=>b.onclick=()=>{compBoard=b.dataset.b;renderComp();});
   $("#nickSave").onclick=()=>{const v=($("#nickIn").value||"").trim().slice(0,20); if(v.length<2) return; S.nick=v; save(); pushLb().then(loadComp); toast(t("saved"));};
-  bindRefBanners();
+  bindRefBanners(); { const br=$("#buyRefBtn"); if(br) br.onclick=buyRefsDialog; const mr=$("#refMore"); if(mr) mr.onclick=()=>{ $("#refList").classList.toggle("open"); }; }
   $("#cpCode").onclick=async()=>{ try{ await navigator.clipboard.writeText(myCode()); toast(t("copied")); }catch(e){ toast(myCode()); } };
   $("#cpLink").onclick=async()=>{ try{ await navigator.clipboard.writeText(refLink()); toast(t("linkCopied")); }catch(e){ toast(refLink()); } };
   $("#shCode").onclick=async()=>{ const txt=fmt(t("shareText2"),{l:refLink(),c:myCode()}); try{ if(navigator.share) await navigator.share({title:"Diamantina",text:txt,url:refLink()}); else { await navigator.clipboard.writeText(txt); toast(t("linkCopied")); } }catch(e){} };
@@ -3043,7 +3049,7 @@ const REF_BANNERS=[[300,250],[728,90],[468,60]];
 const banUrl=([w,h])=>`https://diamantinagame.xyz/diamantina-banner-${w}x${h}.png`;
 const banCode=(b)=>`<a href="${refLink()}" target="_blank" rel="noopener"><img src="${banUrl(b)}" width="${b[0]}" height="${b[1]}" alt="Diamantina - 10% per referral - The Best Faucet Game" style="border:0;display:block"></a>`;
 function refBannersHTML(){ const es=S.lang==="es";
-  return `<div class="refban"><h3>🖼️ ${es?"Banners para invitar":"Invite banners"}</h3><p class="hint" style="margin:0 0 8px">${es?"Compártelos en tus redes, grupos o tu página. Ya llevan tu link: cada jugador que entre te da tu 10%.":"Share them on your socials, groups or website. They already carry your link: every player who joins earns you 10%."}</p>
+  return `<div class="refban"><h3>🖼️ ${es?"Banners para invitar":"Invite banners"}</h3><p class="hint" style="margin:0 0 8px">${es?`Compártelos en tus redes, grupos o tu página. Ya llevan tu link: cada jugador que entre te da tu ${refPct()}%.`:`Share them on your socials, groups or website. They already carry your link: every player who joins earns you ${refPct()}%.`}</p>
     ${REF_BANNERS.map((b,i)=>`<div class="rbitem"><img src="${banUrl(b)}" alt="" loading="lazy" style="aspect-ratio:${b[0]}/${b[1]}"><small>${b[0]}×${b[1]}</small><div class="rbbtns"><button class="mini" data-rbs="${i}">📤 ${es?"Compartir":"Share"}</button><button class="mini gray" data-rbc="${i}">&lt;/&gt; ${es?"Copiar código":"Copy code"}</button><a class="mini gray" href="${banUrl(b)}" download target="_blank" rel="noopener">⬇ ${es?"Descargar":"Download"}</a></div></div>`).join("")}</div>`; }
 function bindRefBanners(){ const es=S.lang==="es";
   document.querySelectorAll("[data-rbc]").forEach(x=>x.onclick=async()=>{ const c=banCode(REF_BANNERS[+x.dataset.rbc]); try{ await navigator.clipboard.writeText(c); toast(es?"Código del banner copiado":"Banner code copied"); }catch(e){ showModal(es?"Código del banner":"Banner code",`<textarea class="field" style="width:100%;height:140px;font-size:12px">${escapeHtml(c)}</textarea>`,[[t("close"),"go",closeModal]]); } });
@@ -3095,7 +3101,10 @@ async function adminPrizes(list){
 
 /* ---------- Referrals: 10% for life ---------- */
 const REF_PCT=10;
-let REF_COUNT=0;
+let REF_COUNT=0, REF_LIST=[], REF_INFO={};
+const REF_TIERS=[10,15,20,25,30];                 // no VIP, VIP1..VIP4
+const refPct=()=>REF_TIERS[Math.min(4,vipTier())]||REF_PCT;
+const REF_PACKS=[{n:5,usd:0.5},{n:10,usd:0.9},{n:25,usd:2},{n:50,usd:3.75}];
 const GEAR_BONUS=2; // +2% per gear piece owned
 const gearPct=()=>GEAR_BONUS*(S.owned||[]).length;
 /* ---------- Levels by total faucet claims ---------- */
@@ -3111,16 +3120,22 @@ function renderLevel(){
 function earn(u){ u=u*coinRate(); const base=u/Math.max(1,mult()); const bonus=Math.round(base*(gearPct()+lvlPct()+premPct())/100*10000)/10000; /* VIP multiplies only the ad; hero/gear/level/NFT bonuses add on the base ad */ addBal(u+bonus); refCommission(u+bonus); return {main:u,bonus,pct:gearPct()+lvlPct()+premPct()}; }
 async function refCommission(u){
   if(!S.refBy||!(DB&&UID)) return;
-  S.refOwed=(S.refOwed||0)+u*REF_PCT/100; save();
-  try{ await DB.doc("refearn/"+UID).set({by:S.refBy,total:S.refOwed,at:Date.now()}); }catch(e){}
+  if(S.refBase==null) S.refBase=(S.refOwed||0)*100/REF_PCT;
+  S.refBase+=u; S.refOwed=(S.refOwed||0)+u*REF_PCT/100; save();
+  try{ await DB.doc("refearn/"+UID).set({by:S.refBy,total:S.refOwed,base:S.refBase,at:Date.now()}); }catch(e){}
 }
 async function collectRef(){
   if(!(DB&&UID)) return;
   try{
-    const q=await DB.collection("refearn").where("by","==",UID).get(); S.refCol=S.refCol||{}; let add=0;
-    q.docs.forEach(d=>{const tot=Math.floor(d.data().total||0), prev=S.refCol[d.id]||0; if(tot>prev){ add+=tot-prev; S.refCol[d.id]=tot; }});
+    const q=await DB.collection("refearn").where("by","==",UID).get(); S.refCol=S.refCol||{}; S.refColB=S.refColB||{}; S.refGot=S.refGot||{}; let add=0; const pct=refPct();
+    q.docs.forEach(d=>{ const x=d.data(), id=d.id, base=x.base!=null?x.base:(x.total||0)*100/REF_PCT;
+      if(S.refColB[id]==null){ S.refColB[id]=(S.refCol[id]||0)*100/REF_PCT; if(S.refGot[id]==null) S.refGot[id]=S.refCol[id]||0; }
+      const dB=base-S.refColB[id]; if(dB>0){ const g=dB*pct/100; add+=g; S.refGot[id]=(S.refGot[id]||0)+g; S.refColB[id]=base; S.refCol[id]=Math.floor(x.total||0); } });
     if(add>0){ S.bal=(S.bal||0)+add; S.refEarned=(S.refEarned||0)+add; save(); renderPay(); toast(fmt(t("refToast"),{x:usd(add)}),"heroes"); }
     const r=await DB.collection("refs").where("by","==",UID).get(); REF_COUNT=r.size;
+    REF_LIST=r.docs.map(d=>({id:d.id,at:d.data().at||0,via:d.data().via||""})).sort((a,b)=>b.at-a.at);
+    await Promise.all(REF_LIST.slice(0,100).filter(x=>!REF_INFO[x.id]).map(async x=>{ try{ const l=await DB.doc("lbads/"+x.id).get(); const y=l.exists?l.data():{}; REF_INFO[x.id]={nick:y.nick||"",code:y.code||codeOf(x.id),seen:y.seen||y.at||0}; }catch(e){ REF_INFO[x.id]={code:codeOf(x.id)}; } }));
+    if(typeof renderComp==="function"&&$("#v-comp")&&$("#v-comp").classList.contains("on")) renderComp();
   }catch(e){}
 }
 async function loadRefBy(){
@@ -3634,14 +3649,15 @@ async function loadAdmin(){
   try{
     const us=await DB.collection("orders").get(); const ords=[];
     for(const u of us.docs){ const ls=await DB.doc("orders/"+u.id).collection("list").where("status","==","pending").get(); ls.docs.forEach(d=>ords.push({uid:u.id,...d.data(),id:d.id})); }
-    if(ords.length) list.insertAdjacentHTML("beforeend",ords.map((o,i)=>`<div class="req">${o.type==="gear"?ic("shop",32):ic("pay",32)}<div class="grow">${o.type==="gear"?escapeHtml(itemName(o.item)):o.type==="vip"?"VIP "+String(o.item||"vip1").slice(3):o.type==="key"?fmt(t("keyOf"),{w:t((BW[o.item]||BW.cars).name)}):o.type==="hero"?"👑 "+escapeHtml(premName(o.item)):o.type==="xp"?"⭐ "+xpName(o.item):o.type==="wnft"?"NFT "+wCode(o.item)+" · "+escapeHtml(premName((wnftBy(o.item)||{}).hero||"")):o.type==="token"?"DMT · "+nf(o.tokens||0)+" tokens":t("depTitle")} · $${escapeHtml(o.usd)}${o.ticket?" 🎟️-"+o.ticket+"%":""} · ${methodName(o.method)}${o.network?" ("+escapeHtml(o.network)+")":""}${o.coinAmt?` · ${nf(o.coinAmt,8)} ${escapeHtml(o.coin)}`:""}<br><span style="color:var(--muted)">TX: ${escapeHtml(o.tx)}</span></div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini ordok" data-o="${i}">${t("approve")}</button><button class="mini ordno" data-o="${i}" style="background:#5a2a3a">${S.lang==="es"?"Rechazar":"Reject"}</button></div></div>`).join(""));
+    if(ords.length) list.insertAdjacentHTML("beforeend",ords.map((o,i)=>`<div class="req">${o.type==="gear"?ic("shop",32):ic("pay",32)}<div class="grow">${o.type==="gear"?escapeHtml(itemName(o.item)):o.type==="vip"?"VIP "+String(o.item||"vip1").slice(3):o.type==="key"?fmt(t("keyOf"),{w:t((BW[o.item]||BW.cars).name)}):o.type==="hero"?"👑 "+escapeHtml(premName(o.item)):o.type==="refs"?"👥 "+(o.item||0)+(S.lang==="es"?" referidos":" referrals"):o.type==="xp"?"⭐ "+xpName(o.item):o.type==="wnft"?"NFT "+wCode(o.item)+" · "+escapeHtml(premName((wnftBy(o.item)||{}).hero||"")):o.type==="token"?"DMT · "+nf(o.tokens||0)+" tokens":t("depTitle")} · $${escapeHtml(o.usd)}${o.ticket?" 🎟️-"+o.ticket+"%":""} · ${methodName(o.method)}${o.network?" ("+escapeHtml(o.network)+")":""}${o.coinAmt?` · ${nf(o.coinAmt,8)} ${escapeHtml(o.coin)}`:""}<br><span style="color:var(--muted)">TX: ${escapeHtml(o.tx)}</span></div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini ordok" data-o="${i}">${t("approve")}</button><button class="mini ordno" data-o="${i}" style="background:#5a2a3a">${S.lang==="es"?"Rechazar":"Reject"}</button></div></div>`).join(""));
     list.querySelectorAll(".ordno").forEach(b=>b.onclick=async()=>{ const o=ords[+b.dataset.o]; if(!confirm(S.lang==="es"?"¿Rechazar esta compra? (no se entrega nada)":"Reject this purchase? (nothing is delivered)")) return; b.disabled=true;
       try{ await DB.doc("orders/"+o.uid).collection("list").doc(o.id).update({status:"rejected",rejectedAt:Date.now()});
            await DB.doc("credits/"+o.uid).set({updatedAt:Date.now()}); await DB.doc("credits/"+o.uid).collection("list").doc("rej-"+o.id).set({type:"reject",item:o.id,at:Date.now()});
            toast(S.lang==="es"?"Compra rechazada":"Purchase rejected","pay"); loadAdmin(); }catch(e){ b.disabled=false; toast(t("mkErr")); } });
     list.querySelectorAll(".ordok").forEach(b=>b.onclick=async()=>{ b.disabled=true; const o=ords[+b.dataset.o];
       try{ if(o.type==="vip"){ await DB.doc("vip/"+o.uid).set({until:Date.now()+VIP_DAYS*86400000,at:Date.now(),tier:parseInt(String(o.item||"vip1").slice(3))||1}); await DB.doc("orders/"+o.uid).collection("list").doc(o.id).update({status:"approved"}); loadAdmin(); return; }
-           await DB.doc("credits/"+o.uid).set({updatedAt:Date.now()}); await DB.doc("credits/"+o.uid).collection("list").doc(o.id).set({type:o.type,item:o.item||null,tokens:o.tokens||null,units:o.units||0,at:Date.now()});
+           let got=null; if(o.type==="refs"){ got=await assignRefs(o.uid,+o.item||0); if(got<(+o.item||0)) alert((S.lang==="es"?"Solo había ":"Only ")+got+(S.lang==="es"?" jugadores sin referente disponibles.":" unreferred players available.")); }
+           await DB.doc("credits/"+o.uid).set({updatedAt:Date.now()}); await DB.doc("credits/"+o.uid).collection("list").doc(o.id).set({type:o.type,item:o.item||null,tokens:o.tokens||null,units:o.units||0,got,at:Date.now()});
            await DB.doc("orders/"+o.uid).collection("list").doc(o.id).update({status:"approved"}); loadAdmin(); }catch(e){ b.disabled=false; } });
   }catch(e){}
   await adminPrizes(list);
@@ -3809,6 +3825,42 @@ function openTasks(){
   clearInterval(taskPoll); taskPoll=setInterval(()=>{ try{ collectCredits(); }catch(e){} },45000);
 }
 setInterval(()=>{ try{ if(!document.hidden) collectCredits(); }catch(e){} },180000);
+
+
+/* ===== Referral panel: % by VIP, my referrals, buy referrals ===== */
+function refTiersHTML(){ const es=S.lang==="es", cur=Math.min(4,vipTier());
+  return `<div class="reftiers">${REF_TIERS.map((p,i)=>`<span class="${i===cur?"on":""}">${i?`VIP ${i}`:(es?"Normal":"Basic")}<b>${p}%</b></span>`).join("")}</div>`; }
+function myRefsHTML(){ const es=S.lang==="es"; if(!REF_LIST.length) return `<div class="myrefs"><h3>👥 ${es?"Tus referidos":"Your referrals"} (0)</h3><p class="hint" style="margin:0">${es?"Aún no tienes referidos. Comparte tu link o compra referidos.":"No referrals yet. Share your link or buy referrals."}</p></div>`;
+  const rows=REF_LIST.map(x=>{ const i=REF_INFO[x.id]||{}, got=(S.refGot||{})[x.id]||0, act=(i.seen||0)>Date.now()-3*86400000;
+    return `<div class="refrow"><span class="rdot ${act?"on":""}"></span><div class="grow"><b>${escapeHtml(i.nick||("Hero-"+(i.code||codeOf(x.id))))}</b><small>ID ${escapeHtml(i.code||codeOf(x.id))} · ${x.at?dateStr(x.at):""}${x.via==="bought"?(es?" · comprado":" · bought"):""}</small></div><b class="rgot">${cryptoTxt(got)}</b></div>`; }).join("");
+  return `<div class="myrefs"><h3>👥 ${es?"Tus referidos":"Your referrals"} (${REF_COUNT})</h3><div class="reflist" id="refList">${rows}</div>${REF_LIST.length>5?`<button class="mini" id="refMore">${es?"Ver todos":"See all"}</button>`:""}<small class="hint">${es?"🟢 activo en los últimos 3 días":"🟢 active in the last 3 days"}</small></div>`; }
+async function refPoolSize(){ try{ const [lb,rf]=await Promise.all([DB.collection("lbads").get(),DB.collection("refs").get()]); const has=new Set(rf.docs.map(d=>d.id)); return lb.docs.filter(d=>!has.has(d.id)&&d.id!==UID).length; }catch(e){ return null; } }
+async function buyRefsDialog(){
+  if(!(DB&&UID)||!isReg()){ try{ return openAuth("up"); }catch(e){ return; } }
+  const es=S.lang==="es"; if((S.orders||[]).some(o=>o.type==="refs"&&o.status==="pending")) return toast(t("inReview"),"heroes");
+  const pool=await refPoolSize(); let sel=1;
+  if(pool!=null){ const ok=REF_PACKS.map((p,i)=>p.n<=pool?i:-1).filter(i=>i>=0); if(!ok.length) return showModal(es?"👥 Comprar referidos":"👥 Buy referrals",`<p>${es?"Ahora mismo no hay jugadores sin referente disponibles. Vuelve a intentarlo más tarde.":"There are no unreferred players available right now. Please try again later."}</p>`,[[t("close"),"no",closeModal]]); if(!ok.includes(sel)) sel=ok[ok.length-1]; }
+  const draw=()=>{ const pk=REF_PACKS[sel], units=Math.round(pk.usd*1e5);
+    showModal(es?"👥 Comprar referidos":"👥 Buy referrals",`<p class="hint" style="margin:0 0 8px">${es?`Te asignamos jugadores que se registraron <b>sin ser invitados</b>. Ganas tu ${refPct()}% de por vida de todo lo que ellos ganen.`:`We assign you players who signed up <b>without an invite</b>. You earn your ${refPct()}% for life of everything they earn.`}</p>
+      ${pool!=null?`<p class="hint" style="margin:0 0 8px;font-weight:800">${es?"Disponibles ahora":"Available now"}: ${pool}</p>`:""}
+      <div class="plans" style="grid-template-columns:repeat(2,1fr)">${REF_PACKS.map((p,i)=>`<button class="plan ${i===sel?"on":""}" data-rp="${i}" ${pool!=null&&p.n>pool?"disabled":""}><b style="font-size:20px">${p.n}</b><span>${es?"referidos":"referrals"}</span><small>$${p.usd.toFixed(2)} · $${(p.usd/p.n).toFixed(3)} c/u</small></button>`).join("")}</div>
+      ${payButtons("rf",units,pk.usd)}<p class="hint">${es?"Se entregan cuando el dueño confirma tu pago.":"Delivered once the owner confirms your payment."}</p>`,[[t("close"),"no",closeModal]]);
+    document.querySelectorAll("[data-rp]").forEach(b=>b.onclick=()=>{ sel=+b.dataset.rp; draw(); });
+    bindPay("rf",{type:"refs",item:pk.n,usd:pk.usd},async()=>{ if((S.bal||0)<units) return;
+      const id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      const ord={id,type:"refs",item:pk.n,tokens:null,usd:pk.usd.toFixed(2),units,coin:"USD",coinAmt:null,method:"balance",tx:"balance",status:"pending",at:Date.now()};
+      S.bal-=units; S.orders=[...(S.orders||[]),ord]; save(); renderPay();
+      try{ await DB.doc("orders/"+UID).set({updatedAt:Date.now()}); await DB.doc("orders/"+UID).collection("list").doc(id).set(ord); }catch(e){}
+      closeModal(); toast(es?"Pedido enviado. Recibirás tus referidos pronto.":"Order sent. You'll get your referrals soon.","heroes"); }); };
+  draw();
+}
+async function assignRefs(buyer,n){
+  const [lb,rf]=await Promise.all([DB.collection("lbads").get(),DB.collection("refs").get()]);
+  const has=new Set(rf.docs.map(d=>d.id)); const myRef=(rf.docs.find(d=>d.id===buyer)||{data:()=>({})}).data().by;
+  const pool=lb.docs.filter(d=>!has.has(d.id)&&d.id!==buyer&&d.id!==UID&&d.id!==myRef).sort((a,b)=>((b.data().seen||b.data().at||0)-(a.data().seen||a.data().at||0)));
+  const pick=pool.slice(0,n); for(const d of pick) await DB.doc("refs/"+d.id).set({by:buyer,code:"",week:weekInfo().key,at:Date.now(),via:"bought"});
+  return pick.length;
+}
 
 /* ---------- Actions ---------- */
 const modal=$("#modal");
@@ -4278,10 +4330,11 @@ async function collectCredits(){
     const cs=await DB.doc("credits/"+UID).collection("list").get(); S.claimed=S.claimed||[]; let n=0;
     for(const d of cs.docs){ if(S.claimed.includes(d.id)) continue; const x=d.data();
       if(x.type==="deposit"){ S.bal=(S.bal||0)+(x.units||0); toast(fmt(t("depOk"),{x:usd(x.units||0)}),"pay"); }
-      else if(x.type==="reject"){ const o=(S.orders||[]).find(o=>o.id===x.item); if(o) o.status="rejected";
+      else if(x.type==="reject"){ const o=(S.orders||[]).find(o=>o.id===x.item); if(o&&o.method==="balance"&&o.status!=="rejected"&&o.units) S.bal=(S.bal||0)+o.units; if(o) o.status="rejected";
         showModal(S.lang==="es"?"Compra rechazada":"Purchase rejected",`<p>${S.lang==="es"?"No encontramos tu pago para esta compra, por eso fue <b>rechazada</b>. Si ya pagaste, escríbenos por Telegram con el comprobante (TX).":"We couldn't find your payment for this purchase, so it was <b>rejected</b>. If you already paid, contact us on Telegram with your proof (TX)."}</p>`,[[t("close"),"go",closeModal]]); S.claimed.push(d.id); n++; continue; }
       else if(x.type==="refund"){ S.bal=(S.bal||0)+(x.units||0); (S.payouts||[]).forEach(p=>{ if(p.date===x.item) p.status="refunded"; });
         showModal(S.lang==="es"?"Retiro devuelto":"Withdrawal returned",`<p>${S.lang==="es"?`Tu retiro de <b>${usd(x.units||0)}</b> no se pudo pagar en esa moneda y se devolvió a tu saldo. Elige otra moneda en <b>Retirar</b> y pídelo de nuevo.`:`Your withdrawal of <b>${usd(x.units||0)}</b> couldn't be paid in that coin and was returned to your balance. Choose another coin in <b>Withdraw</b> and request it again.`}</p>`,[[t("close"),"go",closeModal]]); }
+      else if(x.type==="refs"){ toast((S.lang==="es"?"👥 Recibiste ":"👥 You got ")+(x.got!=null?x.got:x.item)+(S.lang==="es"?" referidos":" referrals"),"heroes"); setTimeout(()=>{ try{ collectRef(); }catch(e){} },500); }
       else if(x.type==="task"){ S.bal=(S.bal||0)+(x.units||0); toast((S.lang==="es"?"✅ Tarea completada: +":"✅ Task completed: +")+cryptoTxt(x.units||0),"pay"); }
       else if(x.type==="key"&&x.item){ giveKey(x.item); toast(fmt(t("keyGot"),{w:t(BW[x.item].name)}),BW[x.item].icon); }
       else if(x.type==="hero"&&premBy(x.item)){ S.prem=S.prem||{}; S.prem[x.item]=true; S.ph=x.item; renderHeroes(); renderMap(); toast(fmt(t("premGot"),{x:premName(x.item),p:premBy(x.item).pct}),"heroes"); }
