@@ -859,6 +859,7 @@ main{overscroll-behavior-y:contain}
 .dealfloat .dealgo{flex:0 0 auto;border:0;border-radius:12px;padding:10px 12px;font-weight:900;background:#ffd76a;color:#3b1d00;font-size:13px}
 .dealfloat .dealx{position:absolute;top:-10px;right:-8px;width:28px;height:28px;border-radius:50%;border:2px solid #ffd76a;background:#1a0f3a;color:#fff;font-size:14px;line-height:1;display:grid;place-items:center;padding:0}
 #worldBar{flex-wrap:wrap;row-gap:6px}#worldBar .wbbreak{flex-basis:100%;height:0;border-top:1px solid rgba(255,255,255,.12)}#worldBar .resetrow{font-size:12px}#worldBar b.resetrow{color:#7CF0C2}
+.tixbar{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0 0 12px;border-radius:16px;background:linear-gradient(135deg,rgba(236,72,153,.25),rgba(245,158,11,.25));border:2px dashed #FDE047}.tixbar b{display:block;font-size:15px;color:#FDE047}.tixbar small{display:block;font-size:12px;opacity:.95}.tixbar svg{flex:0 0 auto}
 </style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -1069,6 +1070,7 @@ main{overscroll-behavior-y:contain}
   <section class="view" id="v-shop">
     <h1 class="title" data-t="shopTitle"></h1>
     <p class="sub" data-t="shopSub"></p>
+    <div id="shopTix"></div>
     <div class="seg" id="shopMode"></div>
     <div class="tabs" id="shopTabs"></div>
     <div id="shopList"></div>
@@ -1220,7 +1222,7 @@ const CHESTS = {
   18:{tier:"diamond",units:20, mode:"spin"},    // $0.0005, coin spinning
   20:{tier:"treasure",final:true}               // withdraw accumulated balance
 };
-const TIER_COLORS={moon:["#8B5CF6","#2E1065","#F0ABFC"],star:["#6D28D9","#1E0B4B","#FDE047"],crystal:["#4338CA","#1E1B4B","#67E8F9"],key:["#10B981","#064E3B","#A7F3D0"],bronze:["#C27A3E","#6E3F17","#F0B072"],silver:["#C9D1DC","#5F6C82","#F7F9FC"],gold:["#F2B705","#946600","#FFE680"],
+const TIER_COLORS={ticket:["#EC4899","#831843","#FDE047"],moon:["#8B5CF6","#2E1065","#F0ABFC"],star:["#6D28D9","#1E0B4B","#FDE047"],crystal:["#4338CA","#1E1B4B","#67E8F9"],key:["#10B981","#064E3B","#A7F3D0"],bronze:["#C27A3E","#6E3F17","#F0B072"],silver:["#C9D1DC","#5F6C82","#F7F9FC"],gold:["#F2B705","#946600","#FFE680"],
   diamond:["#47C6F5","#145F9E","#E2F8FF"],treasure:["#8A3FE0","#45168A","#FFD24A"]};
 const usd=u=>{let s=(Math.max(0,u)/1e5).toFixed(5).replace(/0+$/,"").replace(/\.$/,"");return "$"+s;};
 function chestSVG(tier,cls=""){
@@ -1508,7 +1510,20 @@ const BW={
 const BW_ORDER=["magic","cars","mush","castle","pirate","skel","lava","xmas"];
 const PAID_WORLDS=["pirate","skel","lava"];
 const KEY_PRICE=1;   // USD per key
-const keyPrice=id=>(BW[id]&&BW[id].price)||KEY_PRICE;
+/* ===== 50% discount ticket: chest at circle 12 in every world, once a year per player ===== */
+const TIX_PCT=50, TIX_DAYS=30, TIX_TYPES=["vip","key","gear","hero","wnft","xp"];
+const TIX_CHEST={tier:"ticket",tix:true,mode:"spin"};
+const tixAvail=()=>!(S.tixYear&&Date.now()-S.tixYear<365*86400000);
+const tixOn=()=>!!(S.tix&&!S.tix.used&&(S.tix.until||0)>Date.now());
+const tixP=u=>tixOn()?Math.round(u*(100-TIX_PCT))/100:u;
+function tixUse(type){ if(tixOn()&&(!type||TIX_TYPES.includes(type))){ S.tix.used=Date.now(); S.tix.on=type||""; save(); try{ renderBag(); }catch(e){} } }
+function chestAt(n,magic){ const base=magic?((BW[bwId]||{}).chests||{}):CHESTS; if(n===12&&tixAvail()) return TIX_CHEST; return base[n]; }
+const tixDays=()=>Math.max(1,Math.ceil((((S.tix&&S.tix.until)||0)-Date.now())/86400000));
+const TIX_SVG=(w=96)=>`<svg viewBox="0 0 120 70" width="${w}" height="${Math.round(w*70/120)}" aria-hidden="true"><defs><linearGradient id="tixG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FDE047"/><stop offset=".55" stop-color="#F59E0B"/><stop offset="1" stop-color="#EC4899"/></linearGradient></defs><path d="M8 6 H112 a6 6 0 0 1 6 6 V26 a9 9 0 0 0 0 18 V58 a6 6 0 0 1 -6 6 H8 a6 6 0 0 1 -6 -6 V44 a9 9 0 0 0 0 -18 V12 a6 6 0 0 1 6 -6Z" fill="url(#tixG)" stroke="#7C2D12" stroke-width="2.5"/><path d="M84 10 V60" stroke="#7C2D12" stroke-width="2" stroke-dasharray="4 4"/><text x="44" y="44" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="26" fill="#fff" stroke="#7C2D12" stroke-width="1.2">-50%</text><text x="101" y="40" text-anchor="middle" font-size="18">🎟️</text></svg>`;
+function tixName(){ return S.lang==="es"?"Ticket de descuento -50%":S.lang==="pt"?"Ticket de desconto -50%":"50% discount ticket"; }
+function tixBannerHTML(){ if(!tixOn()) return ""; const es=S.lang==="es";
+  return `<div class="tixbar">${TIX_SVG(64)}<div><b>${tixName()}</b><small>${es?`Se aplica solo en tu próxima compra: VIP, llaves, armas, héroes, NFT y niveles · vence en ${tixDays()} días`:`Applies to your next purchase: VIP, keys, gear, heroes, NFTs and levels · expires in ${tixDays()} days`}</small></div></div>`; }
+const keyPrice=id=>tixP((BW[id]&&BW[id].price)||KEY_PRICE);
 const KEY_DAYS=365;  // a bought key lasts 1 year
 const keyUntil=id=>{ const v=(S.keys||{})[id]; if(v===true){ S.keys[id]=Date.now()+KEY_DAYS*86400000; save(); return S.keys[id]; } return +v||0; };
 const keyValid=id=>keyUntil(id)>Date.now();
@@ -1582,7 +1597,7 @@ function buyKeyDialog(id){
       <button data-km="faucetpay"><img src="${PAY.fp}" alt="">FaucetPay</button><button data-km="cwallet"><img src="${PAY.cw}" alt="">Cwallet</button>
       <button data-kc="1" class="cryptobtn"><span class="cicons">${CRYPTO_ICONS()}</span>${t("cryptoBtn")}</button>
       ${w.price?"":`<button id="kVip">${ic("vip",24)}${fmt(t("keyOrVip"),{n:w.vip})}</button>`}</div>`,[[t("close"),"no",closeModal]]);
-  $("#kBal").onclick=()=>{ if((S.bal||0)<units) return; S.bal-=units; giveKey(id); closeModal(); renderPay(); renderMap(); if(shopMode==="keys") renderKeysTab(); toast(fmt(t("keyGot"),{w:t(w.name)}),w.icon); };
+  $("#kBal").onclick=()=>{ if((S.bal||0)<units) return; S.bal-=units; tixUse("key"); giveKey(id); closeModal(); renderPay(); renderMap(); if(shopMode==="keys") renderKeysTab(); toast(fmt(t("keyGot"),{w:t(w.name)}),w.icon); };
   document.querySelectorAll("[data-km]").forEach(b=>b.onclick=()=>cryptoDialog({type:"key",item:id,usd:KP,method:b.dataset.km}));
   document.querySelectorAll("[data-kc]").forEach(b=>b.onclick=()=>cryptoPay({type:"key",item:id,usd:KP}));
   if($("#kVip")) $("#kVip").onclick=()=>{ closeModal(); vipSel=Math.max(0,Math.min(3,w.vip-1)); shopMode="vip"; goView("shop"); };
@@ -1698,7 +1713,7 @@ function openMagic(n){
   const id=bwId, w=BW[id], d=bwProg(id), off=w.off;
   if(n<=d) return showModal(`${t("circle")} ${n+off}`,`<p>${t("doneMsg")}</p>`,[[t("close"),"no",closeModal]]);
   if(n>d+1) return showModal(`${t("circle")} ${n+off}`,`<p>${t("locked")}</p>`,[[t("close"),"no",closeModal]]);
-  if(w.chests[n]) return chestAd(n,true,`${t(w.name)} · ${t("circle")} ${n+off}`,n+off);
+  if(chestAt(n,true)) return chestAd(n,true,`${t(w.name)} · ${t("circle")} ${n+off}`,n+off);
   adModal(`${t(w.name)} · ${t("circle")} ${n+off}`,n+off,`<p class="amt" style="font-size:18px">${cryptoLine()}${vipTier()?`<small>VIP ×${mult()}</small>`:""}${bonusInfo(AD_UNITS)}</p>`,
     async()=>{ if(!await gate(n+off)) return;
       closeModal(); const g=payAd(); renderText(); completeMagic(n); toast(`${t("adDone")} · +${g}`,w.icon); },{kind:"magic",n,bw:id});
@@ -2240,7 +2255,7 @@ function renderMap(){
   h+=`<path d="${d}" fill="none" stroke="var(--line)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 22"/>`;
   }
   PTS.forEach((p,i)=>{
-    const M=inMagic(), D=M?(magicPreview&&!bwOpen(bwId)?0:bwProg(bwId)):S.done, CH=M?BW[bwId].chests:CHESTS;
+    const M=inMagic(), D=M?(magicPreview&&!bwOpen(bwId)?0:bwProg(bwId)):S.done, CH=new Proxy({},{get:(_,k)=>chestAt(+k,M)});
     const n=i+1, st=viewDay!==null?"locked":(n<=D?"done":(n===D+1?"current":"locked"));
     const special=CH[n]&&st!=="done"?CH[n]:null;
     const label=st==="done"?"✓":(M?n+BW[bwId].off:n);
@@ -2371,16 +2386,16 @@ function bindPay(pre,order,onBal){
   document.querySelectorAll(`[data-${pre}c]`).forEach(x=>x.onclick=()=>cryptoPay({...order}));
 }
 function buyHeroDialog(id){
-  const p=premBy(id), units=Math.round(p.usd*1e5);
+  const p0=premBy(id), p={...p0,usd:tixP(p0.usd)}, units=Math.round(p.usd*1e5);
   if(premOwned(id)) return;
   if(pendingOf("hero",id)) return toast(t("inReview"),"heroes");
   showModal(premName(id),`<div class="premdlg"><img src="${premImg(id)}" alt=""><div><b>+${p.pct}% ${t("premBonus")}</b><p class="hint" style="margin:4px 0 0">${t("premWhy")}</p></div></div>
     ${payButtons("ph",units,p.usd)}`,[[t("close"),"no",closeModal]]);
-  bindPay("ph",{type:"hero",item:id,usd:p.usd},()=>{ if((S.bal||0)<units) return; S.bal-=units; S.prem=S.prem||{}; S.prem[id]=true; S.ph=id; save(); closeModal(); renderPay(); renderHeroes(); renderMap(); renderShop();
+  bindPay("ph",{type:"hero",item:id,usd:p.usd},()=>{ if((S.bal||0)<units) return; S.bal-=units; tixUse("hero"); S.prem=S.prem||{}; S.prem[id]=true; S.ph=id; save(); closeModal(); renderPay(); renderHeroes(); renderMap(); renderShop();
     toast(fmt(t("premGot"),{x:premName(id),p:p.pct}),"heroes"); });
 }
 async function buyWDialog(id){
-  const n=wnftBy(id), units=Math.round(n.usd*1e5);
+  const n0=wnftBy(id), n={...n0,usd:tixP(n0.usd)}, units=Math.round(n.usd*1e5);
   if(myW().includes(n.id)||wTaken(n.id)) return;
   if(pendingOf("wnft",n.id)) return toast(t("inReview"),"gem");
   showModal(`NFT ${wCode(n.id)} · ${premName(n.hero)}`,`<div class="wdlg">${wnftSVG(n)}</div><p class="hint" style="text-align:center;margin:6px 0">${fmt(t("wWhy"),{p:WNFT_PCT})}</p>${payButtons("pw",units,n.usd)}`,[[t("close"),"no",closeModal]]);
@@ -2388,7 +2403,7 @@ async function buyWDialog(id){
     if((S.bal||0)<units) return; const btn=$("#pwBal"); btn.disabled=true;
     if(DB&&UID){ try{ const ref=DB.doc(WNFT_COL+"/"+n.id); const l=await ref.acquire({holder:UID,ttlMs:6000}); const cur=await ref.get();
       if(!l.acquired||(cur.exists&&cur.data().owner&&cur.data().owner!==UID)){ closeModal(); toast(t("wSold"),"gem"); loadW(); return; } }catch(e){} }
-    S.bal-=units; await grantW(n.id); closeModal(); renderPay(); renderShop(); renderBag();
+    S.bal-=units; tixUse("wnft"); await grantW(n.id); closeModal(); renderPay(); renderShop(); renderBag();
     toast(fmt(t("wGot"),{x:wCode(n.id),p:WNFT_PCT}),"gem"); });
 }
 function premCardsHTML(compact){
@@ -2416,11 +2431,11 @@ const xpName=i=>`XP +${nf((XP_PACKS[+i]||XP_PACKS[0]).n)}`;
 function grantXP(i){ const pk=XP_PACKS[+i]; if(!pk) return; const before=lvlInfo().L; S.claims=(S.claims||0)+pk.n; save(); renderLevel(); const v=lvlInfo();
   toast(v.L>before?fmt(t("xpUp"),{n:v.L,p:v.pct}):fmt(t("xpGot"),{n:nf(pk.n)}),"trophy"); if(shopMode==="prem") renderPremTab(); }
 function buyXPDialog(i){
-  const pk=XP_PACKS[i], units=Math.round(pk.usd*1e5), v=lvlInfo(), after=(()=>{ const c=(S.claims||0)+pk.n; let L=0; LEVELS.forEach(([th],k)=>{ if(c>=th) L=k; }); return {L,pct:LEVELS[L][1]}; })();
+  const pk={...XP_PACKS[i],usd:tixP(XP_PACKS[i].usd)}, units=Math.round(pk.usd*1e5), v=lvlInfo(), after=(()=>{ const c=(S.claims||0)+pk.n; let L=0; LEVELS.forEach(([th],k)=>{ if(c>=th) L=k; }); return {L,pct:LEVELS[L][1]}; })();
   if(pendingOf("xp",i)) return toast(t("inReview"),"trophy");
   showModal(xpName(i),`<div class="xpdlg"><div class="lvbadge"><small>LV</small><b>${v.L}</b></div><span class="xparrow">→</span><div class="lvbadge gold"><small>LV</small><b>${after.L}</b></div></div>
     <p class="amt" style="font-size:18px">${fmt(t("xpAfter"),{a:v.pct,b:after.pct})}<small>${fmt(t("xpAdds"),{n:nf(pk.n)})}</small></p>${payButtons("px",units,pk.usd)}`,[[t("close"),"no",closeModal]]);
-  bindPay("px",{type:"xp",item:i,usd:pk.usd},()=>{ if((S.bal||0)<units) return; S.bal-=units; save(); closeModal(); renderPay(); grantXP(i); });
+  bindPay("px",{type:"xp",item:i,usd:pk.usd},()=>{ if((S.bal||0)<units) return; S.bal-=units; tixUse("xp"); save(); closeModal(); renderPay(); grantXP(i); });
 }
 function xpSectionHTML(){
   const v=lvlInfo();
@@ -2457,6 +2472,7 @@ function renderHeroes(){
 let shopCat=-1, shopMode="gear";
 function renderShop(){ if(typeof navSync==="function") setTimeout(()=>navSync(),0);
   const modes=[["keys","magic"],["ads","ad"],["dmt","dmt"],["prem","heroes"],["gear","shop"],["market","gem"],["vip","vip"],["stake","stake"],["swap","swap"]];
+  { const tb=$("#shopTix"); if(tb) tb.innerHTML=(shopMode==="stake"||shopMode==="swap"||shopMode==="market"||shopMode==="ads"||shopMode==="dmt")?"":tixBannerHTML(); }
   $("#shopMode").innerHTML=modes.map(([m,i])=>`<button class="${shopMode===m?"on":""}" data-m="${m}" aria-pressed="${shopMode===m}">${ic(i,26)}<span>${t(m+"Tab")}</span></button>`).join("");
   $("#shopMode").querySelectorAll("button").forEach(b=>b.onclick=()=>{shopMode=b.dataset.m;renderShop();if(shopMode==="market")loadMarket();});
   const gear=shopMode==="gear"; $("#shopTabs").style.display=gear?"":"none"; $("#shopList").style.display=gear?"":"none";
@@ -2490,7 +2506,7 @@ function renderShop(){ if(typeof navSync==="function") setTimeout(()=>navSync(),
 }
 function renderBag(){
   let h="";
-  h+=myWHTML()+myNftsHTML();
+  h+=tixBannerHTML()+myWHTML()+myNftsHTML();
   if(S.owned.length){
     h+=`<div class="shopgroup" style="--c:var(--gold)"><h3>${t("items")} · <span class="gbon">${fmt(t("bonusLine"),{p:gearPct()})}</span></h3><div class="items">`+
       S.owned.map(id=>{const [hid,ci]=id.split(":");const hi=hIdx(hid);
@@ -2785,7 +2801,7 @@ const offerLeft=()=>Math.max(0,(S.offerStart||Date.now())+OFFER_MS-Date.now());
 const DEAL_PCT=20, DEAL_MS=15*60000;
 const dealOn=()=>(S.dealUntil||0)>Date.now();
 const vipOffPct=()=>firstOffer()?OFFER_PCT:dealOn()?DEAL_PCT:0;
-const vipT=v=>{ const p=vipOffPct(), off=p>0; return {...v,full:v.usd,usd:off?Math.round(v.usd*(100-p))/100:v.usd,off,pct:p}; };
+const vipT=v=>{ const p=Math.max(vipOffPct(),tixOn()?TIX_PCT:0), off=p>0; return {...v,full:v.usd,usd:off?Math.round(v.usd*(100-p))/100:v.usd,off,pct:p}; };
 function vipCompareHTML(){ const es=S.lang==="es", per=AD_UNITS*coinRate(), rows=[{n:0,m:1},...VIP_TIERS];
   return `<div class="vipcmp"><h4>📊 ${es?"¿Cuánto ganas con VIP?":"How much do you earn with VIP?"}</h4><small>${es?"Con los 20 anuncios del día · en":"With the 20 daily ads · in"} ${S.payCoin}</small>
     <table><tr><th></th><th>${es?"Por día":"Per day"}</th><th>${es?"Por mes":"Per month"}</th></tr>${rows.map(r=>`<tr class="${r.n===4?"best":""}"><td>${r.n?`VIP ${r.n} <b>×${r.m}</b>`:(es?"Sin VIP":"No VIP")}</td><td>${cryptoTxt(per*r.m*20)}</td><td>${cryptoTxt(per*r.m*20*30)}</td></tr>`).join("")}</table>
@@ -2813,7 +2829,7 @@ function renderVip(){
   p.insertAdjacentHTML("beforeend",`<button class="keylink" id="vipKeys">${ic("magic",20)} ${t("noVipKeys")}</button>`);
   $("#vipKeys").onclick=()=>{ shopMode="keys"; renderShop(); };
   p.querySelectorAll("[data-vt]").forEach(b=>b.onclick=()=>{vipSel=+b.dataset.vt;renderVip();});
-  const vb=$("#vipBal"); if(vb) vb.onclick=()=>{ if((S.bal||0)<units) return; S.bal-=units; S.vipUntil=Date.now()+VIP_DAYS*86400000; S.vipTier=T0.n; save(); sendVipReq("balance","-","active",T0); renderPay(); renderVip(); toast(`VIP ${T0.n} ×${T0.m}`,"vip"); };
+  const vb=$("#vipBal"); if(vb) vb.onclick=()=>{ if((S.bal||0)<units) return; S.bal-=units; tixUse("vip"); S.vipUntil=Date.now()+VIP_DAYS*86400000; S.vipTier=T0.n; save(); sendVipReq("balance","-","active",T0); renderPay(); renderVip(); toast(`VIP ${T0.n} ×${T0.m}`,"vip"); };
   p.querySelectorAll("[data-cp]").forEach(b=>b.onclick=()=>cryptoPay({type:"vip",usd:T0.usd,item:"vip"+T0.n}));
   p.querySelectorAll("[data-vm]").forEach(b=>b.onclick=()=>vipDialog(b.dataset.vm));
 }
@@ -2839,6 +2855,7 @@ async function loadVip(){
 
 /* ---------- Staking (locks the USD balance) ---------- */
 const STAKES=[{d:1,r:.0003},{d:7,r:.003},{d:30,r:.015},{d:90,r:.06}];   // total reward for the whole period
+const noBalTxt=()=>S.lang==="es"?"No tienes saldo suficiente.":S.lang==="pt"?"Saldo insuficiente.":"Not enough balance.";
 const STAKE_MIN=100;   // $0.001
 let stakePlan=1;
 let stakeAsset="USD";
@@ -2877,7 +2894,7 @@ function renderStake(){ try{ autoClaimStakes(); }catch(e){}
   const q=()=>{const v=stkParse(a,inp.value); $("#stakeQuote").innerHTML=v?`${t("stakeGet")}: <b>${stkFmt(a,v+rewOf(v))}</b> (+${stkFmt(a,rewOf(v))})${a!=="USD"&&a!=="DMT"&&LIVE[a]?` · ≈ $${nf((v+rewOf(v))*LIVE[a],4)}`:""}`:"";};
   inp.oninput=q; $("#stakeMax").onclick=()=>{inp.value=a==="USD"?(bal/1e5).toFixed(5):String(bal);q();};
   $("#stakeGo").onclick=()=>{const v=stkParse(a,inp.value);
-    if(!stkMinOk(a,v)){toast(fmt(t("stakeMinMsg"),{x:stkMinTxt(a)}));return;} if(v>bal+1e-12){toast(t("mkNoBal"));return;}
+    if(!stkMinOk(a,v)){toast(fmt(t("stakeMinMsg"),{x:stkMinTxt(a)}));return;} if(v>bal+1e-12){toast(noBalTxt());return;}
     const pl=STAKES[stakePlan]; stkAdd(a,-v); S.stakes.push({asset:a,amt:v,rew:rewOf(v),p:stakePlan,start:Date.now(),end:Date.now()+pl.d*86400000}); save(); renderPay(); renderStake(); toast(t("stakeOk"),"stake");};
   box.querySelectorAll("[data-claim]").forEach(b=>b.onclick=()=>{const i=+b.dataset.claim, s=S.stakes[i]; if(!s||Date.now()<s.end) return; const sa=s.asset||"USD";
     S.stakes.splice(i,1); stkAdd(sa,s.amt+s.rew); save(); renderPay(); renderStake(); toast(`+${stkFmt(sa,s.rew)}`,"stake");});
@@ -2921,7 +2938,7 @@ function renderSwap(){
   $("#swTo").onchange=e=>{swapTo=e.target.value; if(swapFrom===swapTo) swapFrom=swapTo==="USD"?"BTC":"USD"; renderSwap();};
   $("#swFlip").onclick=()=>{[swapFrom,swapTo]=[swapTo,swapFrom]; renderSwap();};
   $("#swGo").onclick=async()=>{ if(liveStatus==="est"||liveStatus==="loading"){ toast(t("swapNoPriceShort")); return; } const q=quote(); if(!q){ toast(liveStatus==="ok"||liveStatus==="stale"?t("swapEnter"):t("swapNoPriceShort")); return; }
-    if(q.a>held(swapFrom)+1e-12){ toast(t("mkNoBal")); return; }
+    if(q.a>held(swapFrom)+1e-12){ toast(noBalTxt()); return; }
     if(q.usdv<0.0001){ toast(fmt(t("swapMin"),{x:"$0.0001"})); return; }
     if(swapFrom==="USD") S.bal=Math.max(0,(S.bal||0)-Math.round(q.a*1e5)); else S.hold[swapFrom]=Math.max(0,held(swapFrom)-q.a);
     if(swapTo==="USD") S.bal=(S.bal||0)+Math.round(q.out*1e5); else S.hold[swapTo]=held(swapTo)+q.out;
@@ -3565,7 +3582,7 @@ async function loadAdmin(){
   try{
     const us=await DB.collection("orders").get(); const ords=[];
     for(const u of us.docs){ const ls=await DB.doc("orders/"+u.id).collection("list").where("status","==","pending").get(); ls.docs.forEach(d=>ords.push({uid:u.id,...d.data(),id:d.id})); }
-    if(ords.length) list.insertAdjacentHTML("beforeend",ords.map((o,i)=>`<div class="req">${o.type==="gear"?ic("shop",32):ic("pay",32)}<div class="grow">${o.type==="gear"?escapeHtml(itemName(o.item)):o.type==="vip"?"VIP "+String(o.item||"vip1").slice(3):o.type==="key"?fmt(t("keyOf"),{w:t((BW[o.item]||BW.cars).name)}):o.type==="hero"?"👑 "+escapeHtml(premName(o.item)):o.type==="xp"?"⭐ "+xpName(o.item):o.type==="wnft"?"NFT "+wCode(o.item)+" · "+escapeHtml(premName((wnftBy(o.item)||{}).hero||"")):o.type==="token"?"DMT · "+nf(o.tokens||0)+" tokens":t("depTitle")} · $${escapeHtml(o.usd)} · ${methodName(o.method)}${o.network?" ("+escapeHtml(o.network)+")":""}${o.coinAmt?` · ${nf(o.coinAmt,8)} ${escapeHtml(o.coin)}`:""}<br><span style="color:var(--muted)">TX: ${escapeHtml(o.tx)}</span></div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini ordok" data-o="${i}">${t("approve")}</button><button class="mini ordno" data-o="${i}" style="background:#5a2a3a">${S.lang==="es"?"Rechazar":"Reject"}</button></div></div>`).join(""));
+    if(ords.length) list.insertAdjacentHTML("beforeend",ords.map((o,i)=>`<div class="req">${o.type==="gear"?ic("shop",32):ic("pay",32)}<div class="grow">${o.type==="gear"?escapeHtml(itemName(o.item)):o.type==="vip"?"VIP "+String(o.item||"vip1").slice(3):o.type==="key"?fmt(t("keyOf"),{w:t((BW[o.item]||BW.cars).name)}):o.type==="hero"?"👑 "+escapeHtml(premName(o.item)):o.type==="xp"?"⭐ "+xpName(o.item):o.type==="wnft"?"NFT "+wCode(o.item)+" · "+escapeHtml(premName((wnftBy(o.item)||{}).hero||"")):o.type==="token"?"DMT · "+nf(o.tokens||0)+" tokens":t("depTitle")} · $${escapeHtml(o.usd)}${o.ticket?" 🎟️-"+o.ticket+"%":""} · ${methodName(o.method)}${o.network?" ("+escapeHtml(o.network)+")":""}${o.coinAmt?` · ${nf(o.coinAmt,8)} ${escapeHtml(o.coin)}`:""}<br><span style="color:var(--muted)">TX: ${escapeHtml(o.tx)}</span></div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini ordok" data-o="${i}">${t("approve")}</button><button class="mini ordno" data-o="${i}" style="background:#5a2a3a">${S.lang==="es"?"Rechazar":"Reject"}</button></div></div>`).join(""));
     list.querySelectorAll(".ordno").forEach(b=>b.onclick=async()=>{ const o=ords[+b.dataset.o]; if(!confirm(S.lang==="es"?"¿Rechazar esta compra? (no se entrega nada)":"Reject this purchase? (nothing is delivered)")) return; b.disabled=true;
       try{ await DB.doc("orders/"+o.uid).collection("list").doc(o.id).update({status:"rejected",rejectedAt:Date.now()});
            await DB.doc("credits/"+o.uid).set({updatedAt:Date.now()}); await DB.doc("credits/"+o.uid).collection("list").doc("rej-"+o.id).set({type:"reject",item:o.id,at:Date.now()});
@@ -3767,6 +3784,23 @@ function showDeal(){
   d.querySelector(".dealgo").onclick=e=>{ e.stopPropagation(); hideDeal(); go(); };
   clearInterval(dealTimer); dealTimer=setInterval(()=>{ const el=d.querySelector(".dealleft"); if(!document.body.contains(d)){ clearInterval(dealTimer); return; } if(el){ const ms=+el.dataset.u-Date.now(); if(ms<=0){ hideDeal(); return; } el.textContent=leftStr(ms); } },1000);
 }
+/* Reminder: ticket expires in 3 days or less (once per day) */
+function tixRemind(force){
+  if(!tixOn()) return; const left=(S.tix.until||0)-Date.now(); if(left>3*86400000) return;
+  const k=bogota().key; if(!force&&S.tixRemind===k) return; if($("#dealFloat")) return;
+  S.tixRemind=k; save();
+  const d=document.createElement("div"); d.id="dealFloat"; d.className="dealfloat";
+  const days=tixDays(), es=S.lang==="es", pt=S.lang==="pt";
+  d.innerHTML=`<button class="dealx" aria-label="Cerrar">✕</button><div class="dealic">${TIX_SVG(48)}</div><div class="dealbody"><span class="dealtag">-${TIX_PCT}%</span>
+    <b>⏰ ${es?`¡Tu ticket vence en ${days} ${days===1?"día":"días"}!`:pt?`Seu ticket vence em ${days} ${days===1?"dia":"dias"}!`:`Your ticket expires in ${days} ${days===1?"day":"days"}!`}</b>
+    <small>${es?"Úsalo en VIP, llaves, armas, héroes o NFT antes de que se pierda.":pt?"Use em VIP, chaves, armas, heróis ou NFT antes que expire.":"Use it on VIP, keys, gear, heroes or NFTs before it's gone."}</small></div>
+    <button class="dealgo">${es?"Usar":pt?"Usar":"Use it"}</button>`;
+  document.body.appendChild(d); requestAnimationFrame(()=>d.classList.add("in"));
+  d.querySelector(".dealx").onclick=e=>{ e.stopPropagation(); hideDeal(); };
+  d.querySelector(".dealgo").onclick=e=>{ e.stopPropagation(); hideDeal(); vipSel=Math.min(3,vipTier()); shopMode="vip"; goView("shop"); };
+}
+setTimeout(()=>{ try{ tixRemind(); }catch(e){} },4000);
+setInterval(()=>{ try{ tixRemind(); }catch(e){} },10*60000);
 function hideDeal(){ const d=$("#dealFloat"); if(d) d.remove(); clearInterval(dealTimer); }
 setInterval(()=>{ document.querySelectorAll(".firstoff .dealleft").forEach(el=>{ const ms=(S.dealUntil||0)-Date.now(); if(ms<=0){ try{ renderVip(); }catch(e){} } else el.textContent=leftStr(ms); }); },1000);
 
@@ -3819,6 +3853,7 @@ function legend(){
   const T2=t("tierName");
   const M=typeof inMagic==="function"&&inMagic();
   const list=M?Object.entries(BW[bwId].chests).map(([n,c])=>[c,+n+BW[bwId].off,""]):[[CHESTS[3],3,usd(10)],[CHESTS[7],7,"🔑"],[CHESTS[10],10,"NFT"],[CHESTS[14],14,usd(30)],[CHESTS[18],18,usd(50)],[CHESTS[20],20,t("legWd")]];
+  if(tixAvail()) list.push([TIX_CHEST,M?12+BW[bwId].off:12,"🎟️ -50%"]);
   const chips=list
     .map(([c,n,v])=>`<span class="chip">${chestSVG(c.tier)}${fmt(t("chestCell"),{n})}${c.units?"":" · "+v}</span>`).join("");
   $("#legendChips").innerHTML=chips+(M?"":`<span class="chip"><svg viewBox="-20 -24 40 46" width="22" height="22">${padlockSVG(false,0,0,.8)}</svg>${fmt(t("chestCell"),{n:21})} · ${t("magicName")}</span>`)+`<span class="chip">${ic("ad",22)}${t("legAdTxt")}</span>`;
@@ -3832,6 +3867,7 @@ function padlockSVG(open,x,y,s){
     <circle cx="0" cy="3" r="4" fill="${open?"#7A4A0C":"#1E1B4B"}"/><rect x="-1.6" y="4" width="3.2" height="8" rx="1.5" fill="${open?"#7A4A0C":"#1E1B4B"}"/></g>`;
 }
 function lootHTML(c){
+  if(c.tix) return `<div class="loot spin"><div class="mover">${TIX_SVG(110)}</div></div>`;
   if(c.key) return `<div class="loot spin"><div class="mover">${KEY_SVG}</div></div>`;
   const coin=coinBy(S.payCoin);
   if(c.nft){
@@ -3839,8 +3875,8 @@ function lootHTML(c){
   return `<div class="loot ${c.mode}"><div class="mover"><img class="coinimg" src="${coin.img}" alt="${coin.t}"></div></div>`;
 }
 function openChest(n,magic){
-  const c=magic?BW[bwId].chests[n]:CHESTS[n], coin=coinBy(S.payCoin), glow={moon:"rgba(240,171,252,.7)",star:"rgba(253,224,71,.7)",crystal:"rgba(103,232,249,.75)",key:"rgba(52,211,153,.7)",bronze:"rgba(240,176,114,.6)",silver:"rgba(230,238,250,.75)",gold:"rgba(255,220,90,.7)",diamond:"rgba(120,220,255,.7)",treasure:"rgba(255,210,74,.7)"}[c.tier];
-  const title=t("tierName")[c.tier];
+  const c=chestAt(n,magic), coin=coinBy(S.payCoin), glow={ticket:"rgba(253,224,71,.8)",moon:"rgba(240,171,252,.7)",star:"rgba(253,224,71,.7)",crystal:"rgba(103,232,249,.75)",key:"rgba(52,211,153,.7)",bronze:"rgba(240,176,114,.6)",silver:"rgba(230,238,250,.75)",gold:"rgba(255,220,90,.7)",diamond:"rgba(120,220,255,.7)",treasure:"rgba(255,210,74,.7)"}[c.tier];
+  const title=c.tix?tixName():t("tierName")[c.tier];
   const stage=`<div class="stage" id="stage" style="--glow:${glow}"><div class="rays"></div>${c.final?`<div class="loot float"><div class="mover"><img class="coinimg" src="${coin.img}" alt=""></div></div>`:lootHTML(c)}<div class="chestwrap">${chestSVG(c.tier)}</div></div>`;
   showModal(title,stage+`<div id="chestInfo"><p class="amt" style="font-size:18px">${t("adPlusGift")}</p></div>`,[[t("close"),"no",closeModal],[t("openChest"),"go",async()=>{
     if(!await gate(n)) return;
@@ -3860,6 +3896,10 @@ function openChest(n,magic){
       if(nftId){ const nn=nftBy(nftId); if(!MY_NFTS.includes(nftId)) MY_NFTS.push(nftId); if(!(S.nft500||[]).includes(nftId)){ S.nft500=[...(S.nft500||[]),nftId]; save(); } renderBag();
         info=`<p class="amt">NFT #${String(nftId).padStart(3,"0")} · ${nftCharName(nn)}<small>${RAR_NAME[S.lang][nn.rar]} · ${t("nftUnique")}</small>${gotLine}${adLine}</p>`; }
       else { earn(10*mult()); info=`<p class="amt">${t("nftSoldOut")}${gotLine}${adLine}</p>`; }
+    } else if(c.tix){
+      const now=Date.now(); S.tix={got:now,until:now+TIX_DAYS*86400000}; S.tixYear=now; save(); renderBag();
+      const es=S.lang==="es";
+      info=`<p class="amt">🎟️ ${tixName()}<small>${es?`Úsalo en tu próxima compra: VIP, llaves, armas, héroes, NFT o niveles. Vence en ${TIX_DAYS} días. Este cofre sale 1 vez al año.`:`Use it on your next purchase: VIP, keys, gear, heroes, NFTs or levels. Expires in ${TIX_DAYS} days. This chest appears once a year.`}</small>${gotLine}${adLine}</p>`;
     } else if(c.key){
       S.keyDay=bogota().key; save();
       info=`<p class="amt">${t("keyFound")}${gotLine}${adLine}</p>`;
@@ -3873,7 +3913,7 @@ function openChest(n,magic){
     const close=document.createElement("button");close.className="btn "+(c.final?"no":"go");close.textContent=t("close");close.onclick=closeModal;$("#mFoot").appendChild(close);
     if(c.final){const w=document.createElement("button");w.className="btn go";w.textContent=t("withdrawNow");w.onclick=()=>{closeModal();goView("pay");};$("#mFoot").appendChild(w);}
     (magic?completeMagic(n):complete(n));
-    toast(c.nft?t("nftLabel"):c.key?t("keyFound"):"+"+gotTxt,c.nft?"gem":c.key?"magic":"pay");
+    toast(c.tix?"🎟️ "+tixName():c.nft?t("nftLabel"):c.key?t("keyFound"):"+"+gotTxt,c.nft?"gem":c.key?"magic":"pay");
   }]]);
 }
 /* ---------- Circle ads: owner's faucet links, banner click starts a 20 s timer ---------- */
@@ -3928,7 +3968,7 @@ const adUnits=()=>Math.round(AD_UNITS*coinRate()*(mult()+(gearPct()+lvlPct()+pre
 const cryptoLine=()=>{ const c=coinBy(S.payCoin); return `<span class="gotcoin"><img src="${c.img}" alt="">+${cryptoTxt(adUnits())}</span>`; };
 function payAd(){ const r=earn(AD_UNITS*mult()); return cryptoTxt(r.main)+(r.bonus>0?` + Bonus ${cryptoTxt(r.bonus)} (+${nf(r.pct,3)}%)`:""); }
 function chestAd(n,magic,title,key){
-  const c=magic?BW[bwId].chests[n]:CHESTS[n];
+  const c=chestAt(n,magic);
   adModal(title,key,`<div class="chestpeek">${chestSVG(c.tier)}<span>${t("chestAdHint")}</span></div>`,()=>{ closeModal(); setTimeout(()=>openChest(n,magic),150); },{kind:"chest",n,magic:!!magic,bw:magic?bwId:null});
 }
 /* ---------- AdsLab CAPTCHA (server: /api/captcha-*) ---------- */
@@ -3974,7 +4014,7 @@ function openNode(n){
   if(viewDay!==null) return showModal(WORLDS[viewDay][S.lang],`<p>${fmt(t("opensOn"),{x:DAYS[S.lang][viewDay]})}</p>`,[[t("close"),"no",closeModal]]);
   if(n<=S.done) return showModal(`${t("circle")} ${n}`,`<p>${t("doneMsg")}</p>`,[[t("close"),"no",closeModal]]);
   if(n>S.done+1) return showModal(`${t("circle")} ${n}`,`<p>${t("locked")}</p>`,[[t("close"),"no",closeModal]]);
-  if(CHESTS[n]) return chestAd(n,false,`${t("circle")} ${n}`,n);
+  if(chestAt(n,false)) return chestAd(n,false,`${t("circle")} ${n}`,n);
   adModal(`${t("circle")} ${n}`,n,`<p class="amt" style="font-size:18px">${cryptoLine()}${vipTier()?"<small>VIP ×"+mult()+"</small>":""}${bonusInfo(AD_UNITS)}</p>`,
     async()=>{
       if(!await gate(n)) return;
@@ -3987,14 +4027,14 @@ const pendingItem=id=>(S.orders||[]).some(o=>o.type==="gear"&&o.item===id&&o.sta
 const livePrice=tk=>(liveStatus==="est"||liveStatus==="loading")?null:LIVE[tk];
 function coinQuote(usdAmt){const c=coinBy(S.payCoin), pr=livePrice(c.t); return pr?`${nf(usdAmt/pr,8)} ${c.t}`:null;}
 function buyDialog(id){
-  const combo=isCombo(id), hid=combo?id.split(":")[1]:id.split(":")[0], ci=combo?0:id.split(":")[1], hi=hIdx(hid), pts=piecePrice(id), usdAmt=pts*POINT_USD, units=Math.round(usdAmt*1e5), q=coinQuote(usdAmt);
+  const combo=isCombo(id), hid=combo?id.split(":")[1]:id.split(":")[0], ci=combo?0:id.split(":")[1], hi=hIdx(hid), pts=piecePrice(id), usdFull=pts*POINT_USD, usdAmt=tixP(usdFull), units=Math.round(usdAmt*1e5), q=coinQuote(usdAmt);
   showModal(itemName(id),`${combo?`<div class="combopieces" style="--c:${GEAR_HEROES[hi].c}">${comboParts(id).map(x=>gearSVG(hi,+x.split(":")[1])).join("")}</div><p class="offerline"><s>$${(comboFull(id)*POINT_USD).toFixed(2)}</s> · ${fmt(t("saveOff"),{p:offFor(id)})}</p>`:`<div class="item" style="--c:${GEAR_HEROES[hi].c};max-width:180px;margin:0 auto 8px">${gearSVG(hi,+ci)}</div>`}
-    <p class="amt">$${usdAmt.toFixed(2)} USD<small>${q?"≈ "+q+" · CoinGecko":t("payNoLive")}</small></p>
+    <p class="amt">${tixOn()?`<s style="opacity:.6;font-size:.7em">$${usdFull.toFixed(2)}</s> 🎟️ `:""}$${usdAmt.toFixed(2)} USD<small>${q?"≈ "+q+" · CoinGecko":t("payNoLive")}</small></p>
     <div class="vipbtns paylist">
       <button class="gold" id="pBal" ${(S.bal||0)>=units?"":"disabled"}>${ic("pay",24)}${t("payBal")} (${usd(S.bal||0)})</button>
       <button data-pm="faucetpay"><img src="${PAY.fp}" alt="">FaucetPay</button>
       <button data-pm="cwallet"><img src="${PAY.cw}" alt="">Cwallet</button><button data-cp="1" class="cryptobtn"><span class="cicons">${CRYPTO_ICONS()}</span>${t("cryptoBtn")}</button></div>`,[[t("close"),"no",closeModal]]);
-  $("#pBal").onclick=()=>{ if((S.bal||0)<units) return; S.bal-=units; grantItem(id); save(); closeModal(); renderPay(); };
+  $("#pBal").onclick=()=>{ if((S.bal||0)<units) return; S.bal-=units; tixUse("gear"); grantItem(id); save(); closeModal(); renderPay(); };
   document.querySelectorAll(".paylist [data-cp]").forEach(b=>b.onclick=()=>cryptoPay({type:"gear",item:id,usd:usdAmt}));
   document.querySelectorAll("[data-pm]").forEach(b=>b.onclick=()=>cryptoDialog({type:"gear",item:id,usd:usdAmt,method:b.dataset.pm}));
 }
@@ -4010,6 +4050,7 @@ function cryptoDialog(o){
       const tx=($("#cpTx").value||"").trim(); if(tx.length<4){ toast(t("vipTx")); return; }
       const id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
       const ord={id,type:o.type,item:o.item||null,tokens:o.tokens||null,usd:o.usd.toFixed(2),units:Math.round(o.usd*1e5),coin:c.t,coinAmt:LIVE[c.t]?o.usd/LIVE[c.t]:null,method:o.method,tx,status:"pending",at:Date.now()};
+      if(tixOn()&&TIX_TYPES.includes(o.type)){ ord.ticket=TIX_PCT; tixUse(o.type); }
       S.orders=[...(S.orders||[]),ord]; save();
       if(DB&&UID){ try{ await DB.doc("orders/"+UID).set({updatedAt:Date.now()}); await DB.doc("orders/"+UID).collection("list").doc(id).set(ord); }catch(e){} }
       closeModal(); toast(t("cpSent"),"pay"); renderShop(); renderDeposit();
@@ -4071,6 +4112,7 @@ function cryptoPay(o){
     const tx=($("#cpHash").value||"").trim(); if(tx.length<8){ toast(t("txHash")); return; }
     const id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
     const ord={id,type:o.type,item:o.item||null,tokens:o.tokens||null,usd:o.usd.toFixed(2),units:Math.round(o.usd*1e5),coin:cpCoin,coinAmt:amt,network:OWNER_WALLETS[cpCoin].net,method:"crypto",tx,status:"pending",at:Date.now()};
+    if(tixOn()&&TIX_TYPES.includes(o.type)){ ord.ticket=TIX_PCT; tixUse(o.type); }
     S.orders=[...(S.orders||[]),ord]; if(o.type==="vip") S.vipReq={method:"crypto",tx,status:"pending",at:Date.now()}; save();
     if(DB&&UID){ try{ await DB.doc("orders/"+UID).set({updatedAt:Date.now()}); await DB.doc("orders/"+UID).collection("list").doc(id).set(ord); }catch(e){} }
     closeModal(); toast(t("cpSent"),"pay"); renderShop(); renderDeposit(); renderVip();
