@@ -861,7 +861,7 @@ main{overscroll-behavior-y:contain}
 #worldBar{flex-wrap:wrap;row-gap:6px}#worldBar .wbbreak{flex-basis:100%;height:0;border-top:1px solid rgba(255,255,255,.12)}#worldBar .resetrow{font-size:12px}#worldBar b.resetrow{color:#7CF0C2}
 .tixbar{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0 0 12px;border-radius:16px;background:linear-gradient(135deg,rgba(236,72,153,.25),rgba(245,158,11,.25));border:2px dashed #FDE047}.tixbar b{display:block;font-size:15px;color:#FDE047}.tixbar small{display:block;font-size:12px;opacity:.95}.tixbar svg{flex:0 0 auto}
 .otherbal{margin:10px 0;padding:10px 12px;border-radius:14px;background:rgba(124,240,194,.08);border:1px solid rgba(124,240,194,.35);font-size:13px}.otherbal small{display:block;opacity:.85;margin:4px 0 8px}
-.taskcard{display:flex;align-items:center;gap:12px;width:100%;margin:0 0 12px;padding:12px 14px;border-radius:16px;border:2px solid #34d399;background:linear-gradient(135deg,rgba(16,185,129,.28),rgba(59,130,246,.22));color:#fff;text-align:left;cursor:pointer}
+.taskcard{display:flex;align-items:center;gap:12px;width:100%;margin:10px 0 12px;padding:12px 14px;border-radius:16px;border:2px solid #34d399;background:linear-gradient(135deg,rgba(16,185,129,.28),rgba(59,130,246,.22));color:#fff;text-align:left;cursor:pointer}
 .taskcard .tkic{font-size:30px}.taskcard .tktx{flex:1;display:flex;flex-direction:column}.taskcard b{font-size:16px}.taskcard small{opacity:.9;font-size:12px}.taskcard .tkgo{font-size:28px;font-weight:900;color:#34d399}
 #modal.wide{width:min(720px,98vw)}.taskwall{width:100%;height:68vh;border:0;border-radius:12px;background:#fff}
 </style>
@@ -1007,7 +1007,6 @@ main{overscroll-behavior-y:contain}
     <h1 class="title" id="worldTitle"></h1>
     <p class="sub" id="worldSub"></p>
     <div class="worldbar" id="worldBar"></div>
-    <button class="taskcard" id="taskBtn" type="button"></button>
     <div class="bwbar" id="bwBar"></div>
     <div class="mapcard"><svg class="scene" id="scene" viewBox="0 0 582 880" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="map" viewBox="0 0 582 880" role="group"></svg></div>
     <div class="legend">
@@ -1016,6 +1015,7 @@ main{overscroll-behavior-y:contain}
     <button class="reset" id="resetBtn" hidden data-t="newRound"></button>
     <div class="payhero"><button class="claimbtn" id="mapClaim"></button></div>
     <button class="depbtn" id="depMapBtn"></button>
+    <button class="taskcard" id="taskBtn" type="button"></button>
     <button class="vipchip" id="vipChip"></button>
   </section>
 
