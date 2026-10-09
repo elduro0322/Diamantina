@@ -860,6 +860,7 @@ main{overscroll-behavior-y:contain}
 .dealfloat .dealx{position:absolute;top:-10px;right:-8px;width:28px;height:28px;border-radius:50%;border:2px solid #ffd76a;background:#1a0f3a;color:#fff;font-size:14px;line-height:1;display:grid;place-items:center;padding:0}
 #worldBar{flex-wrap:wrap;row-gap:6px}#worldBar .wbbreak{flex-basis:100%;height:0;border-top:1px solid rgba(255,255,255,.12)}#worldBar .resetrow{font-size:12px}#worldBar b.resetrow{color:#7CF0C2}
 .tixbar{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0 0 12px;border-radius:16px;background:linear-gradient(135deg,rgba(236,72,153,.25),rgba(245,158,11,.25));border:2px dashed #FDE047}.tixbar b{display:block;font-size:15px;color:#FDE047}.tixbar small{display:block;font-size:12px;opacity:.95}.tixbar svg{flex:0 0 auto}
+.otherbal{margin:10px 0;padding:10px 12px;border-radius:14px;background:rgba(124,240,194,.08);border:1px solid rgba(124,240,194,.35);font-size:13px}.otherbal small{display:block;opacity:.85;margin:4px 0 8px}
 </style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -2861,13 +2862,14 @@ let stakePlan=1;
 let stakeAsset="USD";
 const stkBal=a=>a==="USD"?(S.bal||0):a==="DMT"?(S.dmtPre||0):((S.hold||{})[a]||0);
 function stkAdd(a,v){ if(a==="USD") S.bal=(S.bal||0)+v; else if(a==="DMT") S.dmtPre=(S.dmtPre||0)+v; else { S.hold=S.hold||{}; S.hold[a]=(S.hold[a]||0)+v; } }
+function stkBack(x,v){ const a=x.asset||"USD"; if(a==="USD"&&x.coin&&x.coin!==S.payCoin&&LIVE[x.coin]){ S.hold=S.hold||{}; S.hold[x.coin]=(S.hold[x.coin]||0)+v/1e5/LIVE[x.coin]; } else stkAdd(a,v); }
 const stkFmt=(a,v)=>a==="USD"?usd(v):`${nf(v,a==="DMT"?6:8)} ${a}`;
 const stkIcon=(a,s=30)=>a==="USD"?ic("pay",s):a==="DMT"?ic("dmt",s):`<img src="${coinBy(a).img}" alt="" style="width:${s}px;height:${s}px;border-radius:50%">`;
 const stkParse=(a,str)=>{const v=parseFloat((str||"0").replace(",","."))||0; return a==="USD"?Math.round(v*1e5):v;};
 function stkMinOk(a,amt){ if(a==="USD") return amt>=STAKE_MIN; if(a==="DMT") return amt>=10; const pr=LIVE[a]; return pr?amt*pr>=STAKE_MIN/1e5:amt>0; }
 const stkMinTxt=a=>a==="USD"?usd(STAKE_MIN):a==="DMT"?"10 DMT":"$0.001";
 function autoClaimStakes(){ const now=Date.now(), done=(S.stakes||[]).filter(x=>(x.end||0)<=now); if(!done.length) return;
-  S.stakes=S.stakes.filter(x=>(x.end||0)>now); done.forEach(x=>stkAdd(x.asset||"USD",(x.amt||0)+(x.rew||0))); save();
+  S.stakes=S.stakes.filter(x=>(x.end||0)>now); done.forEach(x=>stkBack(x,(x.amt||0)+(x.rew||0))); save();
   const es=S.lang==="es"; toast((es?"Staking terminado: recibiste ":"Staking finished: you got ")+done.map(x=>stkFmt(x.asset||"USD",(x.amt||0)+(x.rew||0))).join(" + "),"stake");
   if(typeof renderPay==="function") renderPay(); if(typeof pushLb==="function") pushLb(); }
 setInterval(()=>{ try{ autoClaimStakes(); }catch(e){} },60000); setTimeout(()=>{ try{ autoClaimStakes(); }catch(e){} },3000);
@@ -2895,11 +2897,11 @@ function renderStake(){ try{ autoClaimStakes(); }catch(e){}
   inp.oninput=q; $("#stakeMax").onclick=()=>{inp.value=a==="USD"?(bal/1e5).toFixed(5):String(bal);q();};
   $("#stakeGo").onclick=()=>{const v=stkParse(a,inp.value);
     if(!stkMinOk(a,v)){toast(fmt(t("stakeMinMsg"),{x:stkMinTxt(a)}));return;} if(v>bal+1e-12){toast(noBalTxt());return;}
-    const pl=STAKES[stakePlan]; stkAdd(a,-v); S.stakes.push({asset:a,amt:v,rew:rewOf(v),p:stakePlan,start:Date.now(),end:Date.now()+pl.d*86400000}); save(); renderPay(); renderStake(); toast(t("stakeOk"),"stake");};
+    const pl=STAKES[stakePlan]; stkAdd(a,-v); S.stakes.push({asset:a,coin:a==="USD"?S.payCoin:undefined,amt:v,rew:rewOf(v),p:stakePlan,start:Date.now(),end:Date.now()+pl.d*86400000}); save(); renderPay(); renderStake(); toast(t("stakeOk"),"stake");};
   box.querySelectorAll("[data-claim]").forEach(b=>b.onclick=()=>{const i=+b.dataset.claim, s=S.stakes[i]; if(!s||Date.now()<s.end) return; const sa=s.asset||"USD";
-    S.stakes.splice(i,1); stkAdd(sa,s.amt+s.rew); save(); renderPay(); renderStake(); toast(`+${stkFmt(sa,s.rew)}`,"stake");});
+    S.stakes.splice(i,1); stkBack(s,s.amt+s.rew); save(); renderPay(); renderStake(); toast(`+${stkFmt(sa,s.rew)}`,"stake");});
   box.querySelectorAll("[data-cancel-st]").forEach(b=>b.onclick=()=>{const i=+b.dataset.cancelSt, s=S.stakes[i];
-    showModal(t("stakeCancel"),`<p>${t("stakeCancelWarn")}</p>`,[[t("close"),"no",closeModal],[t("stakeCancel"),"go",()=>{S.stakes.splice(i,1); stkAdd(s.asset||"USD",s.amt); save(); closeModal(); renderPay(); renderStake();}]]);});
+    showModal(t("stakeCancel"),`<p>${t("stakeCancelWarn")}</p>`,[[t("close"),"no",closeModal],[t("stakeCancel"),"go",()=>{S.stakes.splice(i,1); stkBack(s,s.amt); save(); closeModal(); renderPay(); renderStake();}]]);});
 }
 
 
@@ -3479,6 +3481,21 @@ async function loadPrices(){
   renderPay(); if(typeof renderDeposit==="function") renderDeposit();
 }
 const holdOf=tk=>((S.hold||{})[tk]||0);
+/* Changing the payout coin: the balance earned so far stays in the old coin (wallet).
+   To cash it out in another coin the player must use the Exchange (2% fee). */
+function setPayCoin(nt,done){
+  const old=S.payCoin, bal=S.bal||0, es=S.lang==="es";
+  if(!nt||nt===old){ if(done) done(); return; }
+  const apply=()=>{ if(bal>0){ const pr=LIVE[old]; if(!pr){ toast(t("swapNoPriceShort")); return false; } S.hold=S.hold||{}; S.hold[old]=(S.hold[old]||0)+bal/1e5/pr; S.bal=0; }
+    S.payCoin=nt; save(); try{ cloudSave(true); }catch(e){} renderPay(); try{ renderSwap(); renderStake(); }catch(e){} if(done) done();
+    toast((es?"Ahora cobras en ":"Now earning in ")+nt,"pay"); return true; };
+  if(bal<=0||!LIVE[old]) return apply();
+  const amt=`${nf(bal/1e5/LIVE[old],8)} ${old}`;
+  showModal(es?`¿Cambiar a ${nt}?`:`Switch to ${nt}?`,
+    `<p>${es?`Tu saldo de <b>${amt}</b> se queda guardado como <b>${old}</b> en tu billetera.`:`Your balance of <b>${amt}</b> stays saved as <b>${old}</b> in your wallet.`}</p>
+     <p>${es?`Desde ahora ganas en <b>${nt}</b>. Para cobrar tu ${old} en ${nt}, cámbialo en el <b>Exchange</b> (comisión ${SWAP_FEE}%).`:`From now on you earn in <b>${nt}</b>. To cash out your ${old} as ${nt}, convert it in the <b>Exchange</b> (${SWAP_FEE}% fee).`}</p>`,
+    [[t("close"),"no",closeModal],[es?"Ir al Exchange":"Go to Exchange","no",()=>{ closeModal(); swapFrom=old; swapTo=nt; shopMode="swap"; goView("shop"); renderShop(); }],[es?`Cambiar a ${nt}`:`Switch to ${nt}`,"go",()=>{ closeModal(); apply(); }]]);
+}
 function coinAmount(tk){const pr=LIVE[tk]; return pr?((S.bal||0)/1e5)/pr+holdOf(tk):(S.bal>0?null:holdOf(tk)||null);}
 const WITHDRAW_MIN=200;   // $0.002
 const wdUnits=()=>(S.bal||0)+(LIVE[S.payCoin]?Math.round(holdOf(S.payCoin)*LIVE[S.payCoin]*1e5):0);
@@ -3497,7 +3514,11 @@ function renderPay(){
   $("#payProg").style.width=(done/20*100)+"%";
   $("#payProgTxt").textContent=fmt(t("missionsDone"),{d:done});
   $("#coinGrid").innerHTML=`<button class="cbtn soon" id="dmtSoon" title="DIAMANTINA">${ic("dmt",40)}DMT<small class="px">$${DMT_PRICE.toFixed(2)}</small></button>`+PAY.coins.map(x=>`<button class="cbtn ${x.t===S.payCoin?"on":""}" data-t="${x.t}" aria-pressed="${x.t===S.payCoin}" title="${x.n}"><img src="${x.img}" alt="">${x.t}<small class="px">${LIVE[x.t]?"$"+nf(LIVE[x.t],5):"—"}</small></button>`).join("");
-  document.querySelectorAll(".cbtn:not(.soon)").forEach(b=>b.onclick=()=>{S.payCoin=b.dataset.t;save();renderPay();});
+  document.querySelectorAll(".cbtn:not(.soon)").forEach(b=>b.onclick=()=>setPayCoin(b.dataset.t));
+  { let ob=$("#otherBal"); if(!ob){ ob=document.createElement("div"); ob.id="otherBal"; $("#coinGrid").insertAdjacentElement("afterend",ob); }
+    const es=S.lang==="es", oth=Object.entries(S.hold||{}).filter(([k,v])=>k!==S.payCoin&&v>0&&coinBy(k));
+    ob.innerHTML=oth.length?`<div class="otherbal">💼 ${es?"También tienes guardado:":"You also have saved:"} <b>${oth.map(([k,v])=>nf(v,8)+" "+k).join(" · ")}</b><small>${es?`Solo puedes cobrar en ${S.payCoin}. Para cobrar ese saldo en ${S.payCoin} cámbialo en el Exchange (${SWAP_FEE}%), o elige esa moneda arriba.`:`You can only cash out in ${S.payCoin}. To cash that out in ${S.payCoin}, convert it in the Exchange (${SWAP_FEE}%), or pick that coin above.`}</small><button class="mini" id="obEx">${es?"Ir al Exchange":"Go to Exchange"}</button></div>`:"";
+    const bx=$("#obEx"); if(bx) bx.onclick=()=>{ swapFrom=oth[0][0]; swapTo=S.payCoin; shopMode="swap"; goView("shop"); renderShop(); }; }
   $("#dmtSoon").onclick=()=>{shopMode="dmt";goView("shop");};
   $("#payCoinImg").src=c.img; $("#payCoinAmt").textContent=coinAmount(c.t)!==null&&LIVE[c.t]?nf(coinAmount(c.t),4):usd(S.bal||0);
   $("#methods").innerHTML=Object.entries(METHODS).map(([k,v])=>`<button class="mbtn ${k===S.payMethod?"on":""}" data-m="${k}" aria-pressed="${k===S.payMethod}"><img src="${v.img}" alt="">${v.name}</button>`).join("");
@@ -3679,7 +3700,7 @@ function openAcct(){
   setTimeout(()=>{ const sv=$("#acSave"); if(!sv) return; sv.onclick=()=>{ const es2=S.lang==="es", fp=$("#acFp").value.trim(), cw=$("#acCw").value.trim(), msg=$("#acMsg");
       if(fp&&!validAcct("faucetpay",fp)){ msg.style.color=""; msg.textContent=es2?"La cuenta de FaucetPay no es válida.":"Invalid FaucetPay account."; return; }
       if(cw&&!validAcct("cwallet",cw)){ msg.style.color=""; msg.textContent=es2?"El Cwallet ID o correo no es válido.":"Invalid Cwallet ID or email."; return; }
-      S.payAcct={...(S.payAcct||{}),faucetpay:fp,cwallet:cw}; S.payMethod=$("#acM").value; S.payCoin=$("#acC").value; save(); cloudSave(true); renderPay();
+      S.payAcct={...(S.payAcct||{}),faucetpay:fp,cwallet:cw}; S.payMethod=$("#acM").value; const nc=$("#acC").value; save(); cloudSave(true); renderPay(); if(nc!==S.payCoin) setPayCoin(nc);
       msg.style.color="#2ee66b"; msg.textContent=es2?"✅ Guardado. Se usará al retirar.":"✅ Saved. It will be used when you withdraw."; }; },0);
   setTimeout(async()=>{ const el=$("#ownTxt"); if(!el) return; const r=await ownerProbe(); const es=S.lang==="es";
     if(r.ok){ el.innerHTML=(es?"✅ Eres el dueño. ":"✅ You are the owner. ")+`<button class="btn go" id="goAdm" type="button" style="margin-top:8px;width:100%">⚙️ ${es?"Abrir panel":"Open panel"}</button>`; const g=$("#goAdm"); if(g) g.onclick=()=>{ closeModal(); goView("admin"); }; }
@@ -4268,7 +4289,7 @@ function coinMenuOpen(){ if($("#coinMenu")){ coinMenuClose(); return; } const es
   m.innerHTML=`<div class="cmh">${es?"Elige la moneda para cobrar":"Choose your payout coin"}</div>`+PAY.coins.map(c=>{ const a=coinAmount(c.t);
     return `<button role="option" class="cmi ${c.t===S.payCoin?"on":""}" data-t="${c.t}"><img src="${c.img}" alt=""><span><b>${c.t}</b><small>${escapeHtml(c.n||"")}</small></span><em>${a!==null&&LIVE[c.t]?nf(a,6):""}</em>${c.t===S.payCoin?"<i>✓</i>":""}</button>`; }).join("")+`<button class="cmgo" type="button">${ic("pay",20)} ${es?"Ir a Retirar":"Go to Withdraw"}</button>`;
   document.body.appendChild(m); $("#payCoinBtn").setAttribute("aria-expanded","true");
-  m.querySelectorAll(".cmi").forEach(x=>x.onclick=()=>{ S.payCoin=x.dataset.t; save(); renderPay(); coinMenuClose(); toast((S.lang==="es"?"Ahora cobras en ":"Now earning in ")+x.dataset.t,"pay"); });
+  m.querySelectorAll(".cmi").forEach(x=>x.onclick=()=>{ coinMenuClose(); setPayCoin(x.dataset.t); });
   m.querySelector(".cmgo").onclick=()=>{ coinMenuClose(); goView("pay"); };
 }
 $("#payCoinBtn").onclick=e=>{ e.stopPropagation(); coinMenuOpen(); };
