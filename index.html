@@ -4056,8 +4056,16 @@ function adModal(title,key,extra,onClaim,ctx){
   const btn=$("#mFoot .btn.go"); btn.disabled=true;
   let left=AD_SECS, started=false, gotB=!hasBanner, gotA=false;
   const msg=$("#adMsg"), ring=$("#adTm .adring");
-  const onBlur=()=>setTimeout(()=>{ const f=document.activeElement; if(f&&f.tagName==="IFRAME"&&$("#topBan")&&$("#topBan").contains(f)) markB(); },0);
-  window.addEventListener("blur",onBlur);
+  /* Banner tap detection (iframes don't report clicks): if the page loses focus or gets hidden
+     and it wasn't the "View ad" button, the player tapped the banner. */
+  let lastFb=0; const tb0=$("#topBan");
+  const chkB=()=>{ if(gotB||!tb0||!tb0.isConnected) return; const f=document.activeElement;
+    if(f&&f.tagName==="IFRAME"&&tb0.contains(f)) return markB();
+    if((document.hidden||!document.hasFocus())&&Date.now()-lastFb>1500) markB(); };
+  const onBlur=()=>{ setTimeout(chkB,0); setTimeout(chkB,200); };
+  const onHid=()=>{ if(document.hidden) chkB(); };
+  window.addEventListener("blur",onBlur); document.addEventListener("visibilitychange",onHid);
+  modal.addEventListener("close",()=>document.removeEventListener("visibilitychange",onHid),{once:true});
   let awayMs=0, awayStart=null;
   const isAway=()=>document.hidden||!document.hasFocus();
   const onVis=()=>{ if(!started) return; if(isAway()){ if(awayStart===null) awayStart=Date.now(); } else if(awayStart!==null){ awayMs+=Date.now()-awayStart; awayStart=null; } tick(); };
@@ -4080,7 +4088,8 @@ function adModal(title,key,extra,onClaim,ctx){
   if(hasBanner) $("#topBan").addEventListener("click",markB,true);
   const leaving=()=>{ if(started&&awayStart===null) awayStart=Date.now(); };
   if(hasBanner) $("#topBan").addEventListener("click",()=>setTimeout(leaving,0));
-  $("#fbBtn").onclick=()=>{ $("#fbBtn").classList.add("seen"); if(!gotA){ gotA=true; update(); } leaving(); };
+  $("#fbBtn").addEventListener("pointerdown",()=>{ lastFb=Date.now(); },true);
+  $("#fbBtn").onclick=()=>{ lastFb=Date.now(); $("#fbBtn").classList.add("seen"); if(!gotA){ gotA=true; update(); } leaving(); };
 }
 function cryptoTxt(units){ const c=coinBy(S.payCoin), pr=LIVE[c.t]; return pr?`${nf(units/1e5/pr,6)} ${c.t}`:`${usd(units)} ${t("inCoin")} ${c.t}`; }
 const adUnits=()=>Math.round(AD_UNITS*coinRate()*(mult()+(gearPct()+lvlPct()+premPct())/100));
