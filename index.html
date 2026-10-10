@@ -870,6 +870,9 @@ main{overscroll-behavior-y:contain}
 .reflist{max-height:260px;overflow:hidden}.reflist.open{max-height:420px;overflow-y:auto}.refrow{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)}.refrow small{display:block;opacity:.75;font-size:11px}.refrow .rgot{font-size:12px;color:#7CF0C2;white-space:nowrap}.rdot{width:9px;height:9px;border-radius:50%;background:#555;flex:0 0 9px}.rdot.on{background:#2ee66b}
 .buyref{margin:6px 0 4px;background:linear-gradient(135deg,#7c3aed,#db2777)!important;color:#fff!important}
 .cbtn{position:relative}.tagbox{position:absolute;top:3px;right:3px;display:flex;flex-direction:column;align-items:flex-end;gap:2px}.cwtag{font-style:normal;font-size:9px;font-weight:900;background:#c8f05a;color:#1a2a00;border-radius:6px;padding:1px 4px}.cwtag.fptag{background:#5aa8ff;color:#00163a}.mbtn{position:relative;flex-wrap:wrap}.mbtn.off{opacity:.45}.mbtn .mno{display:block;width:100%;font-size:11px;color:#ff9a8a}
+.wgift{text-align:center}.wgbox{width:170px;margin:4px auto 8px;filter:drop-shadow(0 0 22px rgba(255,210,74,.7));animation:wgfloat 1.6s ease-in-out infinite}.wgbox.shake{animation:wgshake .18s linear infinite}
+.wgnft{width:190px;margin:4px auto 8px;animation:wgpop .6s cubic-bezier(.2,1.5,.4,1) both;filter:drop-shadow(0 0 26px rgba(124,240,194,.6))}.wgnft svg{width:100%;height:auto}
+@keyframes wgfloat{50%{transform:translateY(-8px) scale(1.03)}}@keyframes wgshake{25%{transform:rotate(-6deg)}75%{transform:rotate(6deg)}}@keyframes wgpop{0%{transform:scale(.2) rotate(-20deg);opacity:0}100%{transform:scale(1);opacity:1}}
 </style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -3692,7 +3695,7 @@ const startDB=(async()=>{
             const {synced,...body}=p; await DB.doc(`payouts/${UID}`).collection("requests").doc(p.date).set(body); p.synced=true;}catch(e){break;}
       }
       save(); renderPay(); refreshPayouts();
-      loadMarket(); loadVip(); collectSales(); collectCredits(); pushLb().then(async()=>{ if(S.pendingRef&&!S.refBy) await applyRefCode(S.pendingRef,true); loadComp(); }); loadRefBy(); collectRef(); loadProofs(); setInterval(()=>{ if(!document.hidden){ pushLb(); loadComp(); loadProofs(); } },60000); setInterval(()=>{ if(!document.hidden){ collectSales(); collectCredits(); collectRef(); } },30000);
+      if(S.welcomePending&&!S.welcomeNft) setTimeout(welcomeGift,2200); loadMarket(); loadVip(); collectSales(); collectCredits(); pushLb().then(async()=>{ if(S.pendingRef&&!S.refBy) await applyRefCode(S.pendingRef,true); loadComp(); }); loadRefBy(); collectRef(); loadProofs(); setInterval(()=>{ if(!document.hidden){ pushLb(); loadComp(); loadProofs(); } },60000); setInterval(()=>{ if(!document.hidden){ collectSales(); collectCredits(); collectRef(); } },30000);
     }
   }catch(e){}
 });
@@ -3733,8 +3736,8 @@ async function doAuth(mode){
   try{
     if(mode==="reg"){
       const u=a.currentUser;
-      if(u&&u.isAnonymous){ await u.linkWithCredential(firebase.auth.EmailAuthProvider.credential(em,pw)); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; save(); await cloudSave(true); closeModal(); renderAcc(); toast(au("welcome"),"trophy"); }
-      else { await a.createUserWithEmailAndPassword(em,pw); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; save(); location.reload(); }
+      if(u&&u.isAnonymous){ await u.linkWithCredential(firebase.auth.EmailAuthProvider.credential(em,pw)); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; if(!S.welcomeNft) S.welcomePending=true; save(); await cloudSave(true); closeModal(); renderAcc(); toast(au("welcome"),"trophy"); setTimeout(welcomeGift,900); }
+      else { await a.createUserWithEmailAndPassword(em,pw); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; if(!S.welcomeNft) S.welcomePending=true; save(); location.reload(); }
     } else {
       await a.signInWithEmailAndPassword(em,pw);
       let d=null; try{ d=await firebase.firestore().doc("upgrades/"+a.currentUser.uid+"/save/state").get(); }catch(e){}
@@ -3872,6 +3875,34 @@ async function assignRefs(buyer,n){
   const pool=lb.docs.filter(d=>!has.has(d.id)&&d.id!==buyer&&d.id!==UID&&d.id!==myRef).sort((a,b)=>((b.data().seen||b.data().at||0)-(a.data().seen||a.data().at||0)));
   const pick=pool.slice(0,n); for(const d of pick) await DB.doc("refs/"+d.id).set({by:buyer,code:"",week:weekInfo().key,at:Date.now(),via:"bought"});
   return pick.length;
+}
+
+
+/* ===== Welcome gift: a random NFT for every new registered player (once) ===== */
+let welcomeBusy=false;
+function welcomeGift(){
+  if(welcomeBusy||S.welcomeNft||!S.welcomePending) return; if(modal.open){ setTimeout(welcomeGift,1500); return; }
+  welcomeBusy=true; const es=S.lang==="es";
+  showModal(es?"🎁 ¡Regalo de bienvenida!":"🎁 Welcome gift!",`<div class="wgift"><div class="wgbox" id="wgBox">${chestSVG("treasure")}</div>
+    <p class="amt" style="font-size:19px">${es?"¡Gracias por registrarte!":"Thanks for signing up!"}<small>${es?"Abre tu regalo: tienes un <b>NFT gratis</b> que te da bonus para siempre.":"Open your gift: a <b>free NFT</b> that gives you a bonus forever."}</small></p></div>`,
+    [[es?"🎁 Abrir regalo":"🎁 Open gift","go",openWelcome]]);
+}
+async function openWelcome(){
+  const es=S.lang==="es"; $("#mFoot").innerHTML=""; const box=$("#wgBox"); if(box) box.classList.add("shake");
+  let id=null; try{ id=await Promise.race([claimNft(false),new Promise(r=>setTimeout(()=>r(undefined),8000))]); }catch(e){ id=undefined; }
+  if(id===undefined) id=await claimNft(true);
+  S.welcomePending=false;
+  if(id){ S.welcomeNft=id; if(!(S.nft500||[]).includes(id)) S.nft500=[...(S.nft500||[]),id]; if(!MY_NFTS.includes(id)) MY_NFTS.push(id); }
+  else { S.welcomeNft=-1; addBal(50); }
+  save(); try{ cloudSave(true); }catch(e){} try{ renderBag(); renderPay(); }catch(e){}
+  welcomeBusy=false;
+  setTimeout(()=>{ const n=id?nftBy(id):null;
+    showModal(es?"🎉 ¡Tu NFT de bienvenida!":"🎉 Your welcome NFT!", n?`<div class="wgift"><div class="wgnft">${nftSVG(n)}</div>
+      <p class="amt">NFT #${String(id).padStart(3,"0")} · ${nftCharName(n)}<small>${(RAR_NAME[S.lang]||RAR_NAME.en)[n.rar]} · ${t("nftUnique")}</small><small style="color:#7CF0C2;font-weight:900">+${nftOne(id)}% ${es?"de bonus para siempre en cada anuncio":"bonus forever on every ad"}</small></p>
+      <p class="hint" style="text-align:center;margin:4px 0 0">${es?"Ya está en tu Mochila. Completa los 20 círculos cada día y gana más cofres y NFT 💎":"It's already in your Bag. Complete the 20 circles every day to win more chests and NFTs 💎"}</p></div>`
+      :`<p class="amt">${es?"Los NFT de bienvenida se agotaron, te regalamos":"Welcome NFTs are sold out, here's"} ${cryptoTxt(50)} 🎁</p>`,
+      [[es?"Ver mi Mochila":"See my Bag","no",()=>{ closeModal(); goView("bag"); }],[es?"¡A jugar!":"Let's play!","go",()=>{ closeModal(); goView("map"); }]]);
+    if(id) toast(es?"🎁 ¡NFT de bienvenida recibido!":"🎁 Welcome NFT received!","gem"); },700);
 }
 
 /* ---------- Actions ---------- */
