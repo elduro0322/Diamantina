@@ -869,7 +869,7 @@ main{overscroll-behavior-y:contain}
 .myrefs{margin:14px 0;padding:12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--stroke)}.myrefs h3{margin:0 0 8px;font-size:16px}
 .reflist{max-height:260px;overflow:hidden}.reflist.open{max-height:420px;overflow-y:auto}.refrow{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)}.refrow small{display:block;opacity:.75;font-size:11px}.refrow .rgot{font-size:12px;color:#7CF0C2;white-space:nowrap}.rdot{width:9px;height:9px;border-radius:50%;background:#555;flex:0 0 9px}.rdot.on{background:#2ee66b}
 .buyref{margin:6px 0 4px;background:linear-gradient(135deg,#7c3aed,#db2777)!important;color:#fff!important}
-.cbtn{position:relative}.cwtag{position:absolute;top:3px;right:3px;font-style:normal;font-size:9px;font-weight:900;background:#c8f05a;color:#1a2a00;border-radius:6px;padding:1px 4px}.cwtag.fptag{background:#5aa8ff;color:#00163a}.mbtn{position:relative;flex-wrap:wrap}.mbtn.off{opacity:.45}.mbtn .mno{display:block;width:100%;font-size:11px;color:#ff9a8a}
+.cbtn{position:relative}.tagbox{position:absolute;top:3px;right:3px;display:flex;flex-direction:column;align-items:flex-end;gap:2px}.cwtag{font-style:normal;font-size:9px;font-weight:900;background:#c8f05a;color:#1a2a00;border-radius:6px;padding:1px 4px}.cwtag.fptag{background:#5aa8ff;color:#00163a}.mbtn{position:relative;flex-wrap:wrap}.mbtn.off{opacity:.45}.mbtn .mno{display:block;width:100%;font-size:11px;color:#ff9a8a}
 </style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -3551,7 +3551,7 @@ const wdMin=()=>Math.max(Math.round(WITHDRAW_MIN*coinRate()),coinMinUnits());
 const canWithdraw=()=>wdUnits()>=wdMin();
 const coinBy=tk=>PAY.coins.find(c=>c.t===(tk==="GEM"?"TON":tk==="ENA"?"APT":tk))||PAY.coins[0];
 /* FaucetPay only pays these coins (payout API, 2026). Everything else goes through Cwallet. */
-const FP_COINS=new Set(["BTC","ETH","USDT","LTC","DOGE","BCH","DASH","DGB","TRX","ZEC","SOL","BNB","FEY","USDC"]);
+const FP_COINS=new Set(["BTC","ETH","USDT","LTC","DOGE","BCH","DASH","DGB","TRX","ZEC","SOL","BNB","FEY","USDC","XRP","TON","ADA","TRUMP"]);
 const payable=(coin,m)=>m!=="faucetpay"||FP_COINS.has(coin);
 const cwOnlyMsg=c=>S.lang==="es"?`${c} solo se puede cobrar por Cwallet`:S.lang==="pt"?`${c} só pode ser sacado pela Cwallet`:`${c} can only be withdrawn via Cwallet`;
 const METHODS={faucetpay:{name:"FaucetPay",img:PAY.fp,hint:"fpHint",ph:"fpPh"},cwallet:{name:"Cwallet",img:PAY.cw,hint:"cwHint",ph:"cwPh"}};
@@ -3562,7 +3562,7 @@ function renderPay(){
   const already=S.payouts.some(p=>p.date===key&&p.status!=="refunded");
   $("#payProg").style.width=(done/20*100)+"%";
   $("#payProgTxt").textContent=fmt(t("missionsDone"),{d:done});
-  $("#coinGrid").innerHTML=`<button class="cbtn soon" id="dmtSoon" title="DIAMANTINA">${ic("dmt",40)}DMT<small class="px">$${DMT_PRICE.toFixed(2)}</small></button>`+PAY.coins.map(x=>`<button class="cbtn ${x.t===S.payCoin?"on":""}" data-t="${x.t}" aria-pressed="${x.t===S.payCoin}" title="${x.n}"><img src="${x.img}" alt="">${x.t}<small class="px">${LIVE[x.t]?"$"+nf(LIVE[x.t],5):"—"}</small>${FP_COINS.has(x.t)?`<em class="cwtag fptag">FaucetPay</em>`:`<em class="cwtag">Cwallet</em>`}</button>`).join("");
+  $("#coinGrid").innerHTML=`<button class="cbtn soon" id="dmtSoon" title="DIAMANTINA">${ic("dmt",40)}DMT<small class="px">$${DMT_PRICE.toFixed(2)}</small></button>`+PAY.coins.map(x=>`<button class="cbtn ${x.t===S.payCoin?"on":""}" data-t="${x.t}" aria-pressed="${x.t===S.payCoin}" title="${x.n}"><img src="${x.img}" alt="">${x.t}<small class="px">${LIVE[x.t]?"$"+nf(LIVE[x.t],5):"—"}</small>${FP_COINS.has(x.t)?`<span class="tagbox"><em class="cwtag fptag">FaucetPay</em><em class="cwtag">Cwallet</em></span>`:`<span class="tagbox"><em class="cwtag">Cwallet</em></span>`}</button>`).join("");
   document.querySelectorAll(".cbtn:not(.soon)").forEach(b=>b.onclick=()=>setPayCoin(b.dataset.t,()=>{ if(!payable(b.dataset.t,S.payMethod)){ S.payMethod="cwallet"; save(); renderPay(); toast(cwOnlyMsg(b.dataset.t),"pay"); } }));
   { let ob=$("#otherBal"); if(!ob){ ob=document.createElement("div"); ob.id="otherBal"; $("#coinGrid").insertAdjacentElement("afterend",ob); }
     const es=S.lang==="es", oth=Object.entries(S.hold||{}).filter(([k,v])=>k!==S.payCoin&&v>0&&coinBy(k));
