@@ -2250,7 +2250,10 @@ function renderText(){
   $("#langCode").textContent=(S.lang==="ind"?"id":S.lang).toUpperCase();
   $("#coinCount").textContent=S.coins;
 }
-function renderMap(){
+const CB_KEY="diamantina-curbw"; let LAST_CB=null;
+function rememberBW(){ let cur=""; try{ cur=inMagic()&&!magicPreview?bwId:""; }catch(e){} if(cur!==LAST_CB){ LAST_CB=cur; try{ localStorage.setItem(CB_KEY,JSON.stringify({id:cur,day:bogota().key})); }catch(e){} } }
+function restoreBW(){ try{ const v=JSON.parse(localStorage.getItem(CB_KEY)||"null"); if(v&&v.id&&v.day===bogota().key&&BW[v.id]&&bwOpen(v.id)){ bwId=v.id; magicMode=true; LAST_CB=v.id; renderMap(); } }catch(e){} }
+function renderMap(){ setTimeout(rememberBW,0);
   const svg=$("#map"); const ns="http://www.w3.org/2000/svg";
   const hi=hIdx(S.hero), HIMG=heroImg(curHero());
   let h=`<defs><clipPath id="tok"><circle cx="0" cy="0" r="30"/></clipPath></defs>`;
@@ -4421,6 +4424,7 @@ setInterval(()=>{ if(!document.hidden && $("#v-comp").classList.contains("on")) 
 applyI18n();
 syncDay();
 renderAll();
+restoreBW();
 setTimeout(captchaResume,600);
 loadPrices(); setInterval(loadPrices,60000);
 soundUI();
