@@ -4065,17 +4065,18 @@ function adModal(title,key,extra,onClaim,ctx){
   modal.addEventListener("close",()=>{ clearInterval(adTick); window.removeEventListener("blur",onBlur); document.removeEventListener("visibilitychange",onVis); window.removeEventListener("blur",onVis); window.removeEventListener("focus",onVis); window.removeEventListener("pageshow",onVis); },{once:true});
   const tick=()=>{ if(!started||!ring.isConnected) return;
     if(!isAway()&&awayStart!==null){ awayMs+=Date.now()-awayStart; awayStart=null; }
-    const total=awayMs+(awayStart!==null?Date.now()-awayStart:0);
+    const total=Date.now()-startAt;   /* runs continuously once both steps are done */
     left=Math.max(0,AD_SECS-Math.floor(total/1000));
     ring.style.setProperty("--p",(AD_SECS-left)/AD_SECS); ring.querySelector("b").textContent=left;
     if(left<=0){ clearInterval(adTick); started=false; ring.classList.remove("paused"); ring.classList.add("ok"); ring.querySelector("b").textContent="✓"; msg.textContent=t("adReady"); btn.disabled=false; btn.classList.add("pulse"); return; }
-    if(isAway()){ ring.classList.remove("paused"); msg.textContent=t("adWatching"); } else { ring.classList.add("paused"); msg.textContent=t("adPaused"); } };
+    ring.classList.remove("paused"); msg.textContent=t("adWatching"); };
   const update=()=>{ const sb=$("#stB"), sa=$("#stA"); if(sb) sb.classList.toggle("ok",gotB); if(sa) sa.classList.toggle("ok",gotA);
     if(started) return;
     if(gotA&&gotB) return start();
     msg.textContent=gotB&&!gotA?t("adNowAd"):gotA&&!gotB?t("adNowBanner"):hasBanner?t("adNeedBoth"):t("adTapFirst"); };
   const markB=()=>{ if(gotB) return; gotB=true; const tb=$("#topBan"); if(tb) tb.classList.add("done"); update(); };
-  const start=()=>{ started=true; msg.textContent=t("adWatching"); clearInterval(adTick); adTick=setInterval(tick,500); };
+  let startAt=0;
+  const start=()=>{ started=true; startAt=Date.now(); msg.textContent=t("adWatching"); clearInterval(adTick); adTick=setInterval(tick,500); tick(); };
   if(hasBanner) $("#topBan").addEventListener("click",markB,true);
   const leaving=()=>{ if(started&&awayStart===null) awayStart=Date.now(); };
   if(hasBanner) $("#topBan").addEventListener("click",()=>setTimeout(leaving,0));
