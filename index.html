@@ -869,6 +869,7 @@ main{overscroll-behavior-y:contain}
 .myrefs{margin:14px 0;padding:12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--stroke)}.myrefs h3{margin:0 0 8px;font-size:16px}
 .reflist{max-height:260px;overflow:hidden}.reflist.open{max-height:420px;overflow-y:auto}.refrow{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)}.refrow small{display:block;opacity:.75;font-size:11px}.refrow .rgot{font-size:12px;color:#7CF0C2;white-space:nowrap}.rdot{width:9px;height:9px;border-radius:50%;background:#555;flex:0 0 9px}.rdot.on{background:#2ee66b}
 .buyref{margin:6px 0 4px;background:linear-gradient(135deg,#7c3aed,#db2777)!important;color:#fff!important}
+.cbtn{position:relative}.cwtag{position:absolute;top:3px;right:3px;font-style:normal;font-size:9px;font-weight:900;background:#c8f05a;color:#1a2a00;border-radius:6px;padding:1px 4px}.cwtag.fptag{background:#5aa8ff;color:#00163a}.mbtn{position:relative;flex-wrap:wrap}.mbtn.off{opacity:.45}.mbtn .mno{display:block;width:100%;font-size:11px;color:#ff9a8a}
 </style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -3549,6 +3550,10 @@ const coinMinUnits=()=>{ const m=COIN_MIN[S.payCoin], pr=LIVE[S.payCoin]; return
 const wdMin=()=>Math.max(Math.round(WITHDRAW_MIN*coinRate()),coinMinUnits());
 const canWithdraw=()=>wdUnits()>=wdMin();
 const coinBy=tk=>PAY.coins.find(c=>c.t===(tk==="GEM"?"TON":tk==="ENA"?"APT":tk))||PAY.coins[0];
+/* FaucetPay only pays these coins (payout API, 2026). Everything else goes through Cwallet. */
+const FP_COINS=new Set(["BTC","ETH","USDT","LTC","DOGE","BCH","DASH","DGB","TRX","ZEC","SOL","BNB","FEY","USDC"]);
+const payable=(coin,m)=>m!=="faucetpay"||FP_COINS.has(coin);
+const cwOnlyMsg=c=>S.lang==="es"?`${c} solo se puede cobrar por Cwallet`:S.lang==="pt"?`${c} só pode ser sacado pela Cwallet`:`${c} can only be withdrawn via Cwallet`;
 const METHODS={faucetpay:{name:"FaucetPay",img:PAY.fp,hint:"fpHint",ph:"fpPh"},cwallet:{name:"Cwallet",img:PAY.cw,hint:"cwHint",ph:"cwPh"}};
 function validAcct(m,v){v=v.trim(); if(m==="cwallet") return /^\d{5,}$/.test(v)||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); return v.length>=6 && !/\s/.test(v);}
 function renderPay(){
@@ -3557,16 +3562,17 @@ function renderPay(){
   const already=S.payouts.some(p=>p.date===key&&p.status!=="refunded");
   $("#payProg").style.width=(done/20*100)+"%";
   $("#payProgTxt").textContent=fmt(t("missionsDone"),{d:done});
-  $("#coinGrid").innerHTML=`<button class="cbtn soon" id="dmtSoon" title="DIAMANTINA">${ic("dmt",40)}DMT<small class="px">$${DMT_PRICE.toFixed(2)}</small></button>`+PAY.coins.map(x=>`<button class="cbtn ${x.t===S.payCoin?"on":""}" data-t="${x.t}" aria-pressed="${x.t===S.payCoin}" title="${x.n}"><img src="${x.img}" alt="">${x.t}<small class="px">${LIVE[x.t]?"$"+nf(LIVE[x.t],5):"—"}</small></button>`).join("");
-  document.querySelectorAll(".cbtn:not(.soon)").forEach(b=>b.onclick=()=>setPayCoin(b.dataset.t));
+  $("#coinGrid").innerHTML=`<button class="cbtn soon" id="dmtSoon" title="DIAMANTINA">${ic("dmt",40)}DMT<small class="px">$${DMT_PRICE.toFixed(2)}</small></button>`+PAY.coins.map(x=>`<button class="cbtn ${x.t===S.payCoin?"on":""}" data-t="${x.t}" aria-pressed="${x.t===S.payCoin}" title="${x.n}"><img src="${x.img}" alt="">${x.t}<small class="px">${LIVE[x.t]?"$"+nf(LIVE[x.t],5):"—"}</small>${FP_COINS.has(x.t)?`<em class="cwtag fptag">FaucetPay</em>`:`<em class="cwtag">Cwallet</em>`}</button>`).join("");
+  document.querySelectorAll(".cbtn:not(.soon)").forEach(b=>b.onclick=()=>setPayCoin(b.dataset.t,()=>{ if(!payable(b.dataset.t,S.payMethod)){ S.payMethod="cwallet"; save(); renderPay(); toast(cwOnlyMsg(b.dataset.t),"pay"); } }));
   { let ob=$("#otherBal"); if(!ob){ ob=document.createElement("div"); ob.id="otherBal"; $("#coinGrid").insertAdjacentElement("afterend",ob); }
     const es=S.lang==="es", oth=Object.entries(S.hold||{}).filter(([k,v])=>k!==S.payCoin&&v>0&&coinBy(k));
     ob.innerHTML=oth.length?`<div class="otherbal">💼 ${es?"También tienes guardado:":"You also have saved:"} <b>${oth.map(([k,v])=>nf(v,8)+" "+k).join(" · ")}</b><small>${es?`Solo puedes cobrar en ${S.payCoin}. Para cobrar ese saldo en ${S.payCoin} cámbialo en el Exchange (${SWAP_FEE}%), o elige esa moneda arriba.`:`You can only cash out in ${S.payCoin}. To cash that out in ${S.payCoin}, convert it in the Exchange (${SWAP_FEE}%), or pick that coin above.`}</small><button class="mini" id="obEx">${es?"Ir al Exchange":"Go to Exchange"}</button></div>`:"";
     const bx=$("#obEx"); if(bx) bx.onclick=()=>{ swapFrom=oth[0][0]; swapTo=S.payCoin; shopMode="swap"; goView("shop"); renderShop(); }; }
   $("#dmtSoon").onclick=()=>{shopMode="dmt";goView("shop");};
   $("#payCoinImg").src=c.img; $("#payCoinAmt").textContent=coinAmount(c.t)!==null&&LIVE[c.t]?nf(coinAmount(c.t),4):usd(S.bal||0);
-  $("#methods").innerHTML=Object.entries(METHODS).map(([k,v])=>`<button class="mbtn ${k===S.payMethod?"on":""}" data-m="${k}" aria-pressed="${k===S.payMethod}"><img src="${v.img}" alt="">${v.name}</button>`).join("");
-  document.querySelectorAll(".mbtn").forEach(b=>b.onclick=()=>{S.payMethod=b.dataset.m;save();renderPay();});
+  if(!payable(S.payCoin,S.payMethod)){ S.payMethod="cwallet"; save(); }
+  $("#methods").innerHTML=Object.entries(METHODS).map(([k,v])=>{ const ok=payable(S.payCoin,k); return `<button class="mbtn ${k===S.payMethod?"on":""} ${ok?"":"off"}" data-m="${k}" aria-pressed="${k===S.payMethod}"><img src="${v.img}" alt="">${v.name}${ok?"":`<small class="mno">${S.lang==="es"?"no paga":"n/a"} ${S.payCoin}</small>`}</button>`; }).join("")+(FP_COINS.has(S.payCoin)?"":`<p class="hint" style="grid-column:1/-1;margin:4px 0 0">ℹ️ ${cwOnlyMsg(S.payCoin)}. ${S.lang==="es"?"FaucetPay solo paga: ":"FaucetPay only pays: "}${[...FP_COINS].filter(c=>PAY.coins.some(x=>x.t===c)).join(", ")}.</p>`);
+  document.querySelectorAll(".mbtn").forEach(b=>b.onclick=()=>{ if(!payable(S.payCoin,b.dataset.m)){ toast(cwOnlyMsg(S.payCoin),"pay"); return; } S.payMethod=b.dataset.m;save();renderPay();});
   const acct=$("#acct"); acct.placeholder=t(m.ph); acct.value=(S.payAcct||{})[S.payMethod]||"";
   acct.oninput=()=>{S.payAcct={...(S.payAcct||{}),[S.payMethod]:acct.value};save();updateReqBtn();};
   $("#acctHint").textContent=t(m.hint);
@@ -3585,8 +3591,10 @@ function updateReqBtn(){
   const key=bogota().key, done=Math.min(S.done,20), already=(S.payouts||[]).some(p=>p.date===key&&p.status!=="refunded");
   const okAcct=validAcct(S.payMethod,(S.payAcct||{})[S.payMethod]||""), btn=$("#reqBtn"), msg=$("#reqMsg");
   btn.innerHTML=`<img src="${coinBy(S.payCoin).img}" alt="">${t("requestBtn")}`;
-  btn.disabled=already||done<20||!okAcct||!canWithdraw();
-  if(already) msg.textContent=t("alreadyToday");
+  const okCoin=payable(S.payCoin,S.payMethod);
+  btn.disabled=already||done<20||!okAcct||!canWithdraw()||!okCoin;
+  if(!okCoin) msg.textContent=cwOnlyMsg(S.payCoin);
+  else if(already) msg.textContent=t("alreadyToday");
   else if(done>=20&&!canWithdraw()) msg.textContent=fmt(t("wdMin"),{x:cryptoTxt(wdMin()),y:cryptoTxt(wdUnits())});
   else if(done<20) msg.textContent=fmt(t("needMissions"),{n:20-done});
   else if(!okAcct) msg.textContent=fmt(t("needAccount"),{x:METHODS[S.payMethod].name});
@@ -3594,7 +3602,7 @@ function updateReqBtn(){
 }
 async function submitPayout(){
   const key=bogota().key;
-  if(S.done<20||!canWithdraw()||(S.payouts||[]).some(p=>p.date===key&&p.status!=="refunded")) return;
+  if(S.done<20||!canWithdraw()||!payable(S.payCoin,S.payMethod)||(S.payouts||[]).some(p=>p.date===key&&p.status!=="refunded")) return;
   const req={date:key,coin:S.payCoin,method:S.payMethod,account:((S.payAcct||{})[S.payMethod]||"").trim(),amountUsd:usd((S.bal||0)+(LIVE[S.payCoin]?Math.round(holdOf(S.payCoin)*LIVE[S.payCoin]*1e5):0)).slice(1),units:S.bal,holdCoin:holdOf(S.payCoin),priceUsd:LIVE[S.payCoin]||null,amountCoin:coinAmount(S.payCoin),world:WORLDS[bogota().day].id,hero:S.hero,createdAt:new Date().toISOString(),status:"pending"};
   $("#reqBtn").disabled=true;
   let synced=false;
@@ -3751,7 +3759,7 @@ function openAcct(){
   setTimeout(()=>{ const sv=$("#acSave"); if(!sv) return; sv.onclick=()=>{ const es2=S.lang==="es", fp=$("#acFp").value.trim(), cw=$("#acCw").value.trim(), msg=$("#acMsg");
       if(fp&&!validAcct("faucetpay",fp)){ msg.style.color=""; msg.textContent=es2?"La cuenta de FaucetPay no es válida.":"Invalid FaucetPay account."; return; }
       if(cw&&!validAcct("cwallet",cw)){ msg.style.color=""; msg.textContent=es2?"El Cwallet ID o correo no es válido.":"Invalid Cwallet ID or email."; return; }
-      S.payAcct={...(S.payAcct||{}),faucetpay:fp,cwallet:cw}; S.payMethod=$("#acM").value; const nc=$("#acC").value; save(); cloudSave(true); renderPay(); if(nc!==S.payCoin) setPayCoin(nc);
+      S.payAcct={...(S.payAcct||{}),faucetpay:fp,cwallet:cw}; S.payMethod=$("#acM").value; const nc=$("#acC").value; if(!payable(nc,S.payMethod)){ S.payMethod="cwallet"; toast(cwOnlyMsg(nc),"pay"); } save(); cloudSave(true); renderPay(); if(nc!==S.payCoin) setPayCoin(nc);
       msg.style.color="#2ee66b"; msg.textContent=es2?"✅ Guardado. Se usará al retirar.":"✅ Saved. It will be used when you withdraw."; }; },0);
   setTimeout(async()=>{ const el=$("#ownTxt"); if(!el) return; const r=await ownerProbe(); const es=S.lang==="es";
     if(r.ok){ el.innerHTML=(es?"✅ Eres el dueño. ":"✅ You are the owner. ")+`<button class="btn go" id="goAdm" type="button" style="margin-top:8px;width:100%">⚙️ ${es?"Abrir panel":"Open panel"}</button>`; const g=$("#goAdm"); if(g) g.onclick=()=>{ closeModal(); goView("admin"); }; }
@@ -4401,7 +4409,7 @@ function coinMenuOpen(){ if($("#coinMenu")){ coinMenuClose(); return; } const es
   m.innerHTML=`<div class="cmh">${es?"Elige la moneda para cobrar":"Choose your payout coin"}</div>`+PAY.coins.map(c=>{ const a=coinAmount(c.t);
     return `<button role="option" class="cmi ${c.t===S.payCoin?"on":""}" data-t="${c.t}"><img src="${c.img}" alt=""><span><b>${c.t}</b><small>${escapeHtml(c.n||"")}</small></span><em>${a!==null&&LIVE[c.t]?nf(a,6):""}</em>${c.t===S.payCoin?"<i>✓</i>":""}</button>`; }).join("")+`<button class="cmgo" type="button">${ic("pay",20)} ${es?"Ir a Retirar":"Go to Withdraw"}</button>`;
   document.body.appendChild(m); $("#payCoinBtn").setAttribute("aria-expanded","true");
-  m.querySelectorAll(".cmi").forEach(x=>x.onclick=()=>{ coinMenuClose(); setPayCoin(x.dataset.t); });
+  m.querySelectorAll(".cmi").forEach(x=>x.onclick=()=>{ coinMenuClose(); const c=x.dataset.t; setPayCoin(c,()=>{ if(!payable(c,S.payMethod)){ S.payMethod="cwallet"; save(); renderPay(); toast(cwOnlyMsg(c),"pay"); } }); });
   m.querySelector(".cmgo").onclick=()=>{ coinMenuClose(); goView("pay"); };
 }
 $("#payCoinBtn").onclick=e=>{ e.stopPropagation(); coinMenuOpen(); };
