@@ -1532,7 +1532,7 @@ const tixOn=()=>!!(S.tix&&!S.tix.used&&(S.tix.until||0)>Date.now());
 const tixP=u=>tixOn()?Math.round(u*(100-TIX_PCT))/100:u;
 function tixUse(type){ if(tixOn()&&(!type||TIX_TYPES.includes(type))){ S.tix.used=Date.now(); S.tix.on=type||""; save(); try{ renderBag(); }catch(e){} } }
 function chestAt(n,magic){ const base=magic?((BW[bwId]||{}).chests||{}):CHESTS; if(n===12&&tixAvail()) return TIX_CHEST;
-  if(magic&&n===KEY_CIRCLE&&KEY_NEXT[bwId]&&(!bwAccess(KEY_NEXT[bwId])||((bwProg(bwId)||0)<KEY_CIRCLE&&!freeKey(KEY_NEXT[bwId])&&!keyValid(KEY_NEXT[bwId])&&vipTier()<BW[KEY_NEXT[bwId]].vip))) return {tier:"key",key:true,mode:"spin",unlock:KEY_NEXT[bwId]};
+  if(magic&&n===KEY_CIRCLE&&KEY_NEXT[bwId]&&!keyValid(KEY_NEXT[bwId])&&vipTier()<BW[KEY_NEXT[bwId]].vip) return {tier:"key",key:true,mode:"spin",unlock:KEY_NEXT[bwId]};
   return base[n]; }
 const tixDays=()=>Math.max(1,Math.ceil((((S.tix&&S.tix.until)||0)-Date.now())/86400000));
 const TIX_SVG=(w=96)=>`<svg viewBox="0 0 120 70" width="${w}" height="${Math.round(w*70/120)}" aria-hidden="true"><defs><linearGradient id="tixG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FDE047"/><stop offset=".55" stop-color="#F59E0B"/><stop offset="1" stop-color="#EC4899"/></linearGradient></defs><path d="M8 6 H112 a6 6 0 0 1 6 6 V26 a9 9 0 0 0 0 18 V58 a6 6 0 0 1 -6 6 H8 a6 6 0 0 1 -6 -6 V44 a9 9 0 0 0 0 -18 V12 a6 6 0 0 1 6 -6Z" fill="url(#tixG)" stroke="#7C2D12" stroke-width="2.5"/><path d="M84 10 V60" stroke="#7C2D12" stroke-width="2" stroke-dasharray="4 4"/><text x="44" y="44" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="26" fill="#fff" stroke="#7C2D12" stroke-width="1.2">-50%</text><text x="101" y="40" text-anchor="middle" font-size="18">🎟️</text></svg>`;
@@ -1552,7 +1552,7 @@ const bogotaDate=()=>new Date(Date.now()+BOGOTA_OFFSET);
 const isDecember=()=>bogotaDate().getUTCMonth()===11;
 function xmasDays(){ const d=bogotaDate(), y=d.getUTCMonth()===11&&d.getUTCDate()>25?d.getUTCFullYear()+1:d.getUTCFullYear(); const tgt=Date.UTC(y,11,25); const today=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()); return Math.round((tgt-today)/86400000); }
 function decDays(){ const d=bogotaDate(); if(d.getUTCMonth()===11) return 0; const tgt=Date.UTC(d.getUTCFullYear(),11,1), today=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()); return Math.round((tgt-today)/86400000); }
-const KEY_FROM={cars:"magic",mush:"cars",castle:"mush"}, KEY_NEXT={magic:"cars",cars:"mush",mush:"castle"}, KEY_CIRCLE=7;
+const KEY_FROM={cars:"magic",mush:"cars",castle:"mush"}, KEY_NEXT={magic:"cars",cars:"mush",mush:"castle"}, KEY_CIRCLE=20;   // last circle (40 / 60 / 80) gives the key and sends the player to the next world
 const dayKeys=()=>{ const k=bogota().key; if(!S.bwKeys||S.bwKeys.day!==k) S.bwKeys={day:k}; return S.bwKeys; };
 const freeKey=id=>!!dayKeys()[id];
 function bwAccess(id){
@@ -1583,7 +1583,7 @@ function renderBonusBar(){
   if(viewDay!==null){ bar.innerHTML=""; return; }
   bar.innerHTML=`<div class="bwhead">${ic("magic",22)}<b>${t("bonusWorlds")}</b><small>${S.done>=20?"":`${20-S.done} ⏳`}</small></div><div class="bwrow">${BW_ORDER.map(id=>{
     const open=bwAccess(id), prog=bwProg(id), w=BW[id];
-    const status=id==="xmas"&&!isDecember()?fmt(t("xmasShort"),{d:decDays()}):id==="magic"&&S.done<20?t("freeTag"):open?(S.done>=20?(prog>=20?"✓ 20/20":`${prog}/20`):"🔒 20"):w.price?`🔑 $${w.price} · ${S.lang==="es"?"1 año":"1 year"}`:KEY_FROM[id]?`🔑 ${S.lang==="es"?"Gratis":"Free"} · #${KEY_CIRCLE} ${t(BW[KEY_FROM[id]].name)}`:`🔑 $${KEY_PRICE} · VIP ${w.vip}`;
+    const status=id==="xmas"&&!isDecember()?fmt(t("xmasShort"),{d:decDays()}):id==="magic"&&S.done<20?t("freeTag"):open?(S.done>=20?(prog>=20?"✓ 20/20":`${prog}/20`):"🔒 20"):w.price?`🔑 $${w.price} · ${S.lang==="es"?"1 año":"1 year"}`:KEY_FROM[id]?`🔑 ${S.lang==="es"?"Gratis · círculo":"Free · circle"} ${KEY_CIRCLE+BW[KEY_FROM[id]].off}`:`🔑 $${KEY_PRICE} · VIP ${w.vip}`;
     return `<button class="bwchip ${open?"open":""}" data-bw="${id}" style="--k1:${(w.key||["#FDE047"])[0]};--k2:${(w.key||["#FDE047","#DC2626"])[1]}">${ic(w.icon,34)}<b>${t(w.name)}</b><small>${status}</small></button>`;}).join("")}</div>`;
   bar.querySelectorAll("[data-bw]").forEach(b=>b.onclick=()=>openBW(b.dataset.bw));
 }
@@ -1595,7 +1595,7 @@ function openBW(id){
   if(id==="magic") return openGate();
   if(KEY_FROM[id]){ const es=S.lang==="es", prev=KEY_FROM[id], pOk=bwOpen(prev);
     return showModal(t(w.name),`<div class="unlock" style="height:110px"><div class="ukey">${keySVGc(id)}</div></div>
-      <p style="text-align:center"><b>${es?"¡Esta aldea ahora es GRATIS!":"This village is now FREE!"}</b><br>${es?`Consigue la <b>llave</b> en la <b>casilla ${KEY_CIRCLE}</b> de <b>${t(BW[prev].name)}</b>. La llave sirve todo el día (hasta el reinicio de las 7 pm).`:`Get the <b>key</b> at <b>circle ${KEY_CIRCLE}</b> of <b>${t(BW[prev].name)}</b>. It works all day (until the daily reset).`}</p>
+      <p style="text-align:center"><b>${es?"¡Esta aldea ahora es GRATIS!":"This village is now FREE!"}</b><br>${es?`Termina <b>${t(BW[prev].name)}</b>: en el <b>círculo ${KEY_CIRCLE+BW[prev].off}</b> (el último) está la <b>llave</b> que te trae aquí al círculo ${BW[id].off+1}. La llave sirve todo el día (hasta el reinicio de las 7 pm).`:`Finish <b>${t(BW[prev].name)}</b>: <b>circle ${KEY_CIRCLE+BW[prev].off}</b> (the last one) has the <b>key</b> that brings you here to circle ${BW[id].off+1}. It works all day (until the daily reset).`}</p>
       ${pOk?"":`<p class="hint" style="text-align:center">${es?`Primero abre ${t(BW[prev].name)}.`:`Open ${t(BW[prev].name)} first.`}</p>`}`,
       [[t("close"),"no",closeModal],...(pOk?[[es?`Ir a ${t(BW[prev].name)}`:`Go to ${t(BW[prev].name)}`,"go",()=>{ closeModal(); enterBW(prev); }]]:[[`VIP ${w.vip}`,"go",()=>{ closeModal(); vipSel=Math.max(0,Math.min(3,w.vip-1)); shopMode="vip"; goView("shop"); }]])]); }
   buyKeyDialog(id);
@@ -4115,6 +4115,7 @@ function openChest(n,magic){
     $("#mFoot").innerHTML="";
     const close=document.createElement("button");close.className="btn "+(c.final?"no":"go");close.textContent=t("close");close.onclick=closeModal;$("#mFoot").appendChild(close);
     if(c.final){const w=document.createElement("button");w.className="btn go";w.textContent=t("withdrawNow");w.onclick=()=>{closeModal();goView("pay");};$("#mFoot").appendChild(w);}
+    if(c.key&&c.unlock){ close.className="btn no"; const g=document.createElement("button"); g.className="btn go pulse"; g.textContent=(S.lang==="es"?"🔑 Ir a ":"🔑 Go to ")+t(BW[c.unlock].name)+" ›"; g.onclick=()=>{ closeModal(); if(bwOpen(c.unlock)) enterBW(c.unlock); else openBW(c.unlock); }; $("#mFoot").appendChild(g); }
     (magic?completeMagic(n):complete(n));
     toast(c.tix?"🎟️ "+tixName():c.nft?t("nftLabel"):(c.key&&c.unlock)?"🔑 "+t(BW[c.unlock].name):c.key?t("keyFound"):"+"+gotTxt,c.nft?"gem":c.key?"magic":"pay");
   }]]);
