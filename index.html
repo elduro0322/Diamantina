@@ -3287,7 +3287,7 @@ function renderAdmAds(){
       <div class="aarow"><label class="aaon"><input type="checkbox" data-bo="${i}" ${b.on!==false?"checked":""}> ${t("aaActive")}</label><button class="mini aadel" data-bd="${i}">${t("aaDelete")}</button></div></div>`).join("")||`<div class="empty" style="padding:12px">${t("aaNoBanners")}</div>`}</div>
     ${A2.banners.length<10?`<button class="keylink" id="aaAdd">+ ${t("aaAdd")}</button>`:""}</div>
     <div class="panel"><h2>${ic("ad",28)} ${S.lang==="es"?"Banners de arriba (debajo de Telegram)":"Top banners (under Telegram)"}</h2><p class="hint" style="margin-top:0">${S.lang==="es"?"Pega el código de cada banner. Déjalo vacío para quitarlo.":"Paste each banner code. Leave empty to remove it."}</p>
-      ${[0,1,2,3,4,5].map(k=>`<div class="aab"><div class="aaprev">${codeHTML(A2.xb[k]||"")||`<span>${S.lang==="es"?"Vacío":"Empty"}</span>`}</div><label class="cfgf"><span>Banner ${k+1}</span><textarea class="field aaframe" data-xb="${k}" spellcheck="false">${escapeHtml(A2.xb[k]||"")}</textarea></label></div>`).join("")}
+      ${[0,1,2,3,4,5].map(k=>`<div class="aab"><div class="aaprev">${codeHTML(A2.xb[k]||"")||`<span>${S.lang==="es"?"Vacío":"Empty"}</span>`}</div><label class="cfgf"><span>Banner ${k+1}</span><textarea class="field aaframe" data-xb="${k}" spellcheck="false">${escapeHtml((A2.xb[k]||"").replace(DIRECT_TAG,""))}</textarea></label><label class="aaon"><input type="checkbox" data-xdir="${k}" ${/^\s*<!--direct-->/.test(A2.xb[k]||"")?"checked":""}> ${S.lang==="es"?"Mostrar directo en la página (úsalo si sale en blanco)":"Show directly on the page (use it if it shows blank)"}</label></div>`).join("")}
       <button class="mini" id="xbReset">${S.lang==="es"?"Volver a los banners originales":"Restore original banners"}</button></div>
     <div class="panel"><h2>${ic("ad",28)} Pop-under PopAds</h2><p class="hint" style="margin-top:0">${S.lang==="es"?"Sale solo después de reclamar, nunca a los VIP.":"Shows only after a claim, never to VIP."}</p>
       <label class="aaon"><input type="checkbox" id="popOn" ${A2.pop.on?"checked":""}> ${t("aaActive")}</label>
@@ -3298,7 +3298,7 @@ function renderAdmAds(){
     <p class="hint" id="aaCount">${fmt(t("aaCount"),{n:A2.links.length})}</p>
     <button class="mini" id="aaReset">${t("aaReset")}</button></div>
     <button class="claimbtn" id="aaSave">${t("save")}</button><p class="msg" id="aaMsg"></p>`;
-  const sync=()=>{ box.querySelectorAll("[data-bu]").forEach(i=>A2.banners[+i.dataset.bu].url=i.value.trim()); box.querySelectorAll("[data-bo]").forEach(i=>A2.banners[+i.dataset.bo].on=i.checked); box.querySelectorAll("[data-bf]").forEach(i=>A2.banners[+i.dataset.bf].frame=i.value.trim()); box.querySelectorAll("[data-xb]").forEach(i=>A2.xb[+i.dataset.xb]=i.value.trim()); A2.pop={on:$("#popOn").checked,max:Math.max(1,Math.min(10,+$("#popMax").value||2)),gap:Math.max(5,Math.min(1440,+$("#popGap").value||30))};
+  const sync=()=>{ box.querySelectorAll("[data-bu]").forEach(i=>A2.banners[+i.dataset.bu].url=i.value.trim()); box.querySelectorAll("[data-bo]").forEach(i=>A2.banners[+i.dataset.bo].on=i.checked); box.querySelectorAll("[data-bf]").forEach(i=>A2.banners[+i.dataset.bf].frame=i.value.trim()); box.querySelectorAll("[data-xb]").forEach(i=>{ const k=+i.dataset.xb, v=i.value.trim().replace(DIRECT_TAG,"").trim(), dc=box.querySelector(`[data-xdir="${k}"]`); A2.xb[k]=v&&dc&&dc.checked?DIRECT_TAG+v:v; }); A2.pop={on:$("#popOn").checked,max:Math.max(1,Math.min(10,+$("#popMax").value||2)),gap:Math.max(5,Math.min(1440,+$("#popGap").value||30))};
     A2.links=$("#aaLinks").value.split("\n").map(l=>{ const m=l.match(/^(.*?)(https?:\/\/\S+)\s*$/); if(!m) return null; const nm=m[1].replace(/[|:]\s*$/,"").trim(); return [nm||hostOf(m[2]),m[2]]; }).filter(Boolean); };
   $("#aaLinks").oninput=()=>{ sync(); $("#aaCount").textContent=fmt(t("aaCount"),{n:A2.links.length}); };
   const add=$("#aaAdd"); if(add) add.onclick=()=>{ sync(); A2.banners.push({frame:"",on:true}); renderAdmAds(); };
@@ -3882,7 +3882,14 @@ async function liveCount(){
 }
 setInterval(beat,60000); setInterval(liveCount,15000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ beat(); liveCount(); } });
-function renderXBans(){ const box=$("#xBans"); if(!box) return; box.innerHTML=XB.map(c=>codeHTML(c)).join(""); }
+const DIRECT_TAG="<!--direct-->";
+const isDirect=c=>/^\s*<!--direct-->/.test(c||"")||/ytrgt\(/.test(c||"");   // header-bidding banners need the real page (not a frame) to get bids
+let xbSig="";
+function runDirect(el,code){ el.innerHTML=String(code||"").replace(DIRECT_TAG,"");
+  el.querySelectorAll("script").forEach(old=>{ const s=document.createElement("script"); [...old.attributes].forEach(a=>s.setAttribute(a.name,a.value)); s.text=old.textContent; old.replaceWith(s); }); }
+function renderXBans(){ const box=$("#xBans"); if(!box) return; const sig=JSON.stringify(XB); if(sig===xbSig&&box.childElementCount) return; xbSig=sig;
+  box.innerHTML=XB.map((c,i)=>isDirect(c)?`<div class="ownframe xdirect" data-xd="${i}" style="min-height:250px;width:300px;max-width:100%;margin:0 auto"></div>`:codeHTML(c)).join("");
+  box.querySelectorAll("[data-xd]").forEach(el=>{ try{ runDirect(el,XB[+el.dataset.xd]); }catch(e){} }); }
 function loadXBans(){ const box=$("#xBans"); if(!box||box.dataset.on) return; box.dataset.on="1"; renderXBans(); }
 if(document.readyState==="complete") setTimeout(loadXBans,800); else window.addEventListener("load",()=>setTimeout(loadXBans,800),{once:true});
 
