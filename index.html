@@ -3249,17 +3249,20 @@ function popState(){ const k=bogota().key; if(!S.pop||S.pop.day!==k) S.pop={day:
 const claimsToday=()=>{ const e=S.eDay; return e&&e.day===bogota().key?(e.n||0):0; };
 function popOk(){ if(!POP.on) return false; if(popTest()) return true; if(vipTier()>0) return false; const p=popState(); if(!p.n&&claimsToday()<(POP.from||1)) return false; if(VISIT_CLAIMS<(POP.visit||1)) return false; return p.n<POP.max&&Date.now()-(p.last||0)>=POP.gap*60000; }
 let popLoaded=false;
-(function(){ const o=window.open; window.open=function(){ let own=!!window.__ownOpen; try{ own=own||(popTapOwn&&Date.now()-popTapAt<1500); }catch(e){} window.__ownOpen=false;   /* taps on banners/links are never treated as pops */
-  if(!own&&popLoaded&&Date.now()-(window.__popAt||0)>4000){ if(popLoaded!=="pa"&&!popOk()) return null; popCount(); }   /* PopAds keeps its own 15-min delay, so it is never blocked here (blocking made it think pop-ups were disabled) */
-  return o.apply(window,arguments); }; })();
+/* window.open is NOT wrapped any more: pop networks check that it is the browser's original and refuse to show ads if it was changed. Pops are counted when the page loses focus right after a tap (below). */
 const POP_CC="<div class=\"cc-cb45d14902bcc514\"><\/div><script>!function e(n,o,t,c,r,d,s,a){(a=o.createElement(t)).async=!0,a.src=\"https://\"+r[d]+\"/js/\"+c+\".js?v=\"+s,a.onerror=function(){a.remove(),(d+=1)>=r.length||e(n,o,t,c,r,d,s)},o.head.appendChild(a)}(window,document,\"script\",\"cb45d14902bcc514\",[\"cdn.ccnsad.com\"],0,Math.floor(Date.now()/3600000));<\/script>";
 function popNext(){ const nets=[POP.pa!==false&&"pa",POP.cc!==false&&"cc"].filter(Boolean); if(!nets.length) return null; const last=popState().net; return nets.find(x=>x!==last)||nets[0]; }
 function popCount(){ const p=popState(); p.n++; p.last=Date.now(); p.net=popLoaded||p.net; window.__popAt=Date.now(); save(); }
 /* pops that don't use window.open (link tricks): the page loses focus right after a tap that wasn't on our own links/banners */
 let popTapAt=0, popTapOwn=false;
 document.addEventListener("pointerdown",e=>{ popTapAt=Date.now(); const t=e.target; popTapOwn=!!(t&&t.closest&&t.closest("a[href],iframe,.fbanner,#topBan,.xbans,.ownframe,input,textarea,select")); },true);
+/* owner test badge: open the site with ?poptest to see what the pop system is doing */
+if(popTest()) setInterval(()=>{ let b=document.getElementById("popDbg"); if(!b){ b=document.createElement("div"); b.id="popDbg"; b.style.cssText="position:fixed;left:6px;bottom:78px;z-index:99999;background:#000c;color:#7CF0A6;font:700 11px/1.35 monospace;padding:6px 8px;border-radius:8px;max-width:70vw;pointer-events:none"; document.body.appendChild(b); }
+  const p=popState(), ok=popLoaded==="pa"?!!window["c0f39647d8f7093dc0f39647d8f7093d"]:popLoaded==="cc"?!![...document.scripts].some(x=>/ccnsad/.test(x.src)):false;
+  b.innerHTML=`POP TEST<br>red: ${popLoaded==="pa"?"PopAds":popLoaded==="cc"?"CryptoCoinsAd":"— (reclama 1 círculo)"}<br>script: ${popLoaded?(ok?"cargado ✓":"cargando… / bloqueado ✗"):"-"}<br>pops hoy: ${p.n}<br>${popLoaded?"👉 toca cualquier parte":""}`; },1000);
 window.addEventListener("blur",()=>{ if(!popLoaded||popTapOwn||Date.now()-popTapAt>1500||Date.now()-(window.__popAt||0)<5000) return; const f=document.activeElement; if(f&&f.tagName==="IFRAME") return; popCount(); });
-function popArm(){ if(popLoaded||!popOk()) return; const net=popNext(); if(!net) return; popLoaded=net;
+let POP_DBG="";
+function popArm(){ if(popLoaded||!popOk()) return; const net=popNext(); if(!net) return; popLoaded=net; POP_DBG="";
   try{ if(net==="pa"){ const s=document.createElement("script"); s.setAttribute("data-cfasync","false"); s.text=POPJS; document.head.appendChild(s); }
     else { const box=document.createElement("div"); box.style.cssText="position:absolute;width:1px;height:1px;overflow:hidden;left:-9px;top:0"; document.body.appendChild(box); runDirect(box,POP_CC); } }catch(e){} }
 const POPJS="(function(){var t=window,i=\"c0f39647d8f7093d333008968171c08f\",q=[[\"siteId\",688-216-459+5323278],[\"minBid\",0],[\"popundersPerIP\",\"0\"],[\"delayBetween\",900],[\"default\",false],[\"defaultPerDay\",0],[\"topmostLayer\",\"auto\"]],m=[\"d3d3LnZpc2FyaW9tZWRpYS5jb20vemJvb3RjYXJkcy5taW4uY3Nz\",\"ZDEzazdwcmF4MXlpMDQuY2xvdWRmcm9udC5uZXQveG51cVUvYWhvcHNjb3RjaC5taW4uanM=\",\"d3d3LmhoeHd0b2hocmUuY29tL2dib290Y2FyZHMubWluLmNzcw==\",\"d3d3LnRkZ3diYWduYm0uY29tL3BJL2hob3BzY290Y2gubWluLmpz\"],h=-1,x,r,u=function(){clearTimeout(r);h++;if(m[h]&&!(1817827768000<(new Date).getTime()&&1<h)){x=t.document.createElement(\"script\");x.type=\"text/javascript\";x.async=!0;var g=t.document.getElementsByTagName(\"script\")[0];x.src=\"https://\"+atob(m[h]);x.crossOrigin=\"anonymous\";x.onerror=u;x.onload=function(){clearTimeout(r);t[i.slice(0,16)+i.slice(0,16)]||u()};r=setTimeout(u,5E3);g.parentNode.insertBefore(x,g)}};if(!t[i]){try{Object.freeze(t[i]=q)}catch(e){}u()}})();";
