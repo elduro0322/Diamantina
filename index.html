@@ -3247,7 +3247,7 @@ let VISIT_CLAIMS=0;   // first pop of the day only after the 11th claim   // Pop
 const popTest=()=>/[?&]poptest\b/.test(location.search);
 function popState(){ const k=bogota().key; if(!S.pop||S.pop.day!==k) S.pop={day:k,n:0,last:0}; return S.pop; }
 const claimsToday=()=>{ const e=S.eDay; return e&&e.day===bogota().key?(e.n||0):0; };
-function popOk(){ if(!POP.on) return false; if(popTest()) return true; if(vipTier()>0) return false; const p=popState(); if(!p.n&&claimsToday()<(POP.from||1)) return false; if(VISIT_CLAIMS<(POP.visit||1)) return false; return p.n<POP.max&&Date.now()-(p.last||0)>=POP.gap*60000; }
+function popOk(){ if(!POP.on) return false; if(popTest()) return true; if(vipTier()>0) return false; const p=popState(); if(!p.n&&claimsToday()<(POP.from||1)-1) return false; if(VISIT_CLAIMS<(POP.visit||1)-1) return false;   /* armed one claim before, so the pop opens when the player taps circle 11 */ return p.n<POP.max&&Date.now()-(p.last||0)>=POP.gap*60000; }
 let popLoaded=false;
 /* window.open is NOT wrapped any more: pop networks check that it is the browser's original and refuse to show ads if it was changed. Pops are counted when the page loses focus right after a tap (below). */
 const POP_CC="<div class=\"cc-cb45d14902bcc514\"><\/div><script>!function e(n,o,t,c,r,d,s,a){(a=o.createElement(t)).async=!0,a.src=\"https://\"+r[d]+\"/js/\"+c+\".js?v=\"+s,a.onerror=function(){a.remove(),(d+=1)>=r.length||e(n,o,t,c,r,d,s)},o.head.appendChild(a)}(window,document,\"script\",\"cb45d14902bcc514\",[\"cdn.ccnsad.com\"],0,Math.floor(Date.now()/3600000));<\/script>";
@@ -3257,6 +3257,7 @@ function popCount(){ const p=popState(); p.n++; p.last=Date.now(); p.net=popLoad
 let popTapAt=0, popTapOwn=false;
 document.addEventListener("pointerdown",e=>{ popTapAt=Date.now(); const t=e.target; popTapOwn=!!(t&&t.closest&&t.closest("a[href],iframe,.fbanner,#topBan,.xbans,.ownframe,input,textarea,select")); },true);
 /* owner test badge: open the site with ?poptest to see what the pop system is doing */
+if(popTest()) setTimeout(()=>{ try{ popArm(); }catch(e){} },1500);
 if(popTest()) setInterval(()=>{ let b=document.getElementById("popDbg"); if(!b){ b=document.createElement("div"); b.id="popDbg"; b.style.cssText="position:fixed;left:6px;bottom:78px;z-index:99999;background:#000c;color:#7CF0A6;font:700 11px/1.35 monospace;padding:6px 8px;border-radius:8px;max-width:70vw;pointer-events:none"; document.body.appendChild(b); }
   const p=popState(), ok=popLoaded==="pa"?!!window["c0f39647d8f7093dc0f39647d8f7093d"]:popLoaded==="cc"?!![...document.scripts].some(x=>/ccnsad/.test(x.src)):false;
   b.innerHTML=`POP TEST<br>red: ${popLoaded==="pa"?"PopAds":popLoaded==="cc"?"CryptoCoinsAd":"— (reclama 1 círculo)"}<br>script: ${popLoaded?(ok?"cargado ✓":"cargando… / bloqueado ✗"):"-"}<br>pops hoy: ${p.n}<br>${popLoaded?"👉 toca cualquier parte":""}`; },1000);
@@ -4209,7 +4210,8 @@ function adModal(title,key,extra,onClaim,ctx){
   let lastFb=0; const tb0=$("#topBan");
   const chkB=()=>{ if(gotB||!tb0||!tb0.isConnected) return; const f=document.activeElement;
     if(f&&f.tagName==="IFRAME"&&tb0.contains(f)) return markB();
-    if((document.hidden||!document.hasFocus())&&Date.now()-lastFb>1500&&Date.now()-(window.__popAt||0)>3000) markB(); };
+    let popNow=false; try{ popNow=!!popLoaded&&!popTapOwn&&Date.now()-popTapAt<2500; }catch(e){}
+    if((document.hidden||!document.hasFocus())&&Date.now()-lastFb>1500&&Date.now()-(window.__popAt||0)>3000&&!popNow) markB(); };
   const onBlur=()=>{ setTimeout(chkB,0); setTimeout(chkB,200); };
   const onHid=()=>{ if(document.hidden) chkB(); };
   window.addEventListener("blur",onBlur); document.addEventListener("visibilitychange",onHid);
