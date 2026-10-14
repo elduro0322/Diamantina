@@ -4192,6 +4192,9 @@ function adModal(title,key,extra,onClaim,ctx){
     [[t("close"),"no",()=>{ clearInterval(adTick); closeModal(); }],[t("claim"),"go",()=>{ if(!btn||btn.disabled) return; clearInterval(adTick); captchaGate(ctx,onClaim,btn); }]]);
   const btn=$("#mFoot .btn.go"); btn.disabled=true;
   let left=AD_SECS, started=false, gotB=!hasBanner, gotA=false;
+  const RS=(AD_RESTORE&&AD_RESTORE.key===key)?AD_RESTORE:null; AD_RESTORE=null;
+  const savePend=()=>{ try{ localStorage.setItem(AD_PK,JSON.stringify({key,ctx:ctx||null,gotA,gotB,startAt:started||left<=0?startAt:0,at:Date.now(),day:bogota().key})); }catch(e){} };
+  modal.addEventListener("close",()=>{ try{ if(!document.hidden) localStorage.removeItem(AD_PK); }catch(e){} },{once:true});
   const msg=$("#adMsg"), ring=$("#adTm .adring");
   /* Banner tap detection (iframes don't report clicks): if the page loses focus or gets hidden
      and it wasn't the "View ad" button, the player tapped the banner. */
@@ -4216,18 +4219,29 @@ function adModal(title,key,extra,onClaim,ctx){
     if(left<=0){ clearInterval(adTick); started=false; ring.classList.remove("paused"); ring.classList.add("ok"); ring.querySelector("b").textContent="✓"; msg.textContent=t("adReady"); btn.disabled=false; btn.classList.add("pulse"); return; }
     ring.classList.remove("paused"); msg.textContent=t("adWatching"); };
   const update=()=>{ const sb=$("#stB"), sa=$("#stA"); if(sb) sb.classList.toggle("ok",gotB); if(sa) sa.classList.toggle("ok",gotA);
-    if(started) return;
+    savePend(); if(started) return;
     if(gotA&&gotB) return start();
     msg.textContent=gotB&&!gotA?t("adNowAd"):gotA&&!gotB?t("adNowBanner"):hasBanner?t("adNeedBoth"):t("adTapFirst"); };
   const markB=()=>{ if(gotB) return; gotB=true; const tb=$("#topBan"); if(tb) tb.classList.add("done"); update(); };
   let startAt=0;
-  const start=()=>{ started=true; startAt=Date.now(); msg.textContent=t("adWatching"); clearInterval(adTick); adTick=setInterval(tick,500); tick(); };
+  const start=(at)=>{ started=true; startAt=at||Date.now(); savePend(); msg.textContent=t("adWatching"); clearInterval(adTick); adTick=setInterval(tick,500); tick(); };
   if(hasBanner) $("#topBan").addEventListener("click",markB,true);
   const leaving=()=>{ if(started&&awayStart===null) awayStart=Date.now(); };
   if(hasBanner) $("#topBan").addEventListener("click",()=>setTimeout(leaving,0));
   $("#fbBtn").addEventListener("pointerdown",()=>{ lastFb=Date.now(); },true);
   $("#fbBtn").onclick=()=>{ lastFb=Date.now(); $("#fbBtn").classList.add("seen"); if(!gotA){ gotA=true; update(); } leaving(); };
+  if(RS){ gotA=!!RS.gotA; gotB=!!RS.gotB||gotB; if(gotA) $("#fbBtn").classList.add("seen"); if(gotB&&tb0) tb0.classList.add("done");
+    const sb=$("#stB"), sa=$("#stA"); if(sb) sb.classList.toggle("ok",gotB); if(sa) sa.classList.toggle("ok",gotA);
+    if(RS.startAt) start(RS.startAt); else update(); }
 }
+const AD_PK="diamantina-adpend"; let AD_RESTORE=null;
+/* reopen the ad the player was watching if the page reloaded (pop-under tab swap, in-app browser, low memory) */
+function restoreAd(){ let r=null; try{ r=JSON.parse(localStorage.getItem(AD_PK)||"null"); }catch(e){}
+  if(!r||!r.ctx||r.day!==bogota().key||Date.now()-(r.at||0)>20*60000||(!r.gotA&&!r.gotB)) return;
+  if(modal.open) return; const c=r.ctx; AD_RESTORE=r;
+  try{ if(c.kind==="node"||(c.kind==="chest"&&!c.magic)){ if(c.n===S.done+1) openNode(c.n); }
+    else if(c.bw&&bwOpen(c.bw)){ if(bwId!==c.bw||!magicMode) enterBW(c.bw); if(c.n===bwProg(c.bw)+1) openMagic(c.n); } }catch(e){}
+  AD_RESTORE=null; }
 function cryptoTxt(units){ const c=coinBy(S.payCoin), pr=LIVE[c.t]; return pr?`${nf(units/1e5/pr,6)} ${c.t}`:`${usd(units)} ${t("inCoin")} ${c.t}`; }
 const adUnits=()=>Math.round(AD_UNITS*coinRate()*(mult()+(gearPct()+lvlPct()+premPct())/100));
 const cryptoLine=()=>{ const c=coinBy(S.payCoin); return `<span class="gotcoin"><img src="${c.img}" alt="">+${cryptoTxt(adUnits())}</span>`; };
@@ -4550,15 +4564,20 @@ modal.addEventListener("click",e=>{if(e.target===modal)closeModal();});
 function soundUI(){const on=S.music!==false;const b=$("#soundBtn");b.setAttribute("aria-pressed",on);b.setAttribute("aria-label",on?(S.lang==="es"?"Apagar música":"Turn music off"):(S.lang==="es"?"Encender música":"Turn music on"));$("#sndOn").style.display=on?"":"none";$("#sndOff").style.display=on?"none":"";}
 function curWorldId(){ try{ if(inMagic()) return BW[bwId].song; }catch(e){} return WORLDS[viewDay??bogota().day].id; }
 $("#soundBtn").onclick=e=>{e.stopPropagation();S.music=S.music===false;save();soundUI();if(S.music) Music.play(curWorldId()); else Music.stop();};
-const firstGesture=()=>{document.removeEventListener("pointerdown",firstGesture,true);document.removeEventListener("keydown",firstGesture,true);if(S.music!==false && !Music.playing) Music.play(curWorldId());};
-document.addEventListener("pointerdown",firstGesture,true);document.addEventListener("keydown",firstGesture,true);
+const GEST=["pointerdown","pointerup","touchend","click","keydown"];
+const firstGesture=()=>{ if(S.music===false) return; if(!Music.playing) Music.play(curWorldId()); else if(Music.ctx&&Music.ctx.state!=="running") Music.ctx.resume().catch(()=>{});
+  if(Music.ctx&&Music.ctx.state==="running") GEST.forEach(ev=>document.removeEventListener(ev,firstGesture,true)); };
+GEST.forEach(ev=>document.addEventListener(ev,firstGesture,true));
+/* try to start right away (desktop browsers often allow it); otherwise it starts on the very first tap anywhere */
+setTimeout(()=>{ try{ if(S.music!==false&&!Music.playing) Music.play(curWorldId()); }catch(e){} },300);
 document.addEventListener("visibilitychange",()=>{if(!Music.ctx) return; if(document.hidden) Music.ctx.suspend(); else if(Music.playing){ Music.ctx.resume().catch(()=>{}); }});
-document.addEventListener("pointerdown",()=>{ if(Music.playing && Music.ctx && Music.ctx.state!=="running") Music.ctx.resume().catch(()=>{}); },true);
+["pointerdown","pointerup","touchend","click"].forEach(ev=>document.addEventListener(ev,()=>{ if(Music.playing && Music.ctx && Music.ctx.state!=="running" && !document.hidden) Music.ctx.resume().catch(()=>{}); },true));
 setInterval(()=>{ if(!document.hidden && $("#v-comp").classList.contains("on")) renderComp(); },60000);
 applyI18n();
 syncDay();
 renderAll();
 restoreBW();
+setTimeout(restoreAd,1200);
 setTimeout(captchaResume,600);
 loadPrices(); setInterval(loadPrices,60000);
 soundUI();
