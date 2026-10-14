@@ -3225,7 +3225,7 @@ function applyCfg(c){
 }
 async function loadCfg(){ if(!DB) return; try{ const d=await DB.doc("config/main").get(); if(d.exists) applyCfg(d.data()); }catch(e){}
   try{ const a=await DB.doc("config/ads").get(); if(a.exists) applyAdsCfg(a.data()); }catch(e){}
-  try{ const x=await DB.doc("config/xbans").get(); if(x.exists&&Array.isArray(x.data().xb)) applyAdsCfg({xb:x.data().xb,xbv:x.data().xbv||0,links:FAUCETS,banners:OWN_BANNERS}); }catch(e){} }
+  try{ const x=await DB.doc("config/xbans").get(); if(x.exists&&Array.isArray(x.data().xb)) applyAdsCfg({xb:x.data().xb,xbv:x.data().xbv||0,links:FAUCETS,banners:OWN_BANNERS}); }catch(e){} try{ loadXBans(); }catch(e){} }
 let OWN_BANNERS=[];
 /* ---------- Anti-cheat: income ledger, device id, claim rhythm, daily cap ---------- */
 const DEV=(()=>{ try{ let d=localStorage.getItem("diamantina-dev"); if(!d){ d=Math.random().toString(36).slice(2,10)+Date.now().toString(36); localStorage.setItem("diamantina-dev",d); } return d; }catch(e){ return "nodev"; } })();
@@ -3249,8 +3249,8 @@ function popState(){ const k=bogota().key; if(!S.pop||S.pop.day!==k) S.pop={day:
 const claimsToday=()=>{ const e=S.eDay; return e&&e.day===bogota().key?(e.n||0):0; };
 function popOk(){ if(!POP.on) return false; if(popTest()) return true; if(vipTier()>0) return false; const p=popState(); if(!p.n&&claimsToday()<(POP.from||1)) return false; if(VISIT_CLAIMS<(POP.visit||1)) return false; return p.n<POP.max&&Date.now()-(p.last||0)>=POP.gap*60000; }
 let popLoaded=false;
-(function(){ const o=window.open; window.open=function(){ const own=window.__ownOpen; window.__ownOpen=false;
-  if(!own&&popLoaded){ if(!popOk()) return null; popCount(); }
+(function(){ const o=window.open; window.open=function(){ let own=!!window.__ownOpen; try{ own=own||(popTapOwn&&Date.now()-popTapAt<1500); }catch(e){} window.__ownOpen=false;   /* taps on banners/links are never treated as pops */
+  if(!own&&popLoaded&&Date.now()-(window.__popAt||0)>4000){ if(popLoaded!=="pa"&&!popOk()) return null; popCount(); }   /* PopAds keeps its own 15-min delay, so it is never blocked here (blocking made it think pop-ups were disabled) */
   return o.apply(window,arguments); }; })();
 const POP_CC="<div class=\"cc-cb45d14902bcc514\"><\/div><script>!function e(n,o,t,c,r,d,s,a){(a=o.createElement(t)).async=!0,a.src=\"https://\"+r[d]+\"/js/\"+c+\".js?v=\"+s,a.onerror=function(){a.remove(),(d+=1)>=r.length||e(n,o,t,c,r,d,s)},o.head.appendChild(a)}(window,document,\"script\",\"cb45d14902bcc514\",[\"cdn.ccnsad.com\"],0,Math.floor(Date.now()/3600000));<\/script>";
 function popNext(){ const nets=[POP.pa!==false&&"pa",POP.cc!==false&&"cc"].filter(Boolean); if(!nets.length) return null; const last=popState().net; return nets.find(x=>x!==last)||nets[0]; }
@@ -3297,7 +3297,7 @@ function renderAdmAds(){
       <div class="aarow"><label class="aaon"><input type="checkbox" data-bo="${i}" ${b.on!==false?"checked":""}> ${t("aaActive")}</label><button class="mini aadel" data-bd="${i}">${t("aaDelete")}</button></div></div>`).join("")||`<div class="empty" style="padding:12px">${t("aaNoBanners")}</div>`}</div>
     ${A2.banners.length<10?`<button class="keylink" id="aaAdd">+ ${t("aaAdd")}</button>`:""}</div>
     <div class="panel"><h2>${ic("ad",28)} ${S.lang==="es"?"Banners de arriba (debajo de Telegram)":"Top banners (under Telegram)"}</h2><p class="hint" style="margin-top:0">${S.lang==="es"?"Pega el código de cada banner. Déjalo vacío para quitarlo.":"Paste each banner code. Leave empty to remove it."}</p>
-      ${[0,1,2,3,4,5].map(k=>`<div class="aab"><div class="aaprev">${codeHTML(A2.xb[k]||"")||`<span>${S.lang==="es"?"Vacío":"Empty"}</span>`}</div><label class="cfgf"><span>Banner ${k+1}</span><textarea class="field aaframe" data-xb="${k}" spellcheck="false">${escapeHtml((A2.xb[k]||"").replace(DIRECT_TAG,""))}</textarea></label><label class="aaon"><input type="checkbox" data-xdir="${k}" ${/^\s*<!--direct-->/.test(A2.xb[k]||"")?"checked":""}> ${S.lang==="es"?"Mostrar directo en la página (úsalo si sale en blanco)":"Show directly on the page (use it if it shows blank)"}</label></div>`).join("")}
+      ${[0,1,2,3,4,5].map(k=>`<div class="aab"><div class="aaprev">${codeHTML(A2.xb[k]||"")||`<span>${S.lang==="es"?"Vacío":"Empty"}</span>`}</div><label class="cfgf"><span>Banner ${k+1}</span><textarea class="field aaframe" data-xb="${k}" spellcheck="false">${escapeHtml((A2.xb[k]||"").replace(DIRECT_TAG,""))}</textarea></label><label class="aaon"><input type="checkbox" data-xdir="${k}" ${isDirect(A2.xb[k]||"")?"checked":""}> ${S.lang==="es"?"Mostrar directo en la página (úsalo si sale en blanco)":"Show directly on the page (use it if it shows blank)"}</label></div>`).join("")}
       <button class="mini" id="xbReset">${S.lang==="es"?"Volver a los banners originales":"Restore original banners"}</button></div>
     <div class="panel"><h2>${ic("ad",28)} Pop-under</h2><p class="hint" style="margin-top:0">${S.lang==="es"?"Sale solo después de reclamar, nunca a los VIP. Las redes marcadas se turnan.":"Shows only after a claim, never to VIP. Checked networks take turns."}</p>
       <label class="aaon"><input type="checkbox" id="popOn" ${A2.pop.on?"checked":""}> ${t("aaActive")}</label>
@@ -3901,11 +3901,12 @@ const isDirect=c=>/^\s*<!--direct-->/.test(c||"")||/ytrgt\(/.test(c||"");   // h
 let xbSig="";
 function runDirect(el,code){ el.innerHTML=String(code||"").replace(DIRECT_TAG,"");
   el.querySelectorAll("script").forEach(old=>{ const s=document.createElement("script"); [...old.attributes].forEach(a=>s.setAttribute(a.name,a.value)); s.text=old.textContent; old.replaceWith(s); }); }
-function renderXBans(){ const box=$("#xBans"); if(!box) return; const sig=JSON.stringify(XB); if(sig===xbSig&&box.childElementCount) return; xbSig=sig;
+function renderXBans(){ const box=$("#xBans"); if(!box||!box.dataset.on) return; const sig=JSON.stringify(XB); if(sig===xbSig&&box.childElementCount) return; xbSig=sig;
   box.innerHTML=XB.map((c,i)=>isDirect(c)?`<div class="ownframe xdirect" data-xd="${i}" style="min-height:250px;width:300px;max-width:100%;margin:0 auto"></div>`:codeHTML(c)).join("");
   box.querySelectorAll("[data-xd]").forEach(el=>{ try{ runDirect(el,XB[+el.dataset.xd]); }catch(e){} }); }
 function loadXBans(){ const box=$("#xBans"); if(!box||box.dataset.on) return; box.dataset.on="1"; renderXBans(); }
-if(document.readyState==="complete") setTimeout(loadXBans,800); else window.addEventListener("load",()=>setTimeout(loadXBans,800),{once:true});
+/* bottom banners wait for the saved ad config (so each ad script runs once), max 4 s */
+if(document.readyState==="complete") setTimeout(loadXBans,4000); else window.addEventListener("load",()=>setTimeout(loadXBans,4000),{once:true});
 
 
 /* ===== AdsLab task wall (offerwall) ===== */
