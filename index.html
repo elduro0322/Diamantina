@@ -477,6 +477,7 @@ h1,h2,h3{font-family:var(--display);font-weight:400;margin:0;letter-spacing:.3px
 .toast .ic{width:22px;height:22px}
 .card3d .back .ic{width:54px;height:54px}
 /* NFT market */
+.seg.three{grid-template-columns:repeat(3,1fr)!important}
 .seg{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;background:rgba(12,28,85,.55);padding:5px;border-radius:16px;margin-bottom:12px}
 .seg button{border:0;border-radius:12px;padding:8px 2px;font-family:var(--body);font-weight:900;font-size:11.5px;background:transparent;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0}
 .seg button span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -866,6 +867,27 @@ main{overscroll-behavior-y:contain}
 .vflplan.best{border-color:#FFC93C;background:rgba(255,201,60,.16)}
 .vflplans.hgrid{grid-template-columns:repeat(3,1fr);gap:6px}.vflhero{padding:6px 3px}.vflhero img{width:46px;height:46px;object-fit:contain;display:block;margin:0 auto 2px}.vflhero b{font-size:12px!important;line-height:1.15}.vflhero small{display:block;color:#FFC93C;font-weight:900;font-size:11px}.vflhero em{font-size:15px!important}
 .vfltab{width:100%;border-collapse:collapse;font-size:13px}.vfltab th,.vfltab td{padding:5px 4px;border-bottom:1px solid rgba(255,255,255,.1);text-align:center}.vfltab td:first-child{text-align:left}
+.rfpbox{background:radial-gradient(120% 70% at 50% 0%,#2B7BFF 0%,#1A3A9C 40%,#0B1240 100%)}
+.rfpstage{position:relative;height:150px;margin:-4px auto 4px;max-width:320px}
+.rfpq{position:absolute;left:50%;bottom:0;width:132px;height:150px;object-fit:contain;transform:translateX(-50%);filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));z-index:3;animation:rfpBob 2.4s ease-in-out infinite}
+.rfpw{position:absolute;bottom:0;width:78px;height:96px;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))}
+.rfpw.l1{left:18%;bottom:6px;z-index:2;width:86px;height:104px}.rfpw.l2{left:0;z-index:1;opacity:.92}.rfpw.r1{right:18%;bottom:6px;z-index:2;width:86px;height:104px}.rfpw.r2{right:0;z-index:1;opacity:.92}
+@keyframes rfpBob{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-6px)}}
+.rfpcoin{position:absolute;top:4px;right:30%;z-index:4;width:34px;height:34px;border-radius:50%;background:linear-gradient(#FFE15A,#F5A400);color:#7A4A00;font-weight:900;font-size:20px;line-height:34px;box-shadow:0 0 16px #FFC93C;animation:rfpBob2 1.6s ease-in-out infinite}
+@keyframes rfpBob2{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-8px) rotate(8deg)}}
+.rfptag{background:#12B76A;animation:none}
+.rfplive{display:grid;grid-template-columns:auto 1fr 1fr;align-items:center;gap:8px;margin:0 0 10px;padding:8px 10px;border-radius:14px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.18);text-align:left}
+.rfplive>b{font-size:12px;color:#FF6B8E;letter-spacing:1px;display:flex;align-items:center;gap:6px}
+.rfplive div{text-align:center}.rfplive small{display:block;font-size:11px;opacity:.8}.rfplive div b{display:block;font-size:20px;font-family:var(--display)}.rfplive em{display:block;font-style:normal;color:#7CF0C2;font-weight:900;font-size:12px}
+.rfplive.small{color:#fff;background:linear-gradient(90deg,#1A3A9C,#0B1240)}
+.rfpdot{width:10px;height:10px;border-radius:50%;background:#FF3D6E;box-shadow:0 0 0 0 rgba(255,61,110,.7);animation:rfpPulse 1.4s infinite;display:inline-block}
+@keyframes rfpPulse{0%{box-shadow:0 0 0 0 rgba(255,61,110,.7)}70%{box-shadow:0 0 0 10px rgba(255,61,110,0)}100%{box-shadow:0 0 0 0 rgba(255,61,110,0)}}
+.rfplink{margin:0 0 8px;padding:8px;border-radius:10px;background:#fff;color:#0B1240;font-weight:800;font-size:13px;word-break:break-all}
+.rfpshare{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+.rfpshare>*{padding:9px 2px;border-radius:12px;border:0;font-weight:900;font-size:12px;color:#fff;text-decoration:none;text-align:center;cursor:pointer;background:rgba(255,255,255,.18)}
+.rfpshare [data-sh=wa]{background:#25D366}.rfpshare [data-sh=tg]{background:#229ED9}.rfpshare [data-sh=fb]{background:#1877F2}
+.rfpprize{margin:0 0 10px;padding:8px 10px;border-radius:12px;background:linear-gradient(90deg,#F5A400,#FFE15A);color:#3A2400;font-weight:800;font-size:13px;cursor:pointer}
+.rfpnote{display:block;margin-top:8px;font-size:11px;opacity:.75}
 .vflplan b{display:block;font-size:17px}.vflplan s{opacity:.6;font-size:12px}.vflplan em{display:block;font-style:normal;color:#7CF0C2;font-size:18px}
 .vflgo{width:100%;padding:15px;border:0;border-radius:16px;font-size:19px;font-weight:900;color:#3A2400;background:linear-gradient(#FFE15A,#F5A400);box-shadow:0 5px 0 #A86A00;cursor:pointer}
 .firstoff.vflash{background:linear-gradient(90deg,#FF3D6E,#7B2CFF);color:#fff;animation:vflBlink 1s infinite alternate}
@@ -3062,7 +3084,11 @@ function renderSwap(){
 }
 
 /* ---------- Weekly competition: most ads + most followers ---------- */
-const PRIZES=[100000,50000,25000,10000,10000,10000,10000,10000,10000,10000]; // USDT in 0.00001 units: $1, $0.50, $0.25, then $0.10 down to 10th
+const PRIZES=[100000,50000,25000,10000,10000,10000,10000,10000,10000,10000];
+/* monthly board: most visits to the referral link — $2, $1, $0.50, then $0.10 down to 10th */
+const VIS_PRIZES=[200000,100000,50000,10000,10000,10000,10000,10000,10000,10000];
+function monthInfo(off=0){ const d=new Date(Date.now()+BOGOTA_OFFSET); const y=d.getUTCFullYear(), m=d.getUTCMonth()+off;
+  const start=Date.UTC(y,m,1), end=Date.UTC(y,m+1,1), s0=new Date(start); return {key:s0.toISOString().slice(0,7),start,end,msLeft:end-d.getTime()}; } // USDT in 0.00001 units: $1, $0.50, $0.25, then $0.10 down to 10th
 const codeOf=u=>{let x=2166136261;for(const ch of String(u)){x^=ch.charCodeAt(0);x=Math.imul(x,16777619);}return (x>>>0).toString(36).toUpperCase().padStart(6,"0").slice(-6);};
 function weekInfo(off=0){
   const d=new Date(Date.now()+BOGOTA_OFFSET), dow=(d.getUTCDay()+6)%7;
@@ -3095,7 +3121,7 @@ async function d1Push(force){   /* weekly ads + profile + "online"; at most ever
   clearTimeout(D1P.tm); D1P.tm=null;
   const prof={nick:myNick().slice(0,20),code:myCode(),hero:curHero(),vip:vipTier(),coin:S.payCoin||""}, sig=JSON.stringify(prof);
   const body={week:w.week,ads:w.ads,coin:prof.coin,vip:prof.vip}; if(sig!==D1P.sig||now-D1P.pat>3600000) Object.assign(body,prof);
-  D1P.at=now; try{ await d1Post("push",body); D1P.ads=w.ads; if(body.nick!=null){ D1P.sig=sig; D1P.pat=now; } }catch(e){}
+  D1P.at=now; try{ const pr=await d1Post("push",body); if(pr&&pr.vis>0) creditVis(pr.vis); D1P.ads=w.ads; if(body.nick!=null){ D1P.sig=sig; D1P.pat=now; } }catch(e){}
 }
 document.addEventListener("visibilitychange",()=>{ try{ if(document.hidden&&UID&&wkAds().ads!==D1P.ads) d1Push(true); }catch(e){} });
 async function pushLb(force){
@@ -3115,10 +3141,10 @@ async function loadComp(force){
   const k=weekInfo().key;
   { const c=cacheGet("comp"+k,force?60000:3*60000); if(c){ COMP={...c,loaded:true}; renderComp(); return; } }
   const F=fortInfo(), fk=String(F.key||F.start||"");
-  if(D1_OK!==false){ try{ const d=await d1Get("comp","&week="+k+"&fs="+(F.start-BOGOTA_OFFSET)+"&fe="+(F.end-BOGOTA_OFFSET));
+  if(D1_OK!==false){ try{ const d=await d1Get("comp","&week="+k+"&fs="+(F.start-BOGOTA_OFFSET)+"&fe="+(F.end-BOGOTA_OFFSET)+"&mo="+monthInfo().key);
     if(OWNER&&!d.imp) d1Import();
-    if(d.imp||d.ads.length||d.refs.length){ COMP={ads:d.ads||[],refs:d.refs||[],names:d.names||{},heroes:d.heroes||{},vips:d.vips||{},loaded:true};
-      cacheSet("comp"+k,{ads:COMP.ads,refs:COMP.refs,names:COMP.names,heroes:COMP.heroes,vips:COMP.vips});
+    if(d.imp||d.ads.length||d.refs.length){ COMP={ads:d.ads||[],refs:d.refs||[],vis:d.vis||[],names:d.names||{},heroes:d.heroes||{},vips:d.vips||{},loaded:true};
+      cacheSet("comp"+k,{ads:COMP.ads,refs:COMP.refs,vis:COMP.vis,names:COMP.names,heroes:COMP.heroes,vips:COMP.vips});
       if(S.refBy&&!S.refByName&&COMP.names[S.refBy]){ S.refByName=COMP.names[S.refBy]; save(); }
       renderComp(); return; } }catch(e){} }
   try{ const b=await withTO(DB.doc("board/comp").get()); const x=b.exists?b.data():null;
@@ -3177,20 +3203,22 @@ function renderTop3(){
 function renderComp(){
   renderTop3();
   const box=$("#compBox"); if(!box) return;
-  const w=compBoard==="refs"?fortInfo():weekInfo(), s=Math.floor(w.msLeft/1000), dd=Math.floor(s/86400), hh=String(Math.floor(s%86400/3600)).padStart(2,"0"), mm=String(Math.floor(s%3600/60)).padStart(2,"0");
-  const prizes=`<div class="prizes"><div class="pz p1">${ic("trophy",26)}<b>$1</b><small>1°</small></div><div class="pz p2"><b>$0.50</b><small>2°</small></div><div class="pz p3"><b>$0.25</b><small>3°</small></div><div class="pz"><b>$0.10</b><small>${t("places")}</small></div></div><p class="hint" style="text-align:center;margin:6px 0 0">${compBoard==="refs"?t("prizeNoteRefs"):t("prizeNote")}</p>`;
+  const vb=compBoard==="vis", PZ=vb?VIS_PRIZES:PRIZES, w=compBoard==="refs"?fortInfo():vb?monthInfo():weekInfo(), s=Math.floor(w.msLeft/1000), dd=Math.floor(s/86400), hh=String(Math.floor(s%86400/3600)).padStart(2,"0"), mm=String(Math.floor(s%3600/60)).padStart(2,"0");
+  const $p=u=>"$"+(u/1e5).toFixed(2).replace(/\.00$/,"");
+  const prizes=`<div class="prizes"><div class="pz p1">${ic("trophy",26)}<b>${$p(PZ[0])}</b><small>1°</small></div><div class="pz p2"><b>${$p(PZ[1])}</b><small>2°</small></div><div class="pz p3"><b>${$p(PZ[2])}</b><small>3°</small></div><div class="pz"><b>${$p(PZ[3])}</b><small>${t("places")}</small></div></div><p class="hint" style="text-align:center;margin:6px 0 0">${vb?(S.lang==="es"?"👀 Premio del MES para quien más visitas traiga a su link de referidos. Se acredita a tu saldo en USDT cuando termina el mes.":"👀 MONTHLY prize for the most visits to your referral link. Paid to your balance in USDT when the month ends."):compBoard==="refs"?t("prizeNoteRefs"):t("prizeNote")}</p>`;
   let html=`<div class="panel comphead"><div class="ctimer"><span>${t("endsIn")}</span><b>${dd}d ${hh}:${mm}</b></div>${prizes}</div>`;
   if(!(DB&&UID)){ box.innerHTML=html+`<div class="empty">${t("compOffline")}</div>`; return; }
   if(COMP.err||COMP.stale){ const es=S.lang==="es", mine=compBoard==="ads"?(wkAds().ads||0):(REF_COUNT||0);
     html+=`<div class="panel" style="text-align:center;border:1px solid rgba(253,224,71,.4)"><b>⏳ ${es?"El ranking se está actualizando":"The ranking is updating"}</b><p class="hint" style="margin:6px 0 0">${es?`Tranquilo: ${compBoard==="ads"?"tus anuncios":"tus referidos"} se siguen contando. Llevas <b>${mine}</b> ${compBoard==="ads"?"anuncios esta semana":"referidos"}. La tabla vuelve en unas horas.`:`Don't worry: your ${compBoard==="ads"?"ads":"referrals"} keep counting. You have <b>${mine}</b> so far. The table will be back in a few hours.`}</p></div>`; }
-  const list=compBoard==="ads"?COMP.ads:COMP.refs, unit=compBoard==="ads"?t("adsW"):t("refsW");
+  const list=compBoard==="ads"?COMP.ads:vb?(COMP.vis||[]):COMP.refs, unit=compBoard==="ads"?t("adsW"):vb?(S.lang==="es"?"visitas":"visits"):t("refsW");
   const myIdx=list.findIndex(r=>r.uid===UID);
-  html+=`<div class="seg two"><button class="${compBoard==="ads"?"on":""}" data-b="ads">${ic("ad",24)}<span>${t("boardAds")}</span></button><button class="${compBoard==="refs"?"on":""}" data-b="refs">${ic("heroes",24)}<span>${t("boardRefs")}</span></button></div>`;
+  html+=`<div class="seg three"><button class="${compBoard==="ads"?"on":""}" data-b="ads">${ic("ad",24)}<span>${t("boardAds")}</span></button><button class="${compBoard==="refs"?"on":""}" data-b="refs">${ic("heroes",24)}<span>${t("boardRefs")}</span></button><button class="${vb?"on":""}" data-b="vis"><span style="font-size:22px;line-height:28px">👀</span><span>${S.lang==="es"?"Visitas · mes":"Visits · month"}</span></button></div>`;
   html+=`<div class="panel lb">${!COMP.loaded?`<p class="hint">${t("mkLoading")}</p>`:list.length?list.slice(0,10).map((r,i)=>{const hsrc=heroImg(COMP.heroes[r.uid]||"princess");
-    return `<div class="lbrow ${r.uid===UID?"me":""}">${medal(i)}<img src="${hsrc}" alt=""><div class="grow"><span class="nmrow"><b>${escapeHtml(r.uid===UID?myNick()+" ("+t("you")+")":(COMP.names[r.uid]||"Hero"))}</b>${vipBadge(vipOf(r.uid),true)}</span><small>${r.n} ${unit}</small></div><span class="prize">$${(PRIZES[i]/1e5).toFixed(2)}</span></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("notRanked")}</p>`}
+    return `<div class="lbrow ${r.uid===UID?"me":""}">${medal(i)}<img src="${hsrc}" alt=""><div class="grow"><span class="nmrow"><b>${escapeHtml(r.uid===UID?myNick()+" ("+t("you")+")":(COMP.names[r.uid]||"Hero"))}</b>${vipBadge(vipOf(r.uid),true)}</span><small>${r.n} ${unit}</small></div><span class="prize">$${(PZ[i]/1e5).toFixed(2)}</span></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("notRanked")}</p>`}
     ${myIdx>=10?`<div class="lbrow me">${medal(myIdx)}<div class="grow"><b>${fmt(t("myPos"),{n:myIdx+1,c:list[myIdx].n+" "+unit})}</b></div></div>`:""}${myIdx<0&&compBoard==="ads"&&(wkAds().ads||0)>0?`<div class="lbrow me"><span class="medal plain">•</span><div class="grow"><b>${escapeHtml(myNick())} (${t("you")})</b><small>${wkAds().ads} ${unit} · ${S.lang==="es"?"tu puesto aparece en la próxima actualización":"your place shows on the next update"}</small></div></div>`:""}</div>`;
   html+=`<div class="panel"><h2>${t("nick")}</h2><div class="amtrow"><input class="field" id="nickIn" maxlength="20" value="${escapeHtml(myNick())}"><button class="maxbtn" id="nickSave">${t("save")}</button></div></div>`;
   html+=`<div class="panel"><h2>${ic("heroes",28)} ${t("inviteTitle")}</h2><div class="reflife">${ic("heroes",34)}<div><b>${fmt(t("refLife"),{p:refPct()})}</b><small>${fmt(t("refStats"),{n:REF_COUNT,x:usd(S.refEarned||0)})}</small></div></div>${refTiersHTML()}<p class="hint" style="margin-top:8px">${t("inviteSub")}</p>
+    ${isReg()?`<div class="rfplive small"><b><span class="rfpdot"></span>${S.lang==="es"?"EN VIVO":"LIVE"}</b><div><small>${S.lang==="es"?"Hoy":"Today"}</small><b data-vis="today">${nf(VIS.today)}</b><em data-vis="earnT">${visU(VIS.today*VIS_UNITS)}</em></div><div><small>Total</small><b data-vis="total">${nf(VIS.total)}</b><em data-vis="earnA">${visU(VIS.total*VIS_UNITS)}</em></div></div><p class="hint" style="margin:4px 0 8px;text-align:center">${S.lang==="es"?"Ganas 0.00001 USDT por cada visita a tu link":"You earn 0.00001 USDT for each visit to your link"}</p>`:""}
     <div class="codebox"><small>${t("myLink")}</small><div class="reflink" id="refLinkTxt">${escapeHtml(refLink())}</div></div>
     <div class="vipbtns" style="grid-template-columns:1fr 1fr"><button id="cpLink" class="gold">${t("copyLink")}</button><button id="shCode">${t("share")}</button></div>
     <div class="codebox small"><small>${t("myCode")}</small><b>${myCode()}</b><button class="mini gray" id="cpCode">${t("copy")}</button></div>
@@ -3223,6 +3251,54 @@ function bindRefBanners(){ const es=S.lang==="es";
 // Public address of the game. Change it when the game moves to its own domain.
 let GAME_URL="https://diamantinagame.xyz/";
 const refLink=()=>`${GAME_URL}?ref=${myCode()}`;
+/* ---- Paid visits: $0.00001 for each different person that opens your link (counted by Cloudflare) ---- */
+const VIS_UNITS=1, VIS_CAP=3000;
+const visU=u=>(u/1e5).toFixed(5)+" USDT";
+function creditVis(n){ const u=n*VIS_UNITS; S.bal=(S.bal||0)+u; incAdd(u); S.visEarned=(S.visEarned||0)+u; S.visN=(S.visN||0)+n; save(); try{ renderPay(); }catch(e){}
+  toast((S.lang==="es"?`👀 ${n} ${n===1?"persona visitó":"personas visitaron"} tu link: +`:`👀 ${n} ${n===1?"visit":"visits"} from your link: +`)+visU(u),"heroes"); }
+let VIS={today:0,total:0,at:0};
+async function visLoad(force){ if(!(UID&&isReg())) return VIS; if(!force&&Date.now()-VIS.at<15000) return VIS;
+  try{ const d=await d1Post("visstats",{}); VIS={today:d.today||0,total:d.total||0,at:Date.now()}; }catch(e){} return VIS; }
+function visPaint(){ document.querySelectorAll("[data-vis]").forEach(el=>{ const k=el.dataset.vis; el.textContent=k==="today"?nf(VIS.today):k==="total"?nf(VIS.total):k==="earnT"?visU(VIS.today*VIS_UNITS):visU(VIS.total*VIS_UNITS); }); }
+/* the visitor's side: counted after 15 s on the page (once per day per phone) */
+(function(){ const c=readRefParam(); if(!c) return; const day=new Date(Date.now()+BOGOTA_OFFSET).toISOString().slice(0,10); let ms=0;
+  try{ if(localStorage.getItem("dc-vis")===day+c) return; }catch(e){}
+  const iv=setInterval(async()=>{ if(document.hidden) return; ms+=1000; if(ms<15000||typeof UID==="undefined"||!UID) return; clearInterval(iv);
+    try{ await d1Post("visit",{code:c}); try{ localStorage.setItem("dc-vis",day+c); }catch(e){} }catch(e){} },1000); })();
+function shareTxt(){ return (S.lang==="es"?"💎 Juega Diamantina y gana cripto GRATIS viendo anuncios. Entra aquí 👉 ":S.lang==="pt"?"💎 Jogue Diamantina e ganhe cripto GRÁTIS. Entre aqui 👉 ":"💎 Play Diamantina and earn FREE crypto. Join here 👉 ")+refLink(); }
+function refPopQueue(){ const k=bogota().key; if(S.refPop===k) return;
+  const show=()=>{ if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; } if($("#vfl")||$("#rfp")){ setTimeout(show,2500); return; } refPopShow(); };
+  setTimeout(show,1300); }
+let rfpTimer=null;
+function refPopShow(){
+  S.refPop=bogota().key; save(); hideDeal();
+  const es=S.lang==="es", pt=S.lang==="pt", L=(a,b,c)=>es?a:pt?b:c, reg=isReg(), link=refLink(), enc=encodeURIComponent;
+  const war=[[A.heroes[1],"l2"],[A.heroes[3],"l1"],[premImg("pdragon"),"r1"],[A.heroes[4],"r2"]];
+  const d=document.createElement("div"); d.id="rfp"; d.className="vfl";
+  d.innerHTML=`<div class="vflbox rfpbox" role="dialog"><button class="vflx" aria-label="Cerrar">✕</button>
+    <div class="rfpstage">${war.map(([src,c])=>`<img class="rfpw ${c}" src="${src}" alt="">`).join("")}<img class="rfpq" src="${A.heroes[0]}" alt=""><span class="rfpcoin">$</span></div>
+    <span class="vfltag rfptag">👥 ${L("LINK DE REFERIDOS","LINK DE INDICAÇÃO","REFERRAL LINK")}</span>
+    <h3>${L("¡Gana 0.00001 USDT por cada visita!","Ganhe 0.00001 USDT por cada visita!","Earn 0.00001 USDT per visit!")}</h3>
+    <p>${L("Comparte tu link: cada persona que entre a Diamantina con él te paga, ¡aunque no se registre! Y si juega, ganas además el 10% de por vida.","Compartilhe seu link: cada pessoa que entrar no Diamantina com ele te paga, mesmo sem cadastro! E se jogar, você ganha +10% para sempre.","Share your link: everyone who opens Diamantina with it pays you, even without signing up! If they play, you also get 10% for life.")}</p>
+    <div class="rfpprize" data-go-vis="1">🏆 ${L("Premio del MES: <b>$2</b> al que más visitas traiga · $1 · $0.50 · $0.10","Prêmio do MÊS: <b>$2</b> para quem trouxer mais visitas","MONTHLY prize: <b>$2</b> for the most visits · $1 · $0.50 · $0.10")} ›</div>
+    ${reg?`<div class="rfplive"><b><span class="rfpdot"></span>${L("EN VIVO","AO VIVO","LIVE")}</b>
+      <div><small>${L("Visitas hoy","Visitas hoje","Visits today")}</small><b data-vis="today">${nf(VIS.today)}</b><em data-vis="earnT">${visU(VIS.today*VIS_UNITS)}</em></div>
+      <div><small>${L("Total","Total","Total")}</small><b data-vis="total">${nf(VIS.total)}</b><em data-vis="earnA">${visU(VIS.total*VIS_UNITS)}</em></div></div>
+    <div class="rfplink">${escapeHtml(link)}</div>
+    <div class="rfpshare"><button data-sh="copy">📋 ${L("Copiar","Copiar","Copy")}</button><a data-sh="wa" href="https://wa.me/?text=${enc(shareTxt())}" target="_blank" rel="noopener">WhatsApp</a><a data-sh="tg" href="https://t.me/share/url?url=${enc(link)}&text=${enc(shareTxt())}" target="_blank" rel="noopener">Telegram</a><a data-sh="fb" href="https://www.facebook.com/sharer/sharer.php?u=${enc(link)}" target="_blank" rel="noopener">Facebook</a></div>
+    <button class="vflgo" data-sh="native">🚀 ${L("¡Compartir mi link!","Compartilhar meu link!","Share my link!")}</button>
+`
+    :`<button class="vflgo" data-sh="reg">✨ ${L("Crea tu cuenta gratis y empieza a ganar","Crie sua conta grátis e comece a ganhar","Create your free account and start earning")}</button>`}</div>`;
+  document.body.appendChild(d);
+  const close=()=>{ d.remove(); clearInterval(rfpTimer); };
+  d.querySelector(".vflx").onclick=close; d.onclick=e=>{ if(e.target===d) close(); };
+  d.querySelector("[data-go-vis]").onclick=()=>{ close(); compBoard="vis"; goView("comp"); };
+  d.querySelectorAll("[data-sh]").forEach(b=>b.onclick=async e=>{ const k=b.dataset.sh;
+    if(k==="reg"){ e.preventDefault(); close(); try{ openAuth("up"); }catch(err){} return; }
+    if(k==="copy"){ e.preventDefault(); try{ await navigator.clipboard.writeText(link); toast(t("linkCopied")); }catch(err){ toast(link); } return; }
+    if(k==="native"){ e.preventDefault(); try{ if(navigator.share) await navigator.share({title:"Diamantina",text:shareTxt(),url:link}); else { await navigator.clipboard.writeText(shareTxt()); toast(t("linkCopied")); } }catch(err){} } });
+  if(reg){ const tick=async()=>{ if(!document.body.contains(d)){ clearInterval(rfpTimer); return; } await visLoad(true); visPaint(); }; tick(); clearInterval(rfpTimer); rfpTimer=setInterval(tick,15000); }
+}
 function readRefParam(){
   try{
     const src=[location.search,location.hash.replace(/^#/,"?")];
@@ -3248,17 +3324,19 @@ async function adminPrizes(list){
   const prev=weekInfo(-1).key;
   try{
     const PF=fortInfo(-1), prevF="f"+PF.key;
-    const [pz,pzf]=await Promise.all([DB.doc("prizes/"+prev).get(),DB.doc("prizes/"+prevF).get()]);
+    const PM=monthInfo(-1), prevM="m"+PM.key;
+    const [pz,pzf,pzm]=await Promise.all([DB.doc("prizes/"+prev).get(),DB.doc("prizes/"+prevF).get(),DB.doc("prizes/"+prevM).get()]);
     let names={}, boards=null;
-    try{ const d=await d1Get("comp","&week="+prev+"&fs="+(PF.start-BOGOTA_OFFSET)+"&fe="+(PF.end-BOGOTA_OFFSET)); if(d.imp){ names=d.names||{}; boards={ads:(d.ads||[]).slice(0,10),refs:(d.refs||[]).slice(0,10)}; } }catch(e){}
+    try{ const d=await d1Get("comp","&week="+prev+"&fs="+(PF.start-BOGOTA_OFFSET)+"&fe="+(PF.end-BOGOTA_OFFSET)+"&mo="+PM.key); if(d.imp){ names=d.names||{}; boards={ads:(d.ads||[]).slice(0,10),refs:(d.refs||[]).slice(0,10),vis:(d.vis||[]).slice(0,10)}; } }catch(e){}
     if(!boards){ const [all,refs]=await Promise.all([DB.collection("lbads").get(),DB.collection("refs").get()]);
       const ads=[]; all.docs.forEach(d=>{const x=d.data(); names[d.id]=x.nick||x.code; if(x.week===prev&&x.ads>0) ads.push({uid:d.id,n:x.ads});});
       const cnt={}; refs.docs.forEach(d=>{const x=d.data(); if(x.by&&inFort(x.at,PF)) cnt[x.by]=(cnt[x.by]||0)+1;});
       boards={ads:ads.sort((a,b)=>b.n-a.n).slice(0,10),refs:Object.entries(cnt).map(([uid,n])=>({uid,n})).sort((a,b)=>b.n-a.n).slice(0,10)}; }
-    const doneA=(pz.exists&&pz.data().done)||{}, doneF=(pzf.exists&&pzf.data().done)||{};
+    const doneA=(pz.exists&&pz.data().done)||{}, doneF=(pzf.exists&&pzf.data().done)||{}, doneM=(pzm.exists&&pzm.data().done)||{}; boards.vis=boards.vis||[];
     let html=`<div class="req">${ic("trophy",32)}<div class="grow"><b>${t("prevWeek")}</b><br><span style="color:var(--muted)">${t("boardAds")}: ${prev} · ${t("boardRefs")}: ${PF.key}</span></div></div>`;
-    for(const b of ["ads","refs"]) boards[b].forEach((r,i)=>{const id=`${b}_${i+1}`, pk=b==="ads"?prev:prevF, done=b==="ads"?doneA:doneF;
-      html+=`<div class="req">${medal(i)}<div class="grow">${b==="ads"?t("boardAds"):t("boardRefs")} · ${escapeHtml(names[r.uid]||r.uid)}<br><span style="color:var(--muted)">${r.n} · $${(PRIZES[i]/1e5).toFixed(2)} USDT</span></div>${done[id]?`<span class="badge paid">${t("credited")}</span>`:`<button class="mini prizeok" data-p="${id}" data-k="${pk}" data-u="${escapeHtml(r.uid)}" data-v="${PRIZES[i]}">${t("creditPrize")}</button>`}</div>`;});
+    if(boards.vis.length) html+=`<div class="req">👀<div class="grow"><b>${S.lang==="es"?"Visitas del mes pasado":"Last month's visits"}</b><br><span style="color:var(--muted)">${PM.key}</span></div></div>`;
+    for(const b of ["ads","refs","vis"]) boards[b].forEach((r,i)=>{const id=`${b}_${i+1}`, pk=b==="ads"?prev:b==="vis"?prevM:prevF, done=b==="ads"?doneA:b==="vis"?doneM:doneF, PZ=b==="vis"?VIS_PRIZES:PRIZES;
+      html+=`<div class="req">${medal(i)}<div class="grow">${b==="ads"?t("boardAds"):b==="vis"?(S.lang==="es"?"Visitas":"Visits"):t("boardRefs")} · ${escapeHtml(names[r.uid]||r.uid)}<br><span style="color:var(--muted)">${r.n} · $${(PZ[i]/1e5).toFixed(2)} USDT</span></div>${done[id]?`<span class="badge paid">${t("credited")}</span>`:`<button class="mini prizeok" data-p="${id}" data-k="${pk}" data-u="${escapeHtml(r.uid)}" data-v="${PZ[i]}">${t("creditPrize")}</button>`}</div>`;});
     list.insertAdjacentHTML("beforeend",html);
     list.querySelectorAll(".prizeok").forEach(btn=>btn.onclick=async()=>{ btn.disabled=true; const id=btn.dataset.p, u=btn.dataset.u, v=+btn.dataset.v, prev=btn.dataset.k;
       try{ await DB.doc("credits/"+u).set({updatedAt:Date.now()}); await DB.doc("credits/"+u).collection("list").doc(`prize_${prev}_${id}`).set({type:"deposit",units:v,at:Date.now(),note:"weekly prize"});
@@ -4322,7 +4400,7 @@ setInterval(()=>{ const on=["vip","gear","hero"].filter(k=>vflOn(k)).join();
   vflWas=on; },1000);
 setInterval(()=>{ document.querySelectorAll(".firstoff .dealleft").forEach(el=>{ const ms=(S.dealUntil||0)-Date.now(); if(ms<=0){ try{ renderVip(); }catch(e){} } else el.textContent=leftStr(ms); }); },1000);
 
-function complete(n){S.done=n;countAd();save();setTimeout(popArm,600);dealTick();renderMap();renderPay(); if(n===5) vflQueue("vip"); if(n===12) vflQueue("gear"); if(n===18) vflQueue("hero"); if(n===20) queueMagicOpen();}
+function complete(n){S.done=n;countAd();save();setTimeout(popArm,600);dealTick();renderMap();renderPay(); if(n===2) refPopQueue(); if(n===5) vflQueue("vip"); if(n===12) vflQueue("gear"); if(n===18) vflQueue("hero"); if(n===20) queueMagicOpen();}
 const leftStr=ms=>{const s=Math.max(0,Math.floor(ms/1000));return `${String(Math.floor(s/3600)).padStart(2,"0")}:${String(Math.floor(s%3600/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;};
 function flashBanner(){
   const f=ensureFlash(); if(!f) return "";
@@ -4819,7 +4897,7 @@ function goView(v){
   document.querySelectorAll(".view").forEach(el=>el.classList.toggle("on",el.id==="v-"+v));
   window.scrollTo({top:0});
   if(v==="pay"){ refreshPayouts(); renderDeposit(); collectCredits(true); }
-  if(v==="comp"){ renderComp(); loadComp(true); collectRef(true).then(renderComp); }
+  if(v==="comp"){ renderComp(); loadComp(true); visLoad(true).then(visPaint); collectRef(true).then(renderComp); }
   if(v==="admin"){ renderAdmin(); setTimeout(liveCount,300); }
   if(v==="bag"||(v==="shop"&&shopMode==="market")){ loadMarket(); collectSales(true); }
   if(v==="shop") renderShop();

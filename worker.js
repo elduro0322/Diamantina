@@ -103,7 +103,11 @@ async function d1Init(db) {
     "CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, nft INTEGER, seller TEXT, buyer TEXT, units INTEGER, fee INTEGER, gets INTEGER, at INTEGER, claimed INTEGER DEFAULT 0, cat INTEGER)",
     "CREATE INDEX IF NOT EXISTS sales_seller ON sales (seller, claimed)",
     "CREATE TABLE IF NOT EXISTS wnft (id INTEGER PRIMARY KEY, owner TEXT, at INTEGER)",
-    "CREATE TABLE IF NOT EXISTS offstat (day TEXT, k TEXT, e TEXT, n INTEGER, PRIMARY KEY (day, k, e))"
+    "CREATE TABLE IF NOT EXISTS offstat (day TEXT, k TEXT, e TEXT, n INTEGER, PRIMARY KEY (day, k, e))",
+    "CREATE INDEX IF NOT EXISTS lb_code ON lb (code)",
+    "CREATE TABLE IF NOT EXISTS refvis (day TEXT, iph TEXT, PRIMARY KEY (day, iph))",
+    "CREATE TABLE IF NOT EXISTS visits (uid TEXT, day TEXT, n INTEGER DEFAULT 0, paid INTEGER DEFAULT 0, PRIMARY KEY (uid, day))",
+    "CREATE INDEX IF NOT EXISTS visits_day ON visits (day)"
   ].map(q => db.prepare(q)));
   D1_READY = true;
 }
@@ -119,13 +123,24 @@ async function namesFor(db, uids, snap) {
     for (const x of r.results || []) { snap.names[x.uid] = x.nick || ("Hero-" + (x.code || "")); if (x.hero) snap.heroes[x.uid] = x.hero; if (x.vip) snap.vips[x.uid] = x.vip; }
   }
 }
-async function buildComp(db, week, fs, fe) {
-  const snap = { ads: [], refs: [], names: {}, heroes: {}, vips: {} };
+/* monthly board (most visits): added up at most every 15 min, so it stays cheap even with thousands of visits */
+async function visBoard(db, mo) {
+  const key = "vis:" + mo, old = await metaGet(db, key), cur = mo === today(Date.now()).slice(0, 7);
+  if (old && (Date.now() - old.at < 15 * 60000 || (!cur && old.v.final))) return old.v.list;
+  const [y, m] = mo.split("-").map(Number), next = m === 12 ? (y + 1) + "-01" : y + "-" + String(m + 1).padStart(2, "0");
+  const v = await db.prepare("SELECT uid, SUM(n) AS n FROM visits WHERE day >= ? AND day < ? GROUP BY uid ORDER BY n DESC LIMIT 150").bind(mo + "-01", next + "-01").all();
+  const list = (v.results || []).filter(x => x.n > 0).map(x => ({ uid: x.uid, n: x.n }));
+  await metaSet(db, key, { list, final: !cur && Date.now() > Date.parse(next + "-01") + BOG + 3600000 }).run();
+  return list;
+}
+async function buildComp(db, week, fs, fe, mo) {
+  const snap = { ads: [], refs: [], vis: [], names: {}, heroes: {}, vips: {} };
+  if (mo) snap.vis = await visBoard(db, mo);
   const a = await db.prepare("SELECT w.uid, w.ads, l.nick, l.code, l.hero, l.vip FROM lbw w LEFT JOIN lb l ON l.uid = w.uid WHERE w.week = ? AND w.ads > 0 ORDER BY w.ads DESC LIMIT 150").bind(week).all();
   for (const x of a.results || []) { snap.ads.push({ uid: x.uid, n: x.ads }); snap.names[x.uid] = x.nick || ("Hero-" + (x.code || "")); if (x.hero) snap.heroes[x.uid] = x.hero; if (x.vip) snap.vips[x.uid] = x.vip; }
   const r = await db.prepare("SELECT by AS uid, COUNT(*) AS n FROM refs WHERE at >= ? AND at < ? AND via != 'bought' AND by != '' GROUP BY by ORDER BY n DESC LIMIT 150").bind(fs, fe).all();
   snap.refs = (r.results || []).map(x => ({ uid: x.uid, n: x.n }));
-  await namesFor(db, snap.refs.map(x => x.uid), snap);
+  await namesFor(db, [...snap.refs, ...snap.vis].map(x => x.uid), snap);
   return snap;
 }
 
@@ -226,6 +241,30 @@ async function nftPost(a, db, me, body, now) {
   return null;
 }
 
+/* ===== Paid visits: a referrer earns 1 unit ($0.00001) for each different visitor (1 per internet connection per day, max VIS_CAP a day) ===== */
+const VIS_CAP = 3000;
+const today = now => new Date(now - BOG).toISOString().slice(0, 10);
+async function sha(x) { const h = await crypto.subtle.digest("SHA-256", enc.encode(x)); return [...new Uint8Array(h)].slice(0, 10).map(b => b.toString(16).padStart(2, "0")).join(""); }
+async function visit(db, me, body, request, env, now) {
+  const code = str(body.code, 8).toUpperCase().replace(/[^A-Z0-9]/g, ""); if (code.length < 4) return { counted: false };
+  const ua = request.headers.get("user-agent") || ""; if (!ua || /bot|crawl|spider|headless|curl|wget|python|preview/i.test(ua)) return { counted: false };
+  const ref = await db.prepare("SELECT uid FROM lb WHERE code = ? LIMIT 1").bind(code).first();
+  if (!ref || ref.uid === me.uid) return { counted: false };
+  const day = today(now), ip = request.headers.get("cf-connecting-ip") || "";
+  if (!ip) return { counted: false };
+  const iph = await sha(ip + "|" + day + "|" + (env.ADSLAB_SECRET || "dia"));
+  const ins = await db.prepare("INSERT OR IGNORE INTO refvis (day, iph) VALUES (?, ?)").bind(day, iph).run();
+  if (!(ins.meta && ins.meta.changes)) return { counted: false };            // this connection already counted today
+  const r = await db.prepare("INSERT INTO visits (uid, day, n, paid) VALUES (?, ?, 1, 0) ON CONFLICT(uid, day) DO UPDATE SET n = n + 1 WHERE visits.n < ?").bind(ref.uid, day, VIS_CAP).run();
+  if (Math.random() < 0.01) await db.prepare("DELETE FROM refvis WHERE day < ?").bind(today(now - 2 * 86400000)).run();
+  return { counted: !!(r.meta && r.meta.changes) };
+}
+async function visStats(db, uid, now) {
+  const r = await db.prepare("SELECT day, n, paid FROM visits WHERE uid = ?").bind(uid).all(), d = today(now);
+  let total = 0, td = 0; for (const x of r.results || []) { total += x.n; if (x.day === d) td = x.n; }
+  return { today: td, total, cap: VIS_CAP };
+}
+
 async function d1(request, env) {
   const db = env.DB; if (!db) return json({ ok: false, error: "no_db" }, 503);
   await d1Init(db);
@@ -233,11 +272,13 @@ async function d1(request, env) {
   let body = {}; if (request.method === "POST") { try { body = JSON.parse(await request.text()); } catch (e) {} }
   if (a === "comp") {
     const week = url.searchParams.get("week") || weekKey(), fs = +url.searchParams.get("fs") || 0, fe = +url.searchParams.get("fe") || 0;
+    const mo = /^\d{4}-\d{2}$/.test(url.searchParams.get("mo") || "") ? url.searchParams.get("mo") : "";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(week) || Math.abs(Date.parse(week) - Date.now()) > 40 * 86400000 || Math.abs(fs - Date.now()) > 40 * 86400000 || fe <= fs || fe - fs > 17 * 86400000) return json({ ok: false, error: "bad" }, 400);
-    const key = "comp:" + week + ":" + fs, old = await metaGet(db, key), cur = week === weekKey();
-    const fin = Math.max(Date.parse(week) + 7 * 86400000 + BOG, fe) + 600000;   // a past week is final 10 min after it ends
+    const key = "comp:" + week + ":" + fs + ":" + mo, old = await metaGet(db, key), cur = week === weekKey() && (!mo || mo === today(Date.now()).slice(0, 7));
+    const moEnd = mo ? Date.parse((mo.slice(5) === "12" ? (+mo.slice(0, 4) + 1) + "-01" : mo.slice(0, 5) + String(+mo.slice(5) + 1).padStart(2, "0")) + "-01") + BOG : 0;
+    const fin = Math.max(Date.parse(week) + 7 * 86400000 + BOG, fe, moEnd) + 600000;   // a past week/month is final 10 min after it ends
     if (old && (cur ? Date.now() - old.at < 120000 : old.at > fin)) return json({ ok: true, ...old.v, at: old.at, imp: !!(await metaGet(db, "imported")) });
-    const snap = await buildComp(db, week, fs, fe);
+    const snap = await buildComp(db, week, fs, fe, mo);
     await metaSet(db, key, snap).run();
     return json({ ok: true, ...snap, at: Date.now(), imp: !!(await metaGet(db, "imported")) });
   }
@@ -266,8 +307,10 @@ async function d1(request, env) {
       q.push(db.prepare("INSERT INTO lb (uid, nick, code, hero, vip, coin, seen, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET nick = excluded.nick, code = excluded.code, hero = excluded.hero, vip = excluded.vip, coin = excluded.coin, seen = excluded.seen, at = excluded.at")
         .bind(me.uid, str(body.nick, 20), str(body.code, 8), str(body.hero, 20), int(body.vip, 4), str(body.coin, 10), now, now));
     else q.push(db.prepare("UPDATE lb SET seen = ?, coin = ?, vip = ? WHERE uid = ?").bind(now, str(body.coin, 10), int(body.vip, 4), me.uid));
-    await db.batch(q);
-    return json({ ok: true });
+    q.push(db.prepare("SELECT COALESCE(SUM(n - paid), 0) AS v FROM visits WHERE uid = ? AND n > paid").bind(me.uid));
+    q.push(db.prepare("UPDATE visits SET paid = n WHERE uid = ? AND n > paid").bind(me.uid));
+    const res = await db.batch(q), vr = res[res.length - 2];
+    return json({ ok: true, vis: ((vr.results || [])[0] || {}).v || 0 });
   }
   if (a === "ref") {                                       // "player X was invited by Y"
     const by = str(body.by, 64).replace(/[^A-Za-z0-9]/g, "");
@@ -275,6 +318,8 @@ async function d1(request, env) {
     await db.prepare("INSERT OR IGNORE INTO refs (uid, by, at, via) VALUES (?, ?, ?, ?)").bind(me.uid, by, now, str(body.via, 10) || "code").run();
     return json({ ok: true });
   }
+  if (a === "visit") return json({ ok: true, ...(await visit(db, me, body, request, env, now)) });
+  if (a === "visstats") return json({ ok: true, ...(await visStats(db, me.uid, now)) });
   if (a === "ev") {                                        // flash-sale counters: seen / tapped / bought
     const k = str(body.k, 8), e = str(body.e, 8);
     if (!["vip", "gear", "hero"].includes(k) || !["view", "click", "buy"].includes(e)) return json({ ok: false, error: "bad" }, 400);
