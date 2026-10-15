@@ -3255,13 +3255,13 @@ async function loadStats(){
   const box=$("#adminStats"); if(!box||!(DB&&UID)) return; box.innerHTML=`<div class="panel"><p class="hint">${t("mkLoading")}</p></div>`;
   const STK=[]; const k=bogota().key, wk=weekInfo().key, S0={players:0,today:0,fToday:0,fWeek:0,refs:0,nfts:0,sales:0,proofs:0,paid:0,vip:0,pendPay:0,pendOrd:0,dmt:0};
   try{
-    const [lb,refs,nfts,sales,proofs,vip,pay,ord,wl]=await Promise.all(["lbads","refs",NFT_COL,"sales","proofs","vip","payouts","orders","waitlist"].map(c=>DB.collection(c).get()));
+    const [lb,refs,nfts,sales,proofs,vip,pay,ord,wl]=await Promise.all(["lbads","refs",NFT_COL,"sales","proofs","vip","payouts","orders","waitlist"].map(c=>aCol(c)));
     lb.docs.forEach(d=>{const x=d.data(); if(Array.isArray(x.stk)&&x.stk.length) STK.push({uid:d.id,nick:x.nick||"",code:x.code||"",stk:x.stk}); S0.players++; if(x.day===k){S0.today++; S0.fToday+=x.td||0;} if(x.week===wk) S0.fWeek+=x.ads||0; S0.dmt+=x.dmt||0;});
     S0.refs=refs.size; S0.wait=wl.size; nfts.docs.forEach(d=>{ if(d.data().owner) S0.nfts++; }); S0.sales=sales.size;
     proofs.docs.forEach(d=>{S0.proofs++; S0.paid+=parseFloat(d.data().amountUsd||0);});
     vip.docs.forEach(d=>{ if((d.data().until||0)>Date.now()) S0.vip++; });
-    for(const u of pay.docs){ const r=await DB.doc("payouts/"+u.id).collection("requests").where("status","==","pending").get(); S0.pendPay+=r.size; }
-    for(const u of ord.docs){ const r=await DB.doc("orders/"+u.id).collection("list").where("status","==","pending").get(); S0.pendOrd+=r.size; }
+    for(const u of pay.docs){ const r=await aSub("payouts",u,"requests"); S0.pendPay+=r.docs.filter(d=>d.data().status==="pending").length; }
+    for(const u of ord.docs){ const r=await aSub("orders",u,"list"); S0.pendOrd+=r.docs.filter(d=>d.data().status==="pending").length; }
   }catch(e){}
   const card=(i,l,v,c="")=>`<div class="stcard ${c}">${ic(i,26)}<small>${t(l)}</small><b>${v}</b></div>`;
   box.innerHTML=`<div class="panel"><h2>${ic("trophy",28)} ${t("admStats")}</h2><div class="stgrid">
@@ -3583,14 +3583,14 @@ async function loadAccounting(){
   const A0={dep:0,gear:0,vip:0,tok:0,tokN:0,spent:0,paid:0,paidN:0,pend:0,pendN:0,owed:0,staked:0,dmtOwed:0,fees:0,exf:0,prizes:0,players:0};
   try{
     const users=new Set();
-    const E0={docs:[]}, g=c=>DB.collection(c).get().catch(()=>E0); const [ord,pay,cred,lb,sales,ex]=await Promise.all([g("orders"),g("payouts"),g("credits"),g("lbads"),g("sales"),g("exfees")]);
-    for(const u of ord.docs){ const ls=await DB.doc("orders/"+u.id).collection("list").get();
+    const E0={docs:[]}, g=c=>aCol(c).catch(()=>E0); const [ord,pay,cred,lb,sales,ex]=await Promise.all([g("orders"),g("payouts"),g("credits"),g("lbads"),g("sales"),g("exfees")]);
+    for(const u of ord.docs){ const ls=await aSub("orders",u,"list");
       ls.docs.forEach(d=>{ const o=d.data(), v=parseFloat(o.usd||0); if(o.status!=="approved") return;
         if(o.method==="balance"){ A0.spent+=v; if(o.type==="token"){A0.tok+=0; A0.tokN+=o.tokens||0;} return; }
         if(o.type==="deposit") A0.dep+=v; else if(o.type==="gear") A0.gear+=v; else if(o.type==="vip") A0.vip+=v; else if(o.type==="token"){ A0.tok+=v; A0.tokN+=o.tokens||0; } }); }
-    for(const u of pay.docs){ const rs=await DB.doc("payouts/"+u.id).collection("requests").get();
+    for(const u of pay.docs){ const rs=await aSub("payouts",u,"requests");
       rs.docs.forEach(d=>{ const r=d.data(), v=parseFloat(r.amountUsd||0); if(r.status==="paid"){A0.paid+=v;A0.paidN++;} else {A0.pend+=v;A0.pendN++;} }); }
-    for(const u of cred.docs){ const cs=await DB.doc("credits/"+u.id).collection("list").get(); cs.docs.forEach(d=>{ const x=d.data(); if(x.note==="weekly prize") A0.prizes+=(x.units||0)/1e5; }); }
+    for(const u of cred.docs){ const cs=await aSub("credits",u,"list"); cs.docs.forEach(d=>{ const x=d.data(); if(x.note==="weekly prize") A0.prizes+=(x.units||0)/1e5; }); }
     lb.docs.forEach(d=>{ const x=d.data(); A0.players++; A0.owed+=(x.bal||0)/1e5; A0.staked+=(x.staked||0)/1e5; A0.dmtOwed+=(x.dmt||0); });
     sales.docs.forEach(d=>A0.fees+=(d.data().fee||0)/1e5); ex.docs.forEach(d=>A0.exf+=d.data().feeUsd||0);
     { let fx=0, fm=0; lb.docs.forEach(d=>{ const x=d.data(); fx+=x.fx||0; fm+=(x.fm||0)/1e5; }); A0.exf=Math.max(A0.exf,fx); A0.fees=Math.max(A0.fees,fm); }
@@ -3797,24 +3797,34 @@ function riskHTML(r,R){ const F=riskFlags(r,R), es=S.lang==="es";
   if(F===null) return `<div class="risk none">⚪ ${es?"Sin datos (pedido de una versión vieja): revísalo a mano":"No data (older version request): check manually"}</div>`;
   if(!F.length) return `<div class="risk ok">✅ ${es?"Sin alertas":"No alerts"}</div>`;
   return `<div class="risk bad">${F.map(x=>"🚩 "+x).join("<br>")}</div>`; }
+/* ---- Owner panel cache: the panel used to re-read EVERY collection (thousands of reads) after each "paid" tap ---- */
+let AC={}; try{ AC=JSON.parse(localStorage.getItem("dc-admc")||"{}")||{}; }catch(e){ AC={}; }
+let acT=null; const acSave=()=>{ clearTimeout(acT); acT=setTimeout(()=>{ try{ const now=Date.now(); for(const k in AC) if(now-AC[k].at>2*86400000) delete AC[k]; localStorage.setItem("dc-admc",JSON.stringify(AC)); }catch(e){ try{ localStorage.removeItem("dc-admc"); }catch(_){} } },500); };
+const aSnap=docs=>({docs:docs.map(d=>({id:d.id,exists:true,data:()=>d.v})),size:docs.length,empty:!docs.length});
+async function aGet(key,q,ttl){ const c=AC[key]; if(c&&Date.now()-c.at<(ttl||15*60000)) return aSnap(c.docs);
+  const r=await q.get(); const docs=r.docs.map(d=>({id:d.id,v:d.data()})); AC[key]={at:Date.now(),docs}; acSave(); return aSnap(docs); }
+const aCol=(c,ttl)=>aGet(c,DB.collection(c),ttl);
+/* a player's sub-list is read again only when its parent doc changed (updatedAt) */
+const aSub=(p,u,sub)=>aGet(p+"/"+u.id+"/"+sub+"@"+((u.data()||{}).updatedAt||""),DB.doc(p+"/"+u.id).collection(sub),3*86400000);
+const aDrop=pre=>{ for(const k in AC) if(k.startsWith(pre)) delete AC[k]; acSave(); };
 async function loadAdmin(){
   const list=$("#adminList"); const rows=[]; let feeSum=0, feeN=0;
-  try{ const ss=await DB.collection("sales").get(); ss.docs.forEach(d=>{const x=d.data(); feeSum+=x.fee||0; feeN++;}); }catch(e){}
-  let exSum=0, exN=0; try{ const ex=await DB.collection("exfees").get(); ex.docs.forEach(d=>{exSum+=d.data().feeUsd||0; exN++;}); }catch(e){}
-  try{ const lb=await DB.collection("lbads").get(); let fx=0,fxn=0,fm=0,fmn=0; lb.docs.forEach(d=>{const x=d.data(); fx+=x.fx||0; fxn+=x.fxn||0; fm+=x.fm||0; fmn+=x.fmn||0;});
+  try{ const ss=await aCol("sales"); ss.docs.forEach(d=>{const x=d.data(); feeSum+=x.fee||0; feeN++;}); }catch(e){}
+  let exSum=0, exN=0; try{ const ex=await aCol("exfees"); ex.docs.forEach(d=>{exSum+=d.data().feeUsd||0; exN++;}); }catch(e){}
+  try{ const lb=await aCol("lbads"); let fx=0,fxn=0,fm=0,fmn=0; lb.docs.forEach(d=>{const x=d.data(); fx+=x.fx||0; fxn+=x.fxn||0; fm+=x.fm||0; fmn+=x.fmn||0;});
     if(fx>exSum){ exSum=fx; exN=Math.max(exN,fxn); } if(fm>feeSum){ feeSum=fm; feeN=Math.max(feeN,fmn); } }catch(e){}
   try{
-    const users=await DB.collection("payouts").get();
+    const users=await aCol("payouts",2*60000);
     for(const u of users.docs){
-      const rs=await DB.doc(`payouts/${u.id}`).collection("requests").get();
+      const rs=await aSub("payouts",u,"requests");
       rs.docs.forEach(r=>{const d=r.data(); if(d.status!=="paid"&&d.status!=="refunded") rows.push({uid:u.id,id:r.id,...d});});
     }
   }catch(e){}
-  let RISK=null; if(rows.length){ try{ const [lb,rf]=await Promise.all([DB.collection("lbads").get(),DB.collection("refs").get()]); RISK={lb:{},rf:rf.docs.map(d=>({id:d.id,...d.data()}))}; lb.docs.forEach(d=>RISK.lb[d.id]=d.data()); }catch(e){ RISK=null; } }
+  let RISK=null; if(rows.length){ try{ const [lb,rf]=await Promise.all([aCol("lbads"),aCol("refs")]); RISK={lb:{},rf:rf.docs.map(d=>({id:d.id,...d.data()}))}; lb.docs.forEach(d=>RISK.lb[d.id]=d.data()); }catch(e){ RISK=null; } }
   list.innerHTML=rows.length?rows.map((r,i)=>{const pc=coinBy(r.coin);
     return `<div class="req"><img src="${pc.img}" alt=""><div class="grow">${escapeHtml(r.date)} · ${pc.t} · ${METHODS[r.method]?.name||""} · $${escapeHtml(r.amountUsd)}${r.amountCoin?` ≈ ${nf(r.amountCoin,8)} ${pc.t}`:""}<br><span style="color:var(--muted)">${escapeHtml(r.account)}</span>${riskHTML(r,RISK)}</div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini" data-i="${i}">${t("markPaid")}</button><button class="mini wdref" data-r="${i}" style="background:#5a2a3a">${S.lang==="es"?"Devolver saldo":"Refund"}</button></div></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("noPending")}</p>`;
-  try{ const cr=await DB.collection("credits").get(); let tn=0, tu=0, tr=0, last=[];
-    for(const u of cr.docs){ const ls=await DB.doc("credits/"+u.id).collection("list").get(); ls.docs.forEach(d=>{ const x=d.data(); if(x.type==="task"){ tn++; tu+=x.units||0; tr+=x.reward||0; last.push({...x,uid:u.id}); } }); }
+  try{ const cr=await aCol("credits",30*60000); let tn=0, tu=0, tr=0, last=[];
+    for(const u of cr.docs){ const ls=await aSub("credits",u,"list"); ls.docs.forEach(d=>{ const x=d.data(); if(x.type==="task"){ tn++; tu+=x.units||0; tr+=x.reward||0; last.push({...x,uid:u.id}); } }); }
     if(tn){ last.sort((a,b)=>(b.at||0)-(a.at||0)); const es=S.lang==="es";
       list.insertAdjacentHTML("afterbegin",`<div class="req">📋<div class="grow">${es?"Tareas AdsLab":"AdsLab tasks"} · ${tn}<br><span style="color:var(--muted)">${es?"Pagado a jugadores":"Paid to players"}: ${usd(tu)} · reward: ${nf(tr,6)}<br>${last.slice(0,5).map(x=>`ID ${codeOf(x.uid)} · ${escapeHtml(x.ttype||"")} · reward ${x.reward} · vCur ${x.vCurrency} → ${usd(x.units||0)}`).join("<br>")}</span></div></div>`); } }catch(e){}
   { const es=S.lang==="es"; list.insertAdjacentHTML("afterbegin",`<div class="req">🪙<div class="grow"><b>${es?"Monedas para cobrar":"Payout coins"}</b><br><span style="color:var(--muted)">${COIN_OFF.size?(es?"No disponibles ahora:":"Not available now:"):(es?"Todas disponibles ✓":"All available ✓")}</span><div class="coinoffs">${[...COIN_OFF].map(c=>`<button class="mini coinon" data-c="${c}">✅ ${es?"Activar":"Enable"} ${c}</button>`).join("")}<select class="field" id="coinOffSel" style="padding:6px;max-width:120px"><option value="">${es?"Desactivar…":"Disable…"}</option>${PAY.coins.filter(c=>coinOn(c.t)).map(c=>`<option>${c.t}</option>`).join("")}</select></div></div></div>`);
@@ -3823,26 +3833,26 @@ async function loadAdmin(){
   list.insertAdjacentHTML("afterbegin",`<div class="req">${ic("swap",32)}<div class="grow">${fmt(t("exFees"),{p:SWAP_FEE})}<br><span style="color:var(--muted)">${fmt(t("exCount"),{n:exN})}</span></div><b>$${nf(exSum,4)}</b></div>`);
   list.insertAdjacentHTML("afterbegin",`<div class="req">${ic("gem",32)}<div class="grow">${fmt(t("feesTotal"),{p:FEE_PCT})}<br><span style="color:var(--muted)">${fmt(t("feesCount"),{n:feeN})}</span></div><b>${usd(feeSum)}</b></div>`);
   try{
-    const ups=await DB.collection("upgrades").get(); const pend=ups.docs.filter(d=>d.data().status==="pending");
+    const ups=await aCol("upgrades",2*60000); const pend=ups.docs.filter(d=>d.data().status==="pending");
     if(pend.length) list.insertAdjacentHTML("beforeend",pend.map(d=>{const x=d.data();return `<div class="req">${ic("gem",32)}<div class="grow">VIP ${x.tier||1} · ${METHODS[x.method]?.name||x.method} · $${escapeHtml(x.amountUsd||"2")}<br><span style="color:var(--muted)">TX: ${escapeHtml(x.tx)}</span></div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini vipok" data-u="${escapeHtml(d.id)}">${t("vipApprove")}</button><button class="mini vipno" data-u="${escapeHtml(d.id)}" style="background:#5a2a3a">${S.lang==="es"?"Rechazar":"Reject"}</button></div></div>`;}).join(""));
     list.querySelectorAll(".vipno").forEach(b=>b.onclick=async()=>{ if(!confirm(S.lang==="es"?"¿Rechazar este pago de VIP?":"Reject this VIP payment?")) return; b.disabled=true;
-      try{ await DB.doc("upgrades/"+b.dataset.u).update({status:"rejected",rejectedAt:Date.now()}); toast(S.lang==="es"?"VIP rechazado":"VIP rejected","pay"); loadAdmin(); }catch(e){ b.disabled=false; } });
+      try{ await DB.doc("upgrades/"+b.dataset.u).update({status:"rejected",rejectedAt:Date.now()}); toast(S.lang==="es"?"VIP rechazado":"VIP rejected","pay"); aDrop("upgrades"); loadAdmin(); }catch(e){ b.disabled=false; } });
     list.querySelectorAll(".vipok").forEach(b=>b.onclick=async()=>{ b.disabled=true; const u=b.dataset.u;
-      try{ const up=await DB.doc("upgrades/"+u).get(); const tr=(up.exists&&up.data().tier)||1; await DB.doc("vip/"+u).set({until:Date.now()+VIP_DAYS*86400000,at:Date.now(),tier:tr}); await DB.doc("upgrades/"+u).update({status:"active"}); loadAdmin(); }catch(e){ b.disabled=false; } });
+      try{ const up=await DB.doc("upgrades/"+u).get(); const tr=(up.exists&&up.data().tier)||1; await DB.doc("vip/"+u).set({until:Date.now()+VIP_DAYS*86400000,at:Date.now(),tier:tr}); await DB.doc("upgrades/"+u).update({status:"active"}); aDrop("upgrades"); loadAdmin(); }catch(e){ b.disabled=false; } });
   }catch(e){}
   try{
-    const us=await DB.collection("orders").get(); const ords=[];
-    for(const u of us.docs){ const ls=await DB.doc("orders/"+u.id).collection("list").where("status","==","pending").get(); ls.docs.forEach(d=>ords.push({uid:u.id,...d.data(),id:d.id})); }
+    const us=await aCol("orders",2*60000); const ords=[];
+    for(const u of us.docs){ const ls=await aSub("orders",u,"list"); ls.docs.filter(d=>d.data().status==="pending").forEach(d=>ords.push({uid:u.id,...d.data(),id:d.id})); }
     if(ords.length) list.insertAdjacentHTML("beforeend",ords.map((o,i)=>`<div class="req">${o.type==="gear"?ic("shop",32):ic("pay",32)}<div class="grow">${o.type==="gear"?escapeHtml(itemName(o.item)):o.type==="vip"?"VIP "+String(o.item||"vip1").slice(3):o.type==="key"?fmt(t("keyOf"),{w:t((BW[o.item]||BW.cars).name)}):o.type==="hero"?"👑 "+escapeHtml(premName(o.item)):o.type==="refs"?"👥 "+(o.item||0)+(S.lang==="es"?" referidos":" referrals"):o.type==="xp"?"⭐ "+xpName(o.item):o.type==="wnft"?"NFT "+wCode(o.item)+" · "+escapeHtml(premName((wnftBy(o.item)||{}).hero||"")):o.type==="token"?"DMT · "+nf(o.tokens||0)+" tokens":t("depTitle")} · $${escapeHtml(o.usd)}${o.ticket?" 🎟️-"+o.ticket+"%":""} · ${methodName(o.method)}${o.network?" ("+escapeHtml(o.network)+")":""}${o.coinAmt?` · ${nf(o.coinAmt,8)} ${escapeHtml(o.coin)}`:""}<br><span style="color:var(--muted)">TX: ${escapeHtml(o.tx)}</span></div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini ordok" data-o="${i}">${t("approve")}</button><button class="mini ordno" data-o="${i}" style="background:#5a2a3a">${S.lang==="es"?"Rechazar":"Reject"}</button></div></div>`).join(""));
     list.querySelectorAll(".ordno").forEach(b=>b.onclick=async()=>{ const o=ords[+b.dataset.o]; if(!confirm(S.lang==="es"?"¿Rechazar esta compra? (no se entrega nada)":"Reject this purchase? (nothing is delivered)")) return; b.disabled=true;
       try{ await DB.doc("orders/"+o.uid).collection("list").doc(o.id).update({status:"rejected",rejectedAt:Date.now()});
            await DB.doc("credits/"+o.uid).set({updatedAt:Date.now()}); await DB.doc("credits/"+o.uid).collection("list").doc("rej-"+o.id).set({type:"reject",item:o.id,at:Date.now()});
-           toast(S.lang==="es"?"Compra rechazada":"Purchase rejected","pay"); loadAdmin(); }catch(e){ b.disabled=false; toast(t("mkErr")); } });
+           toast(S.lang==="es"?"Compra rechazada":"Purchase rejected","pay"); aDrop("orders/"+o.uid+"/"); loadAdmin(); }catch(e){ b.disabled=false; toast(t("mkErr")); } });
     list.querySelectorAll(".ordok").forEach(b=>b.onclick=async()=>{ b.disabled=true; const o=ords[+b.dataset.o];
-      try{ if(o.type==="vip"){ await DB.doc("vip/"+o.uid).set({until:Date.now()+VIP_DAYS*86400000,at:Date.now(),tier:parseInt(String(o.item||"vip1").slice(3))||1}); await DB.doc("orders/"+o.uid).collection("list").doc(o.id).update({status:"approved"}); loadAdmin(); return; }
+      try{ if(o.type==="vip"){ await DB.doc("vip/"+o.uid).set({until:Date.now()+VIP_DAYS*86400000,at:Date.now(),tier:parseInt(String(o.item||"vip1").slice(3))||1}); await DB.doc("orders/"+o.uid).collection("list").doc(o.id).update({status:"approved"}); aDrop("orders/"+o.uid+"/"); loadAdmin(); return; }
            let got=null; if(o.type==="refs"){ got=await assignRefs(o.uid,+o.item||0); if(got<(+o.item||0)) alert((S.lang==="es"?"Solo había ":"Only ")+got+(S.lang==="es"?" jugadores sin referente disponibles.":" unreferred players available.")); }
            await DB.doc("credits/"+o.uid).set({updatedAt:Date.now()}); await DB.doc("credits/"+o.uid).collection("list").doc(o.id).set({type:o.type,item:o.item||null,tokens:o.tokens||null,units:o.units||0,got,at:Date.now()});
-           await DB.doc("orders/"+o.uid).collection("list").doc(o.id).update({status:"approved"}); loadAdmin(); }catch(e){ b.disabled=false; } });
+           await DB.doc("orders/"+o.uid).collection("list").doc(o.id).update({status:"approved"}); aDrop("orders/"+o.uid+"/"); loadAdmin(); }catch(e){ b.disabled=false; } });
   }catch(e){}
   await adminPrizes(list);
   await adminAds(list);
@@ -3850,9 +3860,9 @@ async function loadAdmin(){
     try{ const units=Math.max(1,Math.round(parseFloat(r.amountUsd||"0")*1e5)); await DB.doc("credits/"+r.uid).set({updatedAt:Date.now()}); await DB.doc("credits/"+r.uid).collection("list").doc("refund-"+r.id+"-"+Date.now().toString(36)).set({type:"refund",item:r.id,units,coin:r.coin||"",at:Date.now()});
       await DB.doc(`payouts/${r.uid}`).collection("requests").doc(r.id).update({status:"refunded",refundedAt:new Date().toISOString()}); toast(S.lang==="es"?"Saldo devuelto ✓":"Refunded ✓","pay");
       if(r.coin&&coinOn(r.coin)&&confirm(S.lang==="es"?`¿Marcar ${r.coin} como NO disponible para todos los jugadores? Les saldrá el aviso "No hay ${r.coin} disponible ahora, selecciona otra".`:`Mark ${r.coin} as NOT available for all players?`)) await setCoinOff(r.coin,true);
-      loadAdmin(); }catch(e){ b.disabled=false; toast(t("mkErr")); } });
+      aDrop("payouts/"+r.uid+"/"); loadAdmin(); }catch(e){ b.disabled=false; toast(t("mkErr")); } });
   list.querySelectorAll(".mini:not(.vipok):not(.ordok):not(.prizeok):not(.adok):not(.adno):not(.wdref):not(.ordno):not(.vipno)").forEach(b=>b.onclick=async()=>{const r=rows[+b.dataset.i]; b.disabled=true;
-    try{await DB.doc(`payouts/${r.uid}`).collection("requests").doc(r.id).update({status:"paid",paidAt:new Date().toISOString()}); await publishProof(r); loadAdmin();}catch(e){b.disabled=false;}});
+    try{await DB.doc(`payouts/${r.uid}`).collection("requests").doc(r.id).update({status:"paid",paidAt:new Date().toISOString()}); aDrop("payouts/"+r.uid+"/"); await publishProof(r); loadAdmin();}catch(e){b.disabled=false;}});
 }
 const startDB=(async()=>{
   try{
