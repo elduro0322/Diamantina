@@ -2393,6 +2393,9 @@ function wnftSVG(n,cls=""){
 }
 async function loadW(){
   if(!(DB&&UID)){ WNFT_LOADED=true; return; }
+  { const sn=await nftSnap(); if(sn&&sn.imp){ WNFT_TAKEN={}; Object.entries(sn.w||{}).forEach(([k,v])=>{ WNFT_TAKEN[+k]=v; });
+    const mine=Object.keys(WNFT_TAKEN).filter(k=>WNFT_TAKEN[k]===UID).map(Number); if(mine.length){ S.wnft=[...new Set([...myW(),...mine])]; save(); }
+    WNFT_LOADED=true; if(shopMode==="prem") renderPremTab(); if(shopMode==="market") renderMarket(); return; } }
   try{ const s=await DB.collection(WNFT_COL).get(); WNFT_TAKEN={}; s.docs.forEach(d=>{const x=d.data(); if(x&&x.owner) WNFT_TAKEN[+d.id]=x.owner;});
     const mine=Object.keys(WNFT_TAKEN).filter(k=>WNFT_TAKEN[k]===UID).map(Number); if(mine.length){ S.wnft=[...new Set([...myW(),...mine])]; save(); } }catch(e){}
   WNFT_LOADED=true; if(shopMode==="prem") renderPremTab(); if(shopMode==="market") renderMarket();
@@ -2400,7 +2403,7 @@ async function loadW(){
 const wTaken=id=>(WNFT_TAKEN[id]&&WNFT_TAKEN[id]!==UID)||false;
 async function grantW(id){
   S.wnft=[...new Set([...myW(),+id])]; save(); WNFT_TAKEN[id]=UID||"me";
-  if(DB&&UID){ try{ await DB.doc(WNFT_COL+"/"+id).set({id:+id,owner:UID,at:Date.now()}); }catch(e){} }
+  if(DB&&UID){ try{ if(await nftD1()){ await d1Post("wgrant",{id:+id}); NFT_SNAP_AT=0; } else await DB.doc(WNFT_COL+"/"+id).set({id:+id,owner:UID,at:Date.now()}); }catch(e){} }
 }
 function payButtons(pre,units,usdAmt){
   return `<div class="vipbtns paylist">
@@ -2429,7 +2432,8 @@ async function buyWDialog(id){
   showModal(`NFT ${wCode(n.id)} · ${premName(n.hero)}`,`<div class="wdlg">${wnftSVG(n)}</div><p class="hint" style="text-align:center;margin:6px 0">${fmt(t("wWhy"),{p:WNFT_PCT})}</p>${payButtons("pw",units,n.usd)}`,[[t("close"),"no",closeModal]]);
   bindPay("pw",{type:"wnft",item:n.id,usd:n.usd},async()=>{
     if((S.bal||0)<units) return; const btn=$("#pwBal"); btn.disabled=true;
-    if(DB&&UID){ try{ const ref=DB.doc(WNFT_COL+"/"+n.id); const l=await ref.acquire({holder:UID,ttlMs:6000}); const cur=await ref.get();
+    if(DB&&UID&&await nftD1()){ try{ await d1Post("wgrant",{id:n.id}); }catch(e){ if(/sold/.test(e.message)){ closeModal(); toast(t("wSold"),"gem"); WNFT_LOADED=false; NFT_SNAP_AT=0; loadW(); return; } } }
+    else if(DB&&UID){ try{ const ref=DB.doc(WNFT_COL+"/"+n.id); const l=await ref.acquire({holder:UID,ttlMs:6000}); const cur=await ref.get();
       if(!l.acquired||(cur.exists&&cur.data().owner&&cur.data().owner!==UID)){ closeModal(); toast(t("wSold"),"gem"); loadW(); return; } }catch(e){} }
     S.bal-=units; tixUse("wnft"); await grantW(n.id); closeModal(); renderPay(); renderShop(); renderBag();
     toast(fmt(t("wGot"),{x:wCode(n.id),p:WNFT_PCT}),"gem"); });
@@ -2711,8 +2715,31 @@ function nftSVG(n,cls=""){
 
 /* shared data (needs the game server: db) */
 let MY_NFTS=[], MARKET=[], NFT_TAKEN=0, marketLoaded=false;
+/* ---- NFT market in Cloudflare D1 (once the owner's copy is done; until then the old Firebase way) ---- */
+let NFT_SNAP=null, NFT_SNAP_AT=0, NFT_IMP=0;
+async function nftSnap(force){ if(D1_OK===false) return null; if(!force&&NFT_SNAP&&Date.now()-NFT_SNAP_AT<60000) return NFT_SNAP;
+  try{ const d=await d1Get("nft"); NFT_SNAP=d; NFT_SNAP_AT=Date.now(); if(!d.imp&&OWNER) nftImport(); return d; }catch(e){ return NFT_SNAP; } }
+const nftD1=async()=>{ const d=await nftSnap(); return !!(d&&d.imp); };
+function creditSold(list){ for(const x of list||[]){ const g=+x.gets||0; if(!g) continue; S.bal=(S.bal||0)+g; incAdd(g); toast(fmt(t("soldToast"),{n:String(x.nft).padStart(3,"0")}),"gem"); }
+  if((list||[]).length){ save(); renderPay(); } }
+async function nftImport(){   /* owner, once: copy NFT owners, open listings, unpaid sales and world NFTs from Firebase */
+  if(!(DB&&OWNER)||Date.now()-NFT_IMP<10*60000) return; NFT_IMP=Date.now();
+  try{ const sv={source:"server"}, T=p=>withTO(p,20000);
+    const [nf,mk,sl,w]=await Promise.all([T(DB.collection(NFT_COL).get(sv)),T(DB.collection(MARKET_COL).where("status","==","open").get(sv)),T(DB.collection("sales").where("claimed","==",false).get(sv)),T(DB.collection(WNFT_COL).get(sv))]);
+    if(nf.metadata&&nf.metadata.fromCache) throw new Error("cache");
+    const N=nf.docs.map(d=>{const x=d.data()||{}; return {id:+d.id,owner:x.owner||"",trades:x.trades||0,from:x.from||"",at:x.claimedAt||0};}).filter(x=>x.owner&&x.id>0);
+    const M=mk.docs.map(d=>{const x=d.data()||{}; return {nft:+(x.nft||d.id),seller:x.seller||"",units:x.units||0,promotedUntil:x.promotedUntil||0,at:x.at||0};}).filter(x=>x.seller&&x.units>0);
+    const SL=sl.docs.map(d=>d.data()||{}).filter(x=>x.seller&&x.sellerGets>0), WW=w.docs.map(d=>{const x=d.data()||{}; return {id:+d.id,owner:x.owner||"",at:x.at||0};}).filter(x=>x.owner);
+    for(const [k,L] of [["nfts",N],["market",M],["sales",SL],["w",WW]]) for(let i=0;i<L.length;i+=40) await d1Post("nftimport",{[k]:L.slice(i,i+40)});
+    await d1Post("nftimport",{done:true}); NFT_SNAP_AT=0;
+    toast(S.lang==="es"?"✅ Mercado NFT pasado a Cloudflare D1":"✅ NFT market moved to Cloudflare D1","gem"); loadMarket(true); WNFT_LOADED=false; loadW();
+  }catch(e){}
+}
 async function claimNft(localOnly,pool){
-  if(DB&&UID&&!localOnly){
+  if(DB&&UID&&!localOnly&&await nftD1()){
+    try{ const r=await d1Post("claim",{ids:nftPool(pool).map(n=>n.id)}); NFT_SNAP_AT=0; marketLoaded&&(MARKET_AT=0); return r.id; }catch(e){ /* fall back to this phone */ }
+  }
+  else if(DB&&UID&&!localOnly){
     try{
       const snap=await DB.collection(NFT_COL).get(); const taken=new Set(); snap.docs.forEach(d=>{const x=d.data(); if(x&&x.owner) taken.add(+d.id);});
       const free=nftPool(pool).filter(n=>!taken.has(n.id)); for(let i=free.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[free[i],free[j]]=[free[j],free[i]];}
@@ -2734,6 +2761,17 @@ async function loadMarket(force){
   if(!force&&marketLoaded&&Date.now()-MARKET_AT<10*60000){ renderMarket(); renderBag(); return; }
   if(!force&&!marketLoaded){ const c=cacheGet("mk"+UID,10*60000); if(c){ MY_NFTS=c.my||[]; NFT_TAKEN=c.taken||0; Object.assign(NFT_TRADES,c.tr||{}); MARKET=c.mk||[]; (S.nft500||[]).forEach(id=>{ if(!MY_NFTS.includes(id)) MY_NFTS.push(id); }); marketLoaded=true; MARKET_AT=Date.now(); renderMarket(); renderBag(); return; } }
   try{
+    const snap=await nftSnap(force);
+    if(snap&&snap.imp){
+      const me=await d1Post("mine",{}); creditSold(me.sold);
+      MY_NFTS=(me.my||[]).slice(); NFT_TAKEN=snap.taken||0; Object.entries(snap.tr||{}).forEach(([id,v])=>{ NFT_TRADES[+id]=v; });
+      const miss=(S.nft500||[]).filter(id=>!MY_NFTS.includes(id));
+      if(miss.length){ try{ const g=await d1Post("ensure",{ids:miss}); (g.got||[]).forEach(id=>{ if(!MY_NFTS.includes(id)) MY_NFTS.push(id); }); }catch(e){} }
+      MARKET=(snap.mk||[]).map(x=>({...x,docId:String(x.nft)}));
+      const now=Date.now(); MARKET.sort((a,b)=>((b.promotedUntil||0)>now)-((a.promotedUntil||0)>now)||(b.at||0)-(a.at||0));
+      MARKET_AT=Date.now(); SALES_AT=Date.now(); const tr={}; Object.entries(NFT_TRADES).forEach(([k,v])=>{ if(v) tr[k]=v; }); cacheSet("mk"+UID,{my:MY_NFTS,taken:NFT_TAKEN,tr,mk:MARKET.slice(0,200)});
+      marketLoaded=true; renderMarket(); renderBag(); return;
+    }
     const [mine,mk]=await Promise.all([DB.collection(NFT_COL).where("owner","==",UID).get(),DB.collection(MARKET_COL).where("status","==","open").get()]);
     MY_NFTS=mine.docs.map(d=>+d.id);
     let st=null; try{ const b=await DB.doc("board/nft").get(); st=b.exists?b.data():null; }catch(e){}
@@ -2750,6 +2788,7 @@ async function loadMarket(force){
 let SALES_AT=0;
 async function collectSales(force){
   if(!(DB&&UID)) return; if(!force&&Date.now()-SALES_AT<10*60000) return; SALES_AT=Date.now();
+  try{ if(await nftD1()){ const me=await d1Post("mine",{}); creditSold(me.sold); if((me.sold||[]).length) loadMarket(true); return; } }catch(e){ return; }
   try{
     const s=await DB.collection("sales").where("seller","==",UID).where("claimed","==",false).get();
     for(const d of s.docs){ const x=d.data(); await DB.doc("sales/"+d.id).update({claimed:true}); S.bal=(S.bal||0)+x.sellerGets; incAdd(x.sellerGets); save();
@@ -2778,7 +2817,17 @@ function confirmBuy(l){
   showModal(`NFT #${String(n.id).padStart(3,"0")}`,`<div class="nftbig">${nftSVG(n)}</div><p class="amt">${usd(l.units)} USD<small>${t("balance")}: ${usd(S.bal||0)}</small></p>`,
     [[t("close"),"no",closeModal],[t("buy"),"go",async()=>{ await buyListing(l); }]]);
 }
+let BUYING=false;
 async function buyListing(l){
+  if(await nftD1()){
+    if(BUYING||l.seller===UID) return; if((S.bal||0)<l.units){ toast(t("mkNoBal")); return; } BUYING=true;
+    try{ const r=await d1Post("buy",{id:l.nft,units:l.units}); const fee=r.fee||Math.ceil(l.units*FEE_PCT/100);
+      S.bal-=l.units; S.feeMk=(S.feeMk||0)+fee; S.feeMkN=(S.feeMkN||0)+1; save(); try{ pushLb(); }catch(e){}
+      if(!MY_NFTS.includes(l.nft)) MY_NFTS.push(l.nft); NFT_TRADES[l.nft]=(NFT_TRADES[l.nft]||0)+1; MARKET=MARKET.filter(x=>x.nft!==l.nft);
+      renderPay(); closeModal(); toast(fmt(t("boughtNft"),{n:String(l.nft).padStart(3,"0")}),"gem"); NFT_SNAP_AT=0; loadMarket(true);
+    }catch(e){ closeModal(); toast(/gone/.test(e.message)?t("mkGone"):t("mkErr")); NFT_SNAP_AT=0; loadMarket(true); }
+    BUYING=false; return;
+  }
   const ref=DB.doc(MARKET_COL+"/"+l.nft);
   try{
     const lease=await ref.acquire({holder:UID,ttlMs:8000}); if(!lease.acquired){ toast(t("mkBusy")); return; }
@@ -2796,22 +2845,24 @@ async function buyListing(l){
 }
 async function sellDialog(id){
   const n=nftBy(id); let tr=NFT_TRADES[id]||0;
-  try{ const d=await DB.doc(NFT_COL+"/"+id).get(); if(d.exists) tr=d.data().trades||0; }catch(e){}
+  const d1=await nftD1();
+  if(!d1) try{ const d=await DB.doc(NFT_COL+"/"+id).get(); if(d.exists) tr=d.data().trades||0; }catch(e){}
   const units=nftValue(n,tr), net=units-Math.ceil(units*FEE_PCT/100);
   showModal(`NFT #${String(id).padStart(3,"0")}`,`<div class="nftbig">${nftSVG(n)}</div>
     <p class="amt">${usd(units)} USD<small>${fmt(t("sellNet"),{x:usd(net),p:FEE_PCT})}</small><small>${fmt(t("growNote"),{s:tr,x:usd(nftValue(n,tr+1))})}</small></p>`,
     [[t("close"),"no",closeModal],[t("sellBtn"),"go",async()=>{
       try{
+        if(d1){ await d1Post("list",{id,units}); NFT_SNAP_AT=0; closeModal(); toast(t("listed"),"shop"); loadMarket(true); return; }
         const own=await DB.doc(NFT_COL+"/"+id).get(); if(!own.exists||own.data().owner!==UID){ toast(t("mkErr")); return; }
         await DB.doc(MARKET_COL+"/"+id).set({nft:id,seller:UID,units,status:"open",promotedUntil:0,at:Date.now()});
         closeModal(); toast(t("listed"),"shop"); loadMarket(true);
       }catch(e){ toast(t("mkErr")); }
     }]]);
 }
-async function cancelListing(id){ try{ await DB.doc(MARKET_COL+"/"+id).update({status:"cancelled"}); toast(t("cancelled")); loadMarket(true); }catch(e){ toast(t("mkErr")); } }
+async function cancelListing(id){ try{ if(await nftD1()){ await d1Post("cancel",{id}); NFT_SNAP_AT=0; } else await DB.doc(MARKET_COL+"/"+id).update({status:"cancelled"}); toast(t("cancelled")); loadMarket(true); }catch(e){ toast(t("mkErr")); } }
 async function promoteListing(id){
   if(S.coins<PROMO_COST){ toast(fmt(t("noCoins"),{n:PROMO_COST-S.coins})); return; }
-  try{ await DB.doc(MARKET_COL+"/"+id).update({promotedUntil:Date.now()+PROMO_MS}); S.coins-=PROMO_COST; save(); renderText(); toast(t("promotedOk"),"shop"); loadMarket(); }catch(e){ toast(t("mkErr")); }
+  try{ if(await nftD1()){ await d1Post("promote",{id,until:Date.now()+PROMO_MS}); NFT_SNAP_AT=0; } else await DB.doc(MARKET_COL+"/"+id).update({promotedUntil:Date.now()+PROMO_MS}); S.coins-=PROMO_COST; save(); renderText(); toast(t("promotedOk"),"shop"); loadMarket(true); }catch(e){ toast(t("mkErr")); }
 }
 function myNftsHTML(){
   if(!MY_NFTS.length) return "";
@@ -3810,6 +3861,7 @@ const aDrop=pre=>{ for(const k in AC) if(k.startsWith(pre)) delete AC[k]; acSave
 async function loadAdmin(){
   const list=$("#adminList"); const rows=[]; let feeSum=0, feeN=0;
   try{ const ss=await aCol("sales"); ss.docs.forEach(d=>{const x=d.data(); feeSum+=x.fee||0; feeN++;}); }catch(e){}
+  try{ const sn=await nftSnap(); if(sn&&sn.imp&&sn.fee){ feeSum+=+sn.fee.sum||0; feeN+=+sn.fee.n||0; } }catch(e){}
   let exSum=0, exN=0; try{ const ex=await aCol("exfees"); ex.docs.forEach(d=>{exSum+=d.data().feeUsd||0; exN++;}); }catch(e){}
   try{ const lb=await aCol("lbads"); let fx=0,fxn=0,fm=0,fmn=0; lb.docs.forEach(d=>{const x=d.data(); fx+=x.fx||0; fxn+=x.fxn||0; fm+=x.fm||0; fmn+=x.fmn||0;});
     if(fx>exSum){ exSum=fx; exN=Math.max(exN,fxn); } if(fm>feeSum){ feeSum=fm; feeN=Math.max(feeN,fmn); } }catch(e){}

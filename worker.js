@@ -95,7 +95,14 @@ async function d1Init(db) {
     "CREATE INDEX IF NOT EXISTS refs_at ON refs (at)",
     "CREATE TABLE IF NOT EXISTS proofs (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, coin TEXT, method TEXT, usd TEXT, amt REAL, who TEXT, code TEXT)",
     "CREATE INDEX IF NOT EXISTS proofs_at ON proofs (at)",
-    "CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT, at INTEGER)"
+    "CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT, at INTEGER)",
+    "CREATE TABLE IF NOT EXISTS nfts (id INTEGER PRIMARY KEY, owner TEXT, trades INTEGER DEFAULT 0, prev TEXT, at INTEGER)",
+    "CREATE INDEX IF NOT EXISTS nfts_owner ON nfts (owner)",
+    "CREATE TABLE IF NOT EXISTS market (nft INTEGER PRIMARY KEY, seller TEXT, units INTEGER, status TEXT, promo INTEGER DEFAULT 0, at INTEGER, buyer TEXT, soldAt INTEGER)",
+    "CREATE INDEX IF NOT EXISTS market_status ON market (status)",
+    "CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, nft INTEGER, seller TEXT, buyer TEXT, units INTEGER, fee INTEGER, gets INTEGER, at INTEGER, claimed INTEGER DEFAULT 0, cat INTEGER)",
+    "CREATE INDEX IF NOT EXISTS sales_seller ON sales (seller, claimed)",
+    "CREATE TABLE IF NOT EXISTS wnft (id INTEGER PRIMARY KEY, owner TEXT, at INTEGER)"
   ].map(q => db.prepare(q)));
   D1_READY = true;
 }
@@ -120,6 +127,102 @@ async function buildComp(db, week, fs, fe) {
   await namesFor(db, snap.refs.map(x => x.uid), snap);
   return snap;
 }
+
+/* ===== NFT market in D1 (ownership, listings, sales, world NFTs) ===== */
+const NFT_FEE = 5, NFT_MAX = 500;
+const dropNft = db => db.prepare("DELETE FROM meta WHERE k = 'nft'");
+async function nftSnap(db) {
+  const old = await metaGet(db, "nft");
+  if (old && Date.now() - old.at < 60000) return { ...old.v, at: old.at };
+  const [own, mk, w, fee, imp] = await db.batch([
+    db.prepare("SELECT id, trades FROM nfts WHERE owner IS NOT NULL AND owner != ''"),
+    db.prepare("SELECT nft, seller, units, promo AS promotedUntil, at FROM market WHERE status = 'open'"),
+    db.prepare("SELECT id, owner FROM wnft"),
+    db.prepare("SELECT COALESCE(SUM(fee), 0) AS sum, COUNT(*) AS n FROM sales"),
+    db.prepare("SELECT v FROM meta WHERE k = 'nftimp'")
+  ]);
+  const tr = {}; for (const x of own.results || []) if (x.trades) tr[x.id] = x.trades;
+  const wo = {}; for (const x of w.results || []) if (x.owner) wo[x.id] = x.owner;
+  const v = { taken: (own.results || []).length, tr, mk: mk.results || [], w: wo, fee: (fee.results || [])[0] || { sum: 0, n: 0 }, imp: !!(imp.results || []).length };
+  await metaSet(db, "nft", v).run();
+  return { ...v, at: Date.now() };
+}
+async function nftPost(a, db, me, body, now) {
+  const id = int(body.id, NFT_MAX);
+  if (a === "mine") {                                      // my NFTs + money from my NFTs that were sold
+    const [up, my] = await db.batch([
+      db.prepare("UPDATE sales SET claimed = 1, cat = ? WHERE seller = ? AND claimed = 0").bind(now, me.uid),
+      db.prepare("SELECT id FROM nfts WHERE owner = ?").bind(me.uid)
+    ]);
+    let sold = [];
+    if (up.meta && up.meta.changes) sold = (await db.prepare("SELECT nft, units, gets FROM sales WHERE seller = ? AND cat = ?").bind(me.uid, now).all()).results || [];
+    return { my: (my.results || []).map(x => x.id), sold };
+  }
+  if (a === "claim") {                                     // chest / welcome gift: a random free NFT from the allowed pool
+    const cand = [...new Set((body.ids || []).map(x => int(x, NFT_MAX)).filter(x => x > 0))];
+    const taken = new Set(((await db.prepare("SELECT id FROM nfts WHERE owner IS NOT NULL AND owner != ''").all()).results || []).map(x => x.id));
+    const free = cand.filter(x => !taken.has(x));
+    for (let i = free.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [free[i], free[j]] = [free[j], free[i]]; }
+    for (const n of free.slice(0, 6)) {
+      const r = await db.prepare("INSERT INTO nfts (id, owner, trades, at) VALUES (?, ?, 0, ?) ON CONFLICT(id) DO UPDATE SET owner = excluded.owner, at = excluded.at WHERE nfts.owner IS NULL OR nfts.owner = ''").bind(n, me.uid, now).run();
+      if (r.meta && r.meta.changes) { await dropNft(db).run(); return { id: n }; }
+    }
+    return { id: free.length ? null : 0 };
+  }
+  if (a === "ensure") {                                    // NFTs this phone got while offline: keep them if still free
+    const ids = [...new Set((body.ids || []).map(x => int(x, NFT_MAX)).filter(x => x > 0))].slice(0, 20); const got = [];
+    for (const n of ids) {
+      await db.prepare("INSERT INTO nfts (id, owner, trades, at) VALUES (?, ?, 0, ?) ON CONFLICT(id) DO UPDATE SET owner = excluded.owner WHERE nfts.owner IS NULL OR nfts.owner = ''").bind(n, me.uid, now).run();
+      const o = await db.prepare("SELECT owner FROM nfts WHERE id = ?").bind(n).first(); if (o && o.owner === me.uid) got.push(n);
+    }
+    if (ids.length) await dropNft(db).run();
+    return { got };
+  }
+  if (a === "list") {
+    const units = int(body.units, 1e7); if (!id || units < 1) return { error: "bad" };
+    const o = await db.prepare("SELECT owner FROM nfts WHERE id = ?").bind(id).first(); if (!o || o.owner !== me.uid) return { error: "not_owner" };
+    await db.batch([db.prepare("INSERT INTO market (nft, seller, units, status, promo, at, buyer, soldAt) VALUES (?, ?, ?, 'open', 0, ?, NULL, NULL) ON CONFLICT(nft) DO UPDATE SET seller = excluded.seller, units = excluded.units, status = 'open', promo = 0, at = excluded.at, buyer = NULL, soldAt = NULL").bind(id, me.uid, units, now), dropNft(db)]);
+    return {};
+  }
+  if (a === "cancel" || a === "promote") {
+    const q = a === "cancel" ? db.prepare("UPDATE market SET status = 'cancelled' WHERE nft = ? AND seller = ? AND status = 'open'").bind(id, me.uid)
+      : db.prepare("UPDATE market SET promo = ? WHERE nft = ? AND seller = ? AND status = 'open'").bind(Math.min(int(body.until, 9e15), now + 7 * 86400000), id, me.uid);
+    const [r] = await db.batch([q, dropNft(db)]);
+    return r.meta && r.meta.changes ? {} : { error: "gone" };
+  }
+  if (a === "buy") {                                       // all-or-nothing: listing -> sold, sale record, new owner
+    const units = int(body.units, 1e7), fee = Math.ceil(units * NFT_FEE / 100);
+    const [r] = await db.batch([
+      db.prepare("UPDATE market SET status = 'sold', buyer = ?, soldAt = ? WHERE nft = ? AND status = 'open' AND seller != ? AND units = ? AND seller = (SELECT owner FROM nfts WHERE id = ?)").bind(me.uid, now, id, me.uid, units, id),
+      db.prepare("INSERT INTO sales (nft, seller, buyer, units, fee, gets, at, claimed) SELECT nft, seller, buyer, units, ?, ?, soldAt, 0 FROM market WHERE nft = ? AND buyer = ? AND soldAt = ? AND status = 'sold'").bind(fee, units - fee, id, me.uid, now),
+      db.prepare("UPDATE nfts SET prev = owner, owner = ?, trades = trades + 1, at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM market WHERE nft = ? AND buyer = ? AND soldAt = ? AND status = 'sold')").bind(me.uid, now, id, id, me.uid, now),
+      dropNft(db)
+    ]);
+    if (!(r.meta && r.meta.changes)) return { error: "gone" };
+    return { fee, units };
+  }
+  if (a === "wgrant") {                                    // world NFT (only 1 owner each)
+    if (!id) return { error: "bad" };
+    await db.prepare("INSERT OR IGNORE INTO wnft (id, owner, at) VALUES (?, ?, ?)").bind(id, me.uid, now).run();
+    const o = await db.prepare("SELECT owner FROM wnft WHERE id = ?").bind(id).first();
+    await dropNft(db).run();
+    return o && o.owner === me.uid ? {} : { error: "sold" };
+  }
+  if (a === "nftimport") {                                 // owner: copy from Firebase (small pieces)
+    if (!me.owner) return { error: "owner" };
+    const q = [];
+    for (const x of (body.nfts || []).slice(0, 45)) if (x.owner) q.push(db.prepare("INSERT INTO nfts (id, owner, trades, prev, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING").bind(int(x.id, NFT_MAX), str(x.owner, 64), int(x.trades, 1e6), str(x.from, 64), int(x.at, 9e15)));
+    for (const x of (body.market || []).slice(0, 45)) q.push(db.prepare("INSERT INTO market (nft, seller, units, status, promo, at) VALUES (?, ?, ?, 'open', ?, ?) ON CONFLICT(nft) DO NOTHING").bind(int(x.nft, NFT_MAX), str(x.seller, 64), int(x.units, 1e7), int(x.promotedUntil, 9e15), int(x.at, 9e15)));
+    for (const x of (body.sales || []).slice(0, 45)) q.push(db.prepare("INSERT INTO sales (nft, seller, buyer, units, fee, gets, at, claimed) SELECT ?, ?, ?, ?, ?, ?, ?, 0 WHERE NOT EXISTS (SELECT 1 FROM sales WHERE nft = ? AND at = ?)").bind(int(x.nft, NFT_MAX), str(x.seller, 64), str(x.buyer, 64), int(x.units, 1e7), int(x.fee, 1e7), int(x.sellerGets, 1e7), int(x.at, 9e15), int(x.nft, NFT_MAX), int(x.at, 9e15)));
+    for (const x of (body.w || []).slice(0, 45)) if (x.owner) q.push(db.prepare("INSERT OR IGNORE INTO wnft (id, owner, at) VALUES (?, ?, ?)").bind(int(x.id, 1000), str(x.owner, 64), int(x.at, 9e15)));
+    if (body.done) q.push(metaSet(db, "nftimp", 1));
+    q.push(dropNft(db));
+    await db.batch(q);
+    return { n: q.length };
+  }
+  return null;
+}
+
 async function d1(request, env) {
   const db = env.DB; if (!db) return json({ ok: false, error: "no_db" }, 503);
   await d1Init(db);
@@ -145,9 +248,11 @@ async function d1(request, env) {
     await metaSet(db, "proofs", snap).run();
     return json({ ok: true, ...snap, at: Date.now() });
   }
+  if (a === "nft") return json({ ok: true, ...(await nftSnap(db)) });
   if (request.method !== "POST") return json({ ok: false, error: "bad_request" }, 400);
   let me; try { me = await who(body.t); } catch (e) { return json({ ok: false, error: String(e.message || e) }, 401); }
   const now = Date.now();
+  { const r = await nftPost(a, db, me, body, now); if (r) return json(r.error ? { ok: false, ...r } : { ok: true, ...r }, r.error === "owner" ? 403 : 200); }
   if (a === "push") {                                     // player's weekly ad count + profile + "online now"
     if (me.anon) return json({ ok: false, error: "register" }, 403);
     const q = [];
