@@ -3004,8 +3004,27 @@ let compBoard="ads", COMP={ads:[],refs:[],names:{},loaded:false};
 const myCode=()=>UID?codeOf(UID):"——";
 const myNick=()=>S.nick||("Hero-"+myCode());
 function wkAds(){const k=weekInfo().key; if(!S.wk||S.wk.week!==k) S.wk={week:k,ads:0}; return S.wk;}
-async function pushLb(){
-  if(!(DB&&UID)||!isReg()) return; const w=wkAds();
+/* ---- D1 (Cloudflare): ranking, referrals, proofs and "online now" without Firebase reads ---- */
+const D1_API=(/workers\.dev$/.test(location.hostname)?"":"https://diamantina.julioduluc07.workers.dev")+"/api/d1";
+let D1_OK=null;   // false = the database is not connected yet -> old Firebase way
+async function idTok(){ try{ const u=FA()&&FA().currentUser; return u?await u.getIdToken():null; }catch(e){ return null; } }
+async function d1Get(a,qs){ const r=await withTO(fetch(D1_API+"?a="+a+(qs||""),{cache:"no-store"}),8000); const d=await r.json(); if(!d.ok){ if(d.error==="no_db") D1_OK=false; throw new Error(d.error||"d1"); } D1_OK=true; return d; }
+async function d1Post(a,body){ const t=await idTok(); if(!t) throw new Error("no_token");
+  const r=await withTO(fetch(D1_API+"?a="+a,{method:"POST",body:JSON.stringify({...body,t}),keepalive:true}),15000); const d=await r.json(); if(!d.ok){ if(d.error==="no_db") D1_OK=false; throw new Error(d.error||"d1"); } return d; }
+const D1P={ads:-1,at:0,pat:0,sig:"",tm:null};
+async function d1Push(force){   /* weekly ads + profile + "online"; at most every 2.5 min (all the ads of that time go together) */
+  if(!(UID&&isReg())||D1_OK===false) return; const w=wkAds(), now=Date.now();
+  if(!force&&w.ads===D1P.ads&&now-D1P.at<170000) return;
+  if(!force&&now-D1P.at<150000){ if(!D1P.tm) D1P.tm=setTimeout(()=>{ D1P.tm=null; d1Push(); },150000-(now-D1P.at)); return; }
+  clearTimeout(D1P.tm); D1P.tm=null;
+  const prof={nick:myNick().slice(0,20),code:myCode(),hero:curHero(),vip:vipTier(),coin:S.payCoin||""}, sig=JSON.stringify(prof);
+  const body={week:w.week,ads:w.ads,coin:prof.coin,vip:prof.vip}; if(sig!==D1P.sig||now-D1P.pat>3600000) Object.assign(body,prof);
+  D1P.at=now; try{ await d1Post("push",body); D1P.ads=w.ads; if(body.nick!=null){ D1P.sig=sig; D1P.pat=now; } }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{ try{ if(document.hidden&&UID&&wkAds().ads!==D1P.ads) d1Push(true); }catch(e){} });
+async function pushLb(force){
+  if(!(DB&&UID)||!isReg()) return; d1Push(force); const w=wkAds();
+  if(!force&&D1_OK!==false&&Date.now()-(pushLb.at||0)<15*60000) return; pushLb.at=Date.now();   /* Firebase copy only every 15 min */
   const stUsd=(S.stakes||[]).filter(s=>(s.asset||"USD")==="USD").reduce((a,s)=>a+s.amt+s.rew,0);
   try{ await DB.doc("lbads/"+UID).set({week:w.week,ads:w.ads,nick:myNick().slice(0,20),code:myCode(),hero:curHero(),at:Date.now(),bal:Math.round(S.bal||0),staked:Math.round(stUsd),dmt:S.dmtPre||0,day:bogota().key,td:S.doneDate===bogota().key?(S.done||0):0,stk:(S.stakes||[]).filter(x=>(x.end||0)>Date.now()).slice(0,20).map(x=>({a:x.asset||"USD",amt:x.amt,rew:x.rew||0,end:x.end})),seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier(),fx:S.feeEx||0,fxn:S.feeExN||0,fm:S.feeMk||0,fmn:S.feeMkN||0,dev:DEV}); }catch(e){}
 }
@@ -3018,8 +3037,14 @@ const cacheSet=(k,d)=>{ try{ localStorage.setItem("dc-"+k,JSON.stringify({at:Dat
 async function loadComp(force){
   if(!(DB&&UID)){ renderComp(); return; }
   const k=weekInfo().key;
-  { const c=cacheGet("comp"+k,force?5*60000:20*60000); if(c){ COMP={...c,loaded:true}; renderComp(); return; } }
+  { const c=cacheGet("comp"+k,force?60000:3*60000); if(c){ COMP={...c,loaded:true}; renderComp(); return; } }
   const F=fortInfo(), fk=String(F.key||F.start||"");
+  if(D1_OK!==false){ try{ const d=await d1Get("comp","&week="+k+"&fs="+(F.start-BOGOTA_OFFSET)+"&fe="+(F.end-BOGOTA_OFFSET));
+    if(OWNER&&!d.imp) d1Import();
+    if(d.imp||d.ads.length||d.refs.length){ COMP={ads:d.ads||[],refs:d.refs||[],names:d.names||{},heroes:d.heroes||{},vips:d.vips||{},loaded:true};
+      cacheSet("comp"+k,{ads:COMP.ads,refs:COMP.refs,names:COMP.names,heroes:COMP.heroes,vips:COMP.vips});
+      if(S.refBy&&!S.refByName&&COMP.names[S.refBy]){ S.refByName=COMP.names[S.refBy]; save(); }
+      renderComp(); return; } }catch(e){} }
   try{ const b=await withTO(DB.doc("board/comp").get()); const x=b.exists?b.data():null;
     if(x&&x.week===k&&x.fk===fk&&Date.now()-(x.at||0)<45*60000&&((x.ads||[]).length||(x.refs||[]).length)){ COMP={ads:x.ads||[],refs:x.refs||[],names:x.names||{},heroes:x.heroes||{},vips:x.vips||{},loaded:true};
       cacheSet("comp"+k,{ads:COMP.ads,refs:COMP.refs,names:COMP.names,heroes:COMP.heroes,vips:COMP.vips}); renderComp(); return; } }catch(e){ var fbDown=true; }
@@ -3039,6 +3064,22 @@ async function loadComp(force){
     if(!S.refBy||!S.refByName) { const me=await DB.doc("refs/"+UID).get(); if(me.exists){ const by=me.data().by; S.refBy=by; S.refByName=names[by]||me.data().code; save(); } }
   }catch(e){ /* Firebase busy or over its daily limit: show the last ranking we had (up to 7 days old) */ const old=cacheGet("comp"+k,7*86400000); if(old) COMP={...old,loaded:true,stale:true}; else COMP={...COMP,loaded:true,err:true}; }
   renderComp();
+}
+let D1_IMP=0;
+async function d1Import(){   /* owner, once: copy the old Firebase ranking, referrals and proofs into D1 */
+  if(!(DB&&OWNER)||Date.now()-D1_IMP<10*60000) return; D1_IMP=Date.now();
+  try{ const g=c=>withTO(DB.collection(c).get({source:"server"}),20000);
+    const [lb,rf,pr,st]=await Promise.all([g("lbads"),g("refs"),g("proofs"),withTO(DB.doc("config/stats").get(),15000)]);
+    if((lb.metadata&&lb.metadata.fromCache)||!lb.size) throw new Error("no server data");
+    const L=lb.docs.map(d=>{const x=d.data(); return {uid:d.id,nick:x.nick||"",code:x.code||"",hero:x.hero||"",vip:x.vipNow||0,week:x.week||"",ads:x.ads||0,at:x.at||0};});
+    const R=rf.docs.map(d=>{const x=d.data(); return {uid:d.id,by:x.by||"",at:x.at||0,via:x.via||""};}), P=pr.docs.map(d=>d.data()), s=st.exists?st.data():{};
+    for(let i=0;i<L.length;i+=18) await d1Post("import",{lb:L.slice(i,i+18)});
+    for(let i=0;i<R.length;i+=40) await d1Post("import",{refs:R.slice(i,i+40)});
+    for(let i=0;i<P.length;i+=40) await d1Post("import",{proofs:P.slice(i,i+40)});
+    await d1Post("import",{stats:{paidUsd:s.paidUsd!=null?s.paidUsd:P.reduce((a,x)=>a+parseFloat(x.amountUsd||0),0),paidN:s.paidN!=null?s.paidN:P.length,players:L.length},done:true});
+    try{ localStorage.removeItem("dc-comp"+weekInfo().key); localStorage.removeItem("dc-proofs"); }catch(e){}
+    toast(S.lang==="es"?"✅ Ranking y pruebas pasados a Cloudflare D1":"✅ Ranking and proofs moved to Cloudflare D1","trophy"); loadComp(true); loadProofs();
+  }catch(e){}
 }
 function medal(i){const c=["#FFC93C","#D5DDE8","#E59A5B"][i]; return c?`<span class="medal" style="background:${c}">${i+1}</span>`:`<span class="medal plain">${i+1}</span>`;}
 const VIP_BADGE=[null,{a:"#F3C99B",b:"#B4632C",c:"#7A3B12",t:"#FFE7CF"},{a:"#F1F5F9",b:"#94A3B8",c:"#475569",t:"#FFFFFF"},{a:"#FFE58A",b:"#F5B301",c:"#9A6400",t:"#FFF6CC"},{a:"#9EF3FF",b:"#8B5CF6",c:"#4C1D95",t:"#FFFFFF"}];
@@ -3083,7 +3124,7 @@ function renderComp(){
     ${S.refBy?`<p class="hint" style="font-weight:900;margin-top:10px">${fmt(t("codeDone"),{x:escapeHtml(S.refByName||"")})}</p>`:`<label class="hint" for="refIn" style="display:block;margin:12px 0 4px">${t("haveCode")}</label><div class="amtrow"><input class="field" id="refIn" maxlength="6" style="text-transform:uppercase" autocomplete="off"><button class="maxbtn" id="refGo">${t("applyCode")}</button></div>`}</div>`;
   box.innerHTML=html;
   box.querySelectorAll("[data-b]").forEach(b=>b.onclick=()=>{compBoard=b.dataset.b;renderComp();});
-  $("#nickSave").onclick=()=>{const v=($("#nickIn").value||"").trim().slice(0,20); if(v.length<2) return; S.nick=v; save(); pushLb().then(loadComp); toast(t("saved"));};
+  $("#nickSave").onclick=()=>{const v=($("#nickIn").value||"").trim().slice(0,20); if(v.length<2) return; S.nick=v; save(); pushLb(true).then(()=>loadComp(true)); toast(t("saved"));};
   bindRefBanners(); { const br=$("#buyRefBtn"); if(br) br.onclick=buyRefsDialog; const mr=$("#refMore"); if(mr) mr.onclick=()=>{ $("#refList").classList.toggle("open"); }; }
   $("#cpCode").onclick=async()=>{ try{ await navigator.clipboard.writeText(myCode()); toast(t("copied")); }catch(e){ toast(myCode()); } };
   $("#cpLink").onclick=async()=>{ try{ await navigator.clipboard.writeText(refLink()); toast(t("linkCopied")); }catch(e){ toast(refLink()); } };
@@ -3121,6 +3162,7 @@ async function applyRefCode(c,silent){
     const q=await DB.collection("lbads").where("code","==",c).get(); if(q.empty){ if(!silent) toast(t("codeBad")); return false; }
     const by=q.docs[0].id; if(by===UID){ if(!silent) toast(t("codeSelf")); return false; }
     await DB.doc("refs/"+UID).set({by,code:c,week:weekInfo().key,at:Date.now(),via:silent?"link":"code"});
+    d1Post("ref",{by,via:silent?"link":"code"}).catch(()=>{});
     S.refBy=by; S.refByName=q.docs[0].data().nick||c; delete S.pendingRef; save();
     toast(fmt(silent?t("refAuto"):t("codeOk"),{x:S.refByName}),"heroes"); return true;
   }catch(e){ if(!silent) toast(t("mkErr")); return false; }
@@ -3130,10 +3172,13 @@ async function adminPrizes(list){
   const prev=weekInfo(-1).key;
   try{
     const PF=fortInfo(-1), prevF="f"+PF.key;
-    const [all,refs,pz,pzf]=await Promise.all([DB.collection("lbads").get(),DB.collection("refs").get(),DB.doc("prizes/"+prev).get(),DB.doc("prizes/"+prevF).get()]);
-    const names={}; const ads=[]; all.docs.forEach(d=>{const x=d.data(); names[d.id]=x.nick||x.code; if(x.week===prev&&x.ads>0) ads.push({uid:d.id,n:x.ads});});
-    const cnt={}; refs.docs.forEach(d=>{const x=d.data(); if(x.by&&inFort(x.at,PF)) cnt[x.by]=(cnt[x.by]||0)+1;});
-    const boards={ads:ads.sort((a,b)=>b.n-a.n).slice(0,10),refs:Object.entries(cnt).map(([uid,n])=>({uid,n})).sort((a,b)=>b.n-a.n).slice(0,10)};
+    const [pz,pzf]=await Promise.all([DB.doc("prizes/"+prev).get(),DB.doc("prizes/"+prevF).get()]);
+    let names={}, boards=null;
+    try{ const d=await d1Get("comp","&week="+prev+"&fs="+(PF.start-BOGOTA_OFFSET)+"&fe="+(PF.end-BOGOTA_OFFSET)); if(d.imp){ names=d.names||{}; boards={ads:(d.ads||[]).slice(0,10),refs:(d.refs||[]).slice(0,10)}; } }catch(e){}
+    if(!boards){ const [all,refs]=await Promise.all([DB.collection("lbads").get(),DB.collection("refs").get()]);
+      const ads=[]; all.docs.forEach(d=>{const x=d.data(); names[d.id]=x.nick||x.code; if(x.week===prev&&x.ads>0) ads.push({uid:d.id,n:x.ads});});
+      const cnt={}; refs.docs.forEach(d=>{const x=d.data(); if(x.by&&inFort(x.at,PF)) cnt[x.by]=(cnt[x.by]||0)+1;});
+      boards={ads:ads.sort((a,b)=>b.n-a.n).slice(0,10),refs:Object.entries(cnt).map(([uid,n])=>({uid,n})).sort((a,b)=>b.n-a.n).slice(0,10)}; }
     const doneA=(pz.exists&&pz.data().done)||{}, doneF=(pzf.exists&&pzf.data().done)||{};
     let html=`<div class="req">${ic("trophy",32)}<div class="grow"><b>${t("prevWeek")}</b><br><span style="color:var(--muted)">${t("boardAds")}: ${prev} · ${t("boardRefs")}: ${PF.key}</span></div></div>`;
     for(const b of ["ads","refs"]) boards[b].forEach((r,i)=>{const id=`${b}_${i+1}`, pk=b==="ads"?prev:prevF, done=b==="ads"?doneA:doneF;
@@ -3917,7 +3962,7 @@ async function cloudSave(now){
   try{ if(!(DB&&UID)||!isReg()) return; }catch(e){ return; }
   const run=async()=>{ try{ await DB.doc(SAVE_PATH()).set({s:JSON.stringify(S),at:Date.now()}); }catch(e){} };
   if(now){ clearTimeout(csT); csT=null; return run(); }
-  if(csT) return; csT=setTimeout(()=>{ csT=null; run(); },20000);
+  if(csT) return; csT=setTimeout(()=>{ csT=null; run(); },120000);
 }
 async function cloudLoad(){
   if(!(DB&&UID)||!isReg()) return false;
@@ -3937,12 +3982,13 @@ window.addEventListener("click",e=>{
 
 /* ---------- Live players + external banners ---------- */
 const LIVE_MS=240000;   // players send a heartbeat every 3 min
-async function beat(){ if(!(DB&&UID)||document.hidden||!isReg()) return; try{ await DB.doc("lbads/"+UID).set({seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier()},{merge:true}); }catch(e){} }
+async function beat(){ if(!(DB&&UID)||document.hidden||!isReg()) return; if(D1_OK!==false){ d1Push(); return; } try{ await DB.doc("lbads/"+UID).set({seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier()},{merge:true}); }catch(e){} }
 async function liveCount(){
   if(!(DB&&OWNER)) return; const v=$("#v-admin"); if(!v||!v.classList.contains("on")||document.hidden) return;
-  try{ const q=await DB.collection("lbads").where("seen",">",Date.now()-LIVE_MS).get(); const by={}; let vip=0;
-    q.docs.forEach(d=>{ const x=d.data(); if(x.coinNow) by[x.coinNow]=(by[x.coinNow]||0)+1; if(x.vipNow) vip++; });
-    $("#liveN").textContent=q.size; $("#liveTxt").textContent=S.lang==="es"?" jugadores activos ahora":" players online now";
+  try{ let L=null; try{ L=(await d1Post("live",{})).list.map(x=>({coinNow:x.coin,vipNow:x.vip})); }catch(e){}
+    if(!L){ const q=await DB.collection("lbads").where("seen",">",Date.now()-LIVE_MS).get(); L=q.docs.map(d=>d.data()); }
+    const by={}; let vip=0; L.forEach(x=>{ if(x.coinNow) by[x.coinNow]=(by[x.coinNow]||0)+1; if(x.vipNow) vip++; });
+    $("#liveN").textContent=L.length; $("#liveTxt").textContent=S.lang==="es"?" jugadores activos ahora":" players online now";
     $("#liveCoins").textContent=(Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,n])=>k+" "+n).join(" · "))+(vip?` · VIP ${vip}`:"");
   }catch(e){ $("#liveN").textContent="?"; }
 }
@@ -4504,20 +4550,22 @@ function agoStr(ms){ try{ const r=new Intl.RelativeTimeFormat(LOC(),{numeric:"au
   const a=Math.abs(s); return a<3600?r.format(Math.round(s/60),"minute"):a<86400?r.format(Math.round(s/3600),"hour"):r.format(Math.round(s/86400),"day"); }catch(e){ return ""; } }
 async function publishProof(r){
   try{
-    let nick=""; try{ const lb=await DB.doc("lbads/"+r.uid).get(); if(lb.exists) nick=lb.data().nick||lb.data().code||""; }catch(e){}
+    let nick=(COMP.names||{})[r.uid]||""; if(!nick) try{ const lb=await withTO(DB.doc("lbads/"+r.uid).get(),5000); if(lb.exists) nick=lb.data().nick||lb.data().code||""; }catch(e){}
     const pf={at:Date.now(),coin:r.coin,method:r.method,amountUsd:r.amountUsd,amountCoin:r.amountCoin||null,who:maskName(nick),code:codeOf(r.uid)};
-    await DB.collection("proofs").add(pf);
+    let ds=null; try{ ds=(await d1Post("proof",pf)).s; }catch(e){}   /* D1: everybody sees it within seconds */
+    DB.collection("proofs").add(pf).catch(()=>{});
     /* show it to everybody right away: update the shared proofs doc + this phone's copy */
-    try{ PROOFS=[pf,...(PROOFS||[])].slice(0,20); const st0=PROOF_STATS||{}; PROOF_STATS={...st0,paidUsd:(+st0.paidUsd||0)+parseFloat(r.amountUsd||0),paidN:(+st0.paidN||0)+1};
+    try{ PROOFS=[pf,...(PROOFS||[])].slice(0,40); const st0=PROOF_STATS||{}; PROOF_STATS=ds?{...st0,...ds}:{...st0,paidUsd:(+st0.paidUsd||0)+parseFloat(r.amountUsd||0),paidN:(+st0.paidN||0)+1};
       DB.doc("board/proofs").set({p:PROOFS.map(({_id,...x})=>x),n:PLAYERS||0,s:PROOF_STATS,at:Date.now()}).catch(()=>{}); cacheSet("proofs",{p:PROOFS,n:PLAYERS,s:PROOF_STATS}); renderProofs(); }catch(e){}
-    try{ const st=await DB.doc("config/stats").get();
+    if(!ds) try{ const st=await DB.doc("config/stats").get();
       if(st.exists&&st.data().paidUsd!=null&&window.firebase&&firebase.firestore.FieldValue) await DB.doc("config/stats").set({paidUsd:firebase.firestore.FieldValue.increment(parseFloat(r.amountUsd||0)),paidN:firebase.firestore.FieldValue.increment(1)},{merge:true});
       else { const all=await DB.collection("proofs").get(); await DB.doc("config/stats").set({paidUsd:all.docs.reduce((a,d)=>a+parseFloat(d.data().amountUsd||0),0),paidN:all.size},{merge:true}); } }catch(e){}
   }catch(e){}
 }
 async function loadProofs(){
   if(!(DB&&UID)) return;
-  { const c=cacheGet("proofs",60*60000); if(c&&!OWNER){ PROOFS=c.p||[]; PLAYERS=c.n||0; PROOF_STATS=c.s||null; renderProofs(); return; } }
+  { const c=cacheGet("proofs",(D1_OK===false?60:5)*60000); if(c&&!OWNER){ PROOFS=c.p||[]; PLAYERS=c.n||0; PROOF_STATS=c.s||null; renderProofs(); return; } }
+  if(D1_OK!==false){ try{ const d=await d1Get("proofs"); if(d.p.length||d.s){ PROOFS=d.p; PLAYERS=d.n||PLAYERS; PROOF_STATS=d.s||null; cacheSet("proofs",{p:PROOFS,n:PLAYERS,s:PROOF_STATS}); renderProofs(); return; } }catch(e){} }
   try{
     const cut=Date.now()-30*86400000; let all;
     if(OWNER){ const [q,pl]=await Promise.all([DB.collection("proofs").get(),DB.collection("lbads").get()]); all=q.docs.map(d=>({...d.data(),_id:d.id})); PLAYERS=pl.size; DB.doc("config/stats").set({players:pl.size},{merge:true}).catch(()=>{}); }

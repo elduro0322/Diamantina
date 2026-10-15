@@ -4,5 +4,8 @@
   "compatibility_date": "2025-06-01",
   "workers_dev": true,
   "keep_vars": true,
-  "assets": { "directory": ".", "binding": "ASSETS" }
+  "assets": { "directory": ".", "binding": "ASSETS" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "diamantina-db", "database_id": "0d5679ee-0d05-4845-a189-8d09ef9122ed" }
+  ]
 }
