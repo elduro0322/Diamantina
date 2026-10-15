@@ -102,7 +102,8 @@ async function d1Init(db) {
     "CREATE INDEX IF NOT EXISTS market_status ON market (status)",
     "CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, nft INTEGER, seller TEXT, buyer TEXT, units INTEGER, fee INTEGER, gets INTEGER, at INTEGER, claimed INTEGER DEFAULT 0, cat INTEGER)",
     "CREATE INDEX IF NOT EXISTS sales_seller ON sales (seller, claimed)",
-    "CREATE TABLE IF NOT EXISTS wnft (id INTEGER PRIMARY KEY, owner TEXT, at INTEGER)"
+    "CREATE TABLE IF NOT EXISTS wnft (id INTEGER PRIMARY KEY, owner TEXT, at INTEGER)",
+    "CREATE TABLE IF NOT EXISTS offstat (day TEXT, k TEXT, e TEXT, n INTEGER, PRIMARY KEY (day, k, e))"
   ].map(q => db.prepare(q)));
   D1_READY = true;
 }
@@ -273,6 +274,19 @@ async function d1(request, env) {
     if (!by || by === me.uid) return json({ ok: false, error: "bad" }, 400);
     await db.prepare("INSERT OR IGNORE INTO refs (uid, by, at, via) VALUES (?, ?, ?, ?)").bind(me.uid, by, now, str(body.via, 10) || "code").run();
     return json({ ok: true });
+  }
+  if (a === "ev") {                                        // flash-sale counters: seen / tapped / bought
+    const k = str(body.k, 8), e = str(body.e, 8);
+    if (!["vip", "gear", "hero"].includes(k) || !["view", "click", "buy"].includes(e)) return json({ ok: false, error: "bad" }, 400);
+    const day = new Date(now - BOG).toISOString().slice(0, 10);
+    await db.prepare("INSERT INTO offstat (day, k, e, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, k, e) DO UPDATE SET n = n + 1").bind(day, k, e).run();
+    return json({ ok: true });
+  }
+  if (a === "offstats") {                                  // owner: last 14 days
+    if (!me.owner) return json({ ok: false, error: "owner" }, 403);
+    const from = new Date(now - BOG - 14 * 86400000).toISOString().slice(0, 10);
+    const r = await db.prepare("SELECT day, k, e, n FROM offstat WHERE day >= ? ORDER BY day DESC").bind(from).all();
+    return json({ ok: true, list: r.results || [] });
   }
   if (a === "live") {                                      // owner: players online now
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);

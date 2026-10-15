@@ -851,6 +851,24 @@ main{overscroll-behavior-y:contain}
 .t3 .vipbadge{margin-left:3px;padding:0 5px 0 1px}.t3 .vipbadge b{display:none}.acctbox{display:flex;flex-direction:column;gap:8px;margin:10px 0;padding:12px;border-radius:14px;background:var(--panel-2);text-align:left}.acctbox h4{margin:0 0 2px;font-size:16px}.acctbox label{display:flex;flex-direction:column;gap:4px;font-weight:800;font-size:13px}.acctbox label span{display:flex;align-items:center;gap:6px}.acctbox label img{width:18px;height:18px;border-radius:50%}.acctbox select.field{padding:10px}.authbox{display:flex;flex-direction:column;gap:10px;text-align:left}.authbox .hint{margin:0}.authseg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--panel-2);border-radius:999px;padding:4px}.authseg button{border:0;border-radius:999px;padding:10px;font:inherit;font-weight:900;background:transparent;color:var(--ink)}.authseg button.on{background:var(--gold);color:#3A2400}.aulink{border:0;background:none;color:var(--muted);text-decoration:underline;font:inherit;font-size:13px;padding:0;align-self:flex-start}.auerr{min-height:18px;margin:0;color:#ff8fa3;font-weight:800;font-size:14px}.livebox{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 16px}.livebox b{font-size:24px}.livebox small{width:100%;color:var(--muted)}.livedot{width:12px;height:12px;border-radius:50%;background:#2ee66b;box-shadow:0 0 0 0 rgba(46,230,107,.7);animation:livep 1.6s infinite}@keyframes livep{70%{box-shadow:0 0 0 10px rgba(46,230,107,0)}100%{box-shadow:0 0 0 0 rgba(46,230,107,0)}}.cbtn.cboff,.cmi.cboff{opacity:.45;filter:grayscale(.9)}.cwtag.offtag{background:#5a1d2a;color:#ffb3c1;border-color:#ff4d6d}.coinoffs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.risk{margin-top:6px;padding:6px 8px;border-radius:10px;font-size:12.5px;font-weight:800;line-height:1.45}.risk.ok{background:rgba(46,230,107,.14);color:#7CF0A6}.risk.bad{background:rgba(255,80,110,.16);color:#FF9DB0}.risk.none{background:rgba(255,255,255,.07);color:var(--muted)}.xbans{display:flex;flex-direction:column;align-items:center;gap:12px;margin:4px 0 12px}.xbans iframe{border:0;display:block;width:300px;height:250px;max-width:100%;overflow:hidden;background:transparent}.socials{display:flex;justify-content:center;gap:12px;margin:0 0 10px}.soc{display:flex;align-items:center;gap:8px;padding:6px 14px 6px 6px;border-radius:999px;background:rgba(41,169,235,.14);border:1px solid rgba(41,169,235,.45);color:#fff;font-weight:800;font-size:14px;text-decoration:none}.soc:focus-visible{outline:2px solid #FDE68A;outline-offset:3px}.legal button{all:unset;cursor:pointer;color:var(--muted);font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
 .legal button:focus-visible{outline:2px solid #FDE68A;outline-offset:3px;border-radius:4px}
 .terms{max-height:62vh;overflow:auto;padding-right:6px;font-size:14px;line-height:1.55;text-align:left}.terms h3{font-family:var(--display);font-weight:600;font-size:16px;margin:16px 0 4px;color:#FDE68A}.terms p{margin:0 0 8px}.terms .tdate{color:var(--muted);font-size:12px}
+.vfl{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,10,30,.72);backdrop-filter:blur(3px);animation:vflIn .35s ease}
+@keyframes vflIn{from{opacity:0}to{opacity:1}}
+.vflbox{position:relative;width:min(400px,100%);max-height:calc(100vh - 32px);overflow:auto;border-radius:24px;padding:22px 16px 16px;text-align:center;color:#fff;background:radial-gradient(120% 80% at 50% 0%,#7B2CFF 0%,#3A1A8C 45%,#140B3A 100%);border:3px solid #FFC93C;box-shadow:0 0 0 4px rgba(255,201,60,.25),0 20px 60px rgba(0,0,0,.6);animation:vflPop .45s cubic-bezier(.2,1.4,.4,1)}
+@keyframes vflPop{from{transform:scale(.7)}to{transform:scale(1)}}
+.vflx{position:absolute;top:8px;right:8px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.18);color:#fff;font-size:22px;font-weight:900;line-height:40px;cursor:pointer}
+.vfltag{display:inline-block;padding:5px 14px;border-radius:999px;background:#FF3D6E;font-weight:900;font-size:13px;letter-spacing:1px;animation:vflBlink 1s infinite alternate}
+@keyframes vflBlink{from{opacity:1}to{opacity:.6}}
+.vflbox h3{margin:10px 0 2px;font-family:var(--display);font-size:28px;line-height:1.1;color:#FFE15A;text-shadow:0 3px 0 rgba(0,0,0,.35)}
+.vflbox p{margin:4px 0 10px;font-weight:700;opacity:.92}
+.vflclock{display:inline-flex;align-items:center;gap:8px;margin:2px 0 12px;padding:8px 18px;border-radius:16px;background:#0B0720;border:2px solid #FF3D6E;font-family:var(--display);font-size:34px;color:#FF6B8E;font-variant-numeric:tabular-nums}
+.vflplans{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+.vflplan{border:2px solid rgba(255,255,255,.25);border-radius:14px;padding:8px 6px;background:rgba(255,255,255,.08);color:#fff;font-weight:800;cursor:pointer}
+.vflplan.best{border-color:#FFC93C;background:rgba(255,201,60,.16)}
+.vflplans.hgrid{grid-template-columns:repeat(3,1fr);gap:6px}.vflhero{padding:6px 3px}.vflhero img{width:46px;height:46px;object-fit:contain;display:block;margin:0 auto 2px}.vflhero b{font-size:12px!important;line-height:1.15}.vflhero small{display:block;color:#FFC93C;font-weight:900;font-size:11px}.vflhero em{font-size:15px!important}
+.vfltab{width:100%;border-collapse:collapse;font-size:13px}.vfltab th,.vfltab td{padding:5px 4px;border-bottom:1px solid rgba(255,255,255,.1);text-align:center}.vfltab td:first-child{text-align:left}
+.vflplan b{display:block;font-size:17px}.vflplan s{opacity:.6;font-size:12px}.vflplan em{display:block;font-style:normal;color:#7CF0C2;font-size:18px}
+.vflgo{width:100%;padding:15px;border:0;border-radius:16px;font-size:19px;font-weight:900;color:#3A2400;background:linear-gradient(#FFE15A,#F5A400);box-shadow:0 5px 0 #A86A00;cursor:pointer}
+.firstoff.vflash{background:linear-gradient(90deg,#FF3D6E,#7B2CFF);color:#fff;animation:vflBlink 1s infinite alternate}
 .dealfloat{position:fixed;left:50%;bottom:84px;z-index:30;width:min(360px,calc(100vw - 24px));transform:translate(-50%,140%);transition:transform .45s cubic-bezier(.2,1.3,.4,1);display:flex;align-items:center;gap:10px;padding:12px 12px 12px 10px;border-radius:18px;background:linear-gradient(135deg,#3b1d7a,#7a2ea8 55%,#d1427a);border:2px solid #ffd76a;box-shadow:0 10px 30px rgba(0,0,0,.55),0 0 22px rgba(255,215,106,.35);color:#fff}
 .dealfloat.in{transform:translate(-50%,0)}
 .dealfloat .dealic{flex:0 0 52px;height:52px;display:grid;place-items:center;background:rgba(255,255,255,.12);border-radius:14px}.dealfloat .dealic svg{width:44px;height:44px}
@@ -1531,7 +1549,7 @@ const TIX_CHEST={tier:"ticket",tix:true,mode:"spin"};
 const tixAvail=()=>!(S.tixYear&&Date.now()-S.tixYear<365*86400000);
 const tixOn=()=>!!(S.tix&&!S.tix.used&&(S.tix.until||0)>Date.now());
 const tixP=u=>tixOn()?Math.round(u*(100-TIX_PCT))/100:u;
-function tixUse(type){ if(tixOn()&&(!type||TIX_TYPES.includes(type))){ S.tix.used=Date.now(); S.tix.on=type||""; save(); try{ renderBag(); }catch(e){} } }
+function tixUse(type){ try{ vflBuy(type); }catch(e){} if(tixOn()&&(!type||TIX_TYPES.includes(type))){ S.tix.used=Date.now(); S.tix.on=type||""; save(); try{ renderBag(); }catch(e){} } }
 function chestAt(n,magic){ const base=magic?((BW[bwId]||{}).chests||{}):CHESTS; if(n===12&&tixAvail()) return TIX_CHEST;
   if(magic&&n===KEY_CIRCLE&&KEY_NEXT[bwId]&&!keyValid(KEY_NEXT[bwId])&&vipTier()<BW[KEY_NEXT[bwId]].vip) return {tier:"key",key:true,mode:"spin",unlock:KEY_NEXT[bwId]};
   return base[n]; }
@@ -2417,7 +2435,7 @@ function bindPay(pre,order,onBal){
   document.querySelectorAll(`[data-${pre}c]`).forEach(x=>x.onclick=()=>cryptoPay({...order}));
 }
 function buyHeroDialog(id){
-  const p0=premBy(id), p={...p0,usd:tixP(p0.usd)}, units=Math.round(p.usd*1e5);
+  const p0=premBy(id), p={...p0,usd:offP("hero",p0.usd)}, units=Math.round(p.usd*1e5);
   if(premOwned(id)) return;
   if(pendingOf("hero",id)) return toast(t("inReview"),"heroes");
   showModal(premName(id),`<div class="premdlg"><img src="${premImg(id)}" alt=""><div><b>+${p.pct}% ${t("premBonus")}</b><p class="hint" style="margin:4px 0 0">${t("premWhy")}</p></div></div>
@@ -2444,7 +2462,7 @@ function premCardsHTML(compact){
       <img src="${premImg(p.id)}" alt="">${own?"":`<span class="plock"><svg viewBox="-50 -66 100 106" width="46" height="46">${padlockSVG(false,0,4,1.6)}</svg></span>`}
       <span class="pbadge">+${p.pct}%</span>
       <div class="nm">${premName(p.id)}</div>
-      <div class="st">${sel?t("selected"):own?t("tapSelect"):pend?t("inReview"):`${t("premBuy")} · $${p.usd.toFixed(2)}`}</div></button>`; }).join("");
+      <div class="st">${sel?t("selected"):own?t("tapSelect"):pend?t("inReview"):`${t("premBuy")} · ${offP("hero",p.usd)<p.usd?`<s style="opacity:.6">$${p.usd.toFixed(2)}</s> `:""}$${offP("hero",p.usd).toFixed(2)}`}</div></button>`; }).join("");
 }
 function bindPremCards(root){
   root.querySelectorAll("[data-ph]").forEach(b=>b.onclick=()=>{ const id=b.dataset.ph;
@@ -2504,7 +2522,7 @@ function renderHeroes(){
 let shopCat=-1, shopMode="gear";
 function renderShop(){ if(typeof navSync==="function") setTimeout(()=>navSync(),0);
   const modes=[["keys","magic"],["ads","ad"],["dmt","dmt"],["prem","heroes"],["gear","shop"],["market","gem"],["vip","vip"],["stake","stake"],["swap","swap"]];
-  { const tb=$("#shopTix"); if(tb) tb.innerHTML=(shopMode==="stake"||shopMode==="swap"||shopMode==="market"||shopMode==="ads"||shopMode==="dmt")?"":tixBannerHTML(); }
+  { const tb=$("#shopTix"); if(tb) tb.innerHTML=((shopMode==="stake"||shopMode==="swap"||shopMode==="market"||shopMode==="ads"||shopMode==="dmt")?"":tixBannerHTML())+(shopMode==="gear"?vflBannerHTML("gear"):shopMode==="prem"?vflBannerHTML("hero"):""); }
   $("#shopMode").innerHTML=modes.map(([m,i])=>`<button class="${shopMode===m?"on":""}" data-m="${m}" aria-pressed="${shopMode===m}">${ic(i,26)}<span>${t(m+"Tab")}</span></button>`).join("");
   $("#shopMode").querySelectorAll("button").forEach(b=>b.onclick=()=>{shopMode=b.dataset.m;renderShop();if(shopMode==="market")loadMarket(true);});
   const gear=shopMode==="gear"; $("#shopTabs").style.display=gear?"":"none"; $("#shopList").style.display=gear?"":"none";
@@ -2887,13 +2905,20 @@ const offerLeft=()=>Math.max(0,(S.offerStart||Date.now())+OFFER_MS-Date.now());
 const DEAL_PCT=20, DEAL_MS=2*3600000;
 const leftLong=ms=>{ const s=Math.max(0,Math.floor(ms/1000)), d=Math.floor(s/86400), r=s%86400, hh=String(Math.floor(r/3600)).padStart(2,"0"), mm=String(Math.floor(r%3600/60)).padStart(2,"0"), ss=String(r%60).padStart(2,"0"); return (d?d+"d ":"")+hh+":"+mm+":"+ss; };
 const dealOn=()=>(S.dealUntil||0)>Date.now();
-const vipOffPct=()=>firstOffer()?OFFER_PCT:dealOn()?DEAL_PCT:0;
+/* Daily 15-minute VIP flash sale: one big popup per player per day; the price stays in the shop until the clock runs out */
+const VFL_PCT=30, VFL_MS=15*60000;
+/* S.vfo = {day, vip:until, gear:until, hero:until} — circle 5 VIP, circle 12 weapons, circle 18 VIP heroes */
+const vflOn=(k="vip")=>!!(S.vfo&&S.vfo.day===bogota().key&&(S.vfo[k]||0)>Date.now());
+const vflUntil=(k="vip")=>(S.vfo&&S.vfo[k])||0;
+const offP=(k,u)=>{ const p=Math.max(tixOn()?TIX_PCT:0,vflOn(k)?VFL_PCT:0); return p?Math.round(u*(100-p))/100:u; };
+const vipOffPct=()=>firstOffer()?OFFER_PCT:vflOn()?VFL_PCT:dealOn()?DEAL_PCT:0;
 const vipT=v=>{ const p=Math.max(vipOffPct(),tixOn()?TIX_PCT:0), off=p>0; return {...v,full:v.usd,usd:off?Math.round(v.usd*(100-p))/100:v.usd,off,pct:p}; };
 function vipCompareHTML(){ const es=S.lang==="es", per=AD_UNITS*coinRate(), rows=[{n:0,m:1},...VIP_TIERS];
   return `<div class="vipcmp"><h4>📊 ${es?"¿Cuánto ganas con VIP?":"How much do you earn with VIP?"}</h4><small>${es?"Con los 20 anuncios del día · en":"With the 20 daily ads · in"} ${S.payCoin}</small>
     <table><tr><th></th><th>${es?"Por día":"Per day"}</th><th>${es?"Por mes":"Per month"}</th></tr>${rows.map(r=>`<tr class="${r.n===4?"best":""}"><td>${r.n?`VIP ${r.n} <b>×${r.m}</b>`:(es?"Sin VIP":"No VIP")}</td><td>${cryptoTxt(per*r.m*20)}</td><td>${cryptoTxt(per*r.m*20*30)}</td></tr>`).join("")}</table>
     <small>${es?"+ bonus de héroes, NFT y nivel. VIP dura 1 año.":"+ hero, NFT and level bonus. VIP lasts 1 year."}</small></div>`; }
-function offerHTML(){ if(!firstOffer()){ if(!dealOn()||vipTier()>=4) return ""; const es=S.lang==="es"; return `<div class="firstoff">⚡ <b>${es?`¡Oferta especial -${DEAL_PCT}%!`:`Special deal -${DEAL_PCT}%!`}</b><span>${es?"Termina en":"Ends in"} <span class="dealleft">${leftStr(S.dealUntil-Date.now())}</span></span></div>`; } const es=S.lang==="es", h=Math.ceil(offerLeft()/3600000);
+function offerHTML(){ if(!firstOffer()&&vflOn()&&vipTier()<4){ const es=S.lang==="es"; return `<div class="firstoff vflash">⚡ <b>${es?`¡Oferta relámpago -${VFL_PCT}%!`:S.lang==="pt"?`Oferta relâmpago -${VFL_PCT}%!`:`Flash sale -${VFL_PCT}%!`}</b><span>${es?"Quedan":S.lang==="pt"?"Restam":"Ends in"} <span class="vflleft" data-u="${vflUntil("vip")}">${leftStr(vflUntil("vip")-Date.now())}</span></span></div>`; }
+  if(!firstOffer()){ if(!dealOn()||vipTier()>=4) return ""; const es=S.lang==="es"; return `<div class="firstoff">⚡ <b>${es?`¡Oferta especial -${DEAL_PCT}%!`:`Special deal -${DEAL_PCT}%!`}</b><span>${es?"Termina en":"Ends in"} <span class="dealleft">${leftStr(S.dealUntil-Date.now())}</span></span></div>`; } const es=S.lang==="es", h=Math.ceil(offerLeft()/3600000);
   return `<div class="firstoff">🎁 <b>${es?`¡Primera compra -${OFFER_PCT}%!`:`First purchase -${OFFER_PCT}%!`}</b><span>${es?`Solo para nuevos jugadores · quedan ${h} h`:`New players only · ${h} h left`}</span></div>`; }
 function vipEnd(u){ if(window.__OWNER||!(u>Date.now())) return S.lang==="en"?"Owner · permanent":S.lang==="pt"?"Dono · permanente":"Dueño · permanente"; return dateStr(u); }
 function dateStr(ms){return new Date(ms).toLocaleDateString(LOC(),{day:"numeric",month:"short",year:"numeric"});}
@@ -2930,7 +2955,7 @@ function vipDialog(m){
 }
 async function sendVipReq(method,tx,status,T0){
   T0=T0||VIP_TIERS[0];
-  S.vipReq={method,tx,status,at:Date.now(),tier:T0.n}; save();
+  S.vipReq={method,tx,status,at:Date.now(),tier:T0.n}; save(); try{ vflBuy("vip"); }catch(e){}
   if(DB&&UID){ try{ await DB.doc("upgrades/"+UID).set({method,tx,status,at:Date.now(),tier:T0.n,amountUsd:T0.usd.toFixed(2)}); }catch(e){} }
 }
 async function loadVip(){
@@ -3302,6 +3327,17 @@ function renderAdmin(){
   if(adminTab==="cfg") renderCfg();
   if(adminTab==="ads") renderAdmAds();
 }
+async function loadVflStats(){
+  const el=$("#vflStats"); if(!el) return; const es=S.lang==="es";
+  try{ const d=await d1Post("offstats",{}); const T={}, today=new Date(Date.now()+BOGOTA_OFFSET).toISOString().slice(0,10);
+    d.list.forEach(x=>{ for(const p of [x.day===today?"t":null,"w"]){ if(!p) continue; const r=(T[p+x.k]=T[p+x.k]||{view:0,click:0,buy:0}); r[x.e]+=x.n; } });
+    const nm={vip:es?"Planes VIP (casilla 5)":"VIP plans (circle 5)",gear:es?"Armas (casilla 12)":"Weapons (circle 12)",hero:es?"Héroes VIP (casilla 18)":"VIP heroes (circle 18)"};
+    const row=(p,k)=>{ const r=T[p+k]||{view:0,click:0,buy:0}; return `<tr><td>${nm[k]}</td><td>${r.view}</td><td>${r.click}</td><td><b>${r.buy}</b></td><td>${r.view?(r.buy*100/r.view).toFixed(1)+"%":"—"}</td></tr>`; };
+    const tbl=(p,h)=>`<p class="hint" style="margin:8px 0 4px;font-weight:800">${h}</p><table class="vfltab"><tr><th></th><th>${es?"Vieron":"Seen"}</th><th>${es?"Tocaron":"Tapped"}</th><th>${es?"Compraron":"Bought"}</th><th>%</th></tr>${["vip","gear","hero"].map(k=>row(p,k)).join("")}</table>`;
+    el.innerHTML=`<div class="panel" style="margin-top:12px"><h2>⚡ ${es?"Ofertas relámpago":"Flash sales"}</h2>${tbl("t",es?"Hoy":"Today")}${tbl("w",es?"Últimos 14 días":"Last 14 days")}
+      <p class="hint" style="margin:6px 0 0">${es?"«Compraron» cuenta las compras hechas mientras la oferta estaba activa (con saldo o pedidos por FaucetPay/Cwallet/cripto).":"«Bought» counts purchases made while the offer was active."}</p></div>`;
+  }catch(e){ el.innerHTML=""; }
+}
 async function loadStats(){
   const box=$("#adminStats"); if(!box||!(DB&&UID)) return; box.innerHTML=`<div class="panel"><p class="hint">${t("mkLoading")}</p></div>`;
   const STK=[]; const k=bogota().key, wk=weekInfo().key, S0={players:0,today:0,fToday:0,fWeek:0,refs:0,nfts:0,sales:0,proofs:0,paid:0,vip:0,pendPay:0,pendOrd:0,dmt:0};
@@ -3322,8 +3358,9 @@ async function loadStats(){
     ${card("gem","stNfts",`${S0.nfts}/${NFT_TOTAL}`)}${card("shop","stSales",nf(S0.sales))}
     ${card("pay","stPaid",`$${S0.paid.toFixed(S0.paid<1?4:2)}`)}${card("pay","stProofs",nf(S0.proofs))}
     ${card("pay","stPendPay",nf(S0.pendPay),S0.pendPay?"warn":"")}${card("shop","stPendOrd",nf(S0.pendOrd),S0.pendOrd?"warn":"")}${card("pay","stWait",nf(S0.wait||0))}
-  </div><p class="hint">${t("stNote")}</p>${stakeAdminHTML(STK)}
+  </div><p class="hint">${t("stNote")}</p><div id="vflStats"></div>${stakeAdminHTML(STK)}
   <p class="hint" style="margin:12px 0 6px;font-weight:800">${t("magicPrev")}</p><div class="bwrow">${BW_ORDER.map(id=>`<button class="bwchip open" data-pv="${id}" style="--k1:${(BW[id].key||["#FDE047"])[0]};--k2:${(BW[id].key||["#FDE047","#DC2626"])[1]}">${ic(BW[id].icon,34)}<b>${t(BW[id].name)}</b><small>${t("magicPrevSub")}</small></button>`).join("")}</div></div>`;
+  loadVflStats();
   box.querySelectorAll("[data-pv]").forEach(b=>b.onclick=()=>{ magicPreview=true; bwId=b.dataset.pv; magicMode=true; viewDay=null; goView("map"); renderMap(); });
 }
 const stkAmt=x=>x.a==="USD"?usd(x.amt||0):x.a==="DMT"?nf(x.amt||0)+" DMT":nf(x.amt||0,8)+" "+x.a;
@@ -4166,7 +4203,7 @@ let dealTimer=null;
 function dealTick(){ if((S.claims||0)%3!==0) return; setTimeout(showDeal,1600); }
 function dealTxt(es,pt,en){ return S.lang==="es"?es:S.lang==="pt"?pt:en; }
 function showDeal(){
-  hideDeal(); const cur=window.__OWNER?0:vipTier(); let html="", go=null;
+  if($("#vfl")) return; hideDeal(); const cur=window.__OWNER?0:vipTier(); let html="", go=null;
   if(tixOn()){
     const es=S.lang==="es";
     html=`<div class="dealic">${TIX_SVG(48)}</div><div class="dealbody"><span class="dealtag">-${TIX_PCT}%</span>
@@ -4216,9 +4253,76 @@ function tixRemind(force){
 setTimeout(()=>{ try{ tixRemind(); }catch(e){} },4000);
 setInterval(()=>{ try{ tixRemind(); }catch(e){} },10*60000);
 function hideDeal(){ const d=$("#dealFloat"); if(d) d.remove(); clearInterval(dealTimer); }
+function vflCan(kind){
+  if(kind==="vip"){ const cur=window.__OWNER?4:vipTier(); return !(cur>=4||firstOffer()||tixOn()||(S.vipReq&&S.vipReq.status==="pending")); }
+  if(tixOn()) return false;
+  if(kind==="gear") return !!flashId();
+  if(kind==="hero") return PREMIUM.some(p=>!premOwned(p.id)&&!pendingOf("hero",p.id));
+  return false;
+}
+function vflQueue(kind){   /* once a day per kind; waits until other windows are closed */
+  const k=bogota().key; if(!S.vfo||S.vfo.day!==k) S.vfo={day:k};
+  if(S.vfo[kind]||!vflCan(kind)) return;
+  const show=()=>{ if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; } if($("#vfl")){ setTimeout(show,2000); return; } vflShow(kind); };
+  setTimeout(show,1300);
+}
+function vflShow(kind="vip"){
+  const k=bogota().key; if(!S.vfo||S.vfo.day!==k) S.vfo={day:k};
+  if(!vflOn(kind)) S.vfo[kind]=Date.now()+VFL_MS; save(); hideDeal();
+  const es=S.lang==="es", pt=S.lang==="pt", L=(a,b,c)=>es?a:pt?b:c, cur=window.__OWNER?4:vipTier(), u=vflUntil(kind);
+  let title="", sub="", grid="", goBtn=null;
+  if(kind==="vip"){
+    title=L("¡Compra ahora tu plan VIP!","Compre agora seu plano VIP!","Buy your VIP plan now!");
+    sub=L("Gana hasta ×10 por cada anuncio. Este precio se acaba en:","Ganhe até ×10 por anúncio. Este preço acaba em:","Earn up to ×10 per ad. This price ends in:");
+    grid=`<div class="vflplans">${VIP_TIERS.filter(v=>v.n>cur).map(v=>{ const T=vipT(v); return `<button class="vflplan ${v.n===4?"best":""}" data-vfp="${v.n-1}"><b>VIP ${v.n} ×${v.m}</b><s>$${v.usd.toFixed(2)}</s><em>$${T.usd.toFixed(2)}</em></button>`; }).join("")}</div>`;
+    goBtn=()=>vflGo(()=>{ vipSel=3; shopMode="vip"; goView("shop"); });
+  } else if(kind==="gear"){
+    const id=flashId(); if(!id) return; const hid=id.split(":")[1], hi=hIdx(hid), full=comboPrice(id)*POINT_USD, now=offP("gear",full);
+    title=L("¡Armas con descuento!","Armas com desconto!","Weapons on sale!");
+    sub=L(`Todas las armas -${VFL_PCT}%. Más bonus en cada anuncio. Se acaba en:`,`Todas as armas -${VFL_PCT}%. Mais bônus por anúncio. Acaba em:`,`All weapons -${VFL_PCT}%. More bonus per ad. Ends in:`);
+    grid=`<div class="combopieces" style="--c:${GEAR_HEROES[hi].c};margin-bottom:6px">${comboParts(id).map(x=>gearSVG(hi,+x.split(":")[1])).join("")}</div>
+      <div class="vflplans" style="grid-template-columns:1fr"><button class="vflplan best" data-vfg="1"><b>${escapeHtml(itemName(id))}</b><s>$${full.toFixed(2)}</s><em>$${now.toFixed(2)}</em></button></div>`;
+    goBtn=()=>vflGo(()=>{ shopMode="gear"; goView("shop"); setTimeout(()=>buyDialog(id),250); });
+  } else {
+    const list=PREMIUM.filter(p=>!premOwned(p.id)&&!pendingOf("hero",p.id)); if(!list.length) return;
+    title=L("¡Héroes VIP a la venta!","Heróis VIP à venda!","VIP heroes on sale!");
+    sub=L("Hasta +80% de bonus en cada anuncio. Este precio se acaba en:","Até +80% de bônus por anúncio. Este preço acaba em:","Up to +80% bonus per ad. This price ends in:");
+    grid=`<div class="vflplans hgrid">${list.map(p=>`<button class="vflplan vflhero" data-vfh="${p.id}" style="border-color:${p.c}"><img src="${premImg(p.id)}" alt=""><b>${escapeHtml(premName(p.id))}</b><small>+${p.pct}%</small><s>$${p.usd.toFixed(2)}</s><em>$${offP("hero",p.usd).toFixed(2)}</em></button>`).join("")}</div>`;
+    goBtn=()=>vflGo(()=>{ shopMode="prem"; goView("shop"); });
+  }
+  const old=$("#vfl"); if(old) old.remove();
+  const d=document.createElement("div"); d.id="vfl"; d.className="vfl"; d.dataset.k=kind;
+  if(!S.vfo["s_"+kind]){ S.vfo["s_"+kind]=1; save(); vflEv(kind,"view"); }
+  d.innerHTML=`<div class="vflbox" role="dialog"><button class="vflx" aria-label="Cerrar">✕</button>
+    <span class="vfltag">⚡ ${L("OFERTA RELÁMPAGO","OFERTA RELÂMPAGO","FLASH SALE")} -${VFL_PCT}%</span>
+    <h3>${title}</h3><p>${sub}</p>
+    <div class="vflclock">⏰ <span class="vflleft" data-u="${u}" data-k="${kind}">${leftStr(u-Date.now()).slice(3)}</span></div>
+    ${grid}<button class="vflgo">${L("¡Comprar ahora!","Comprar agora!","Buy now!")}</button></div>`;
+  document.body.appendChild(d);
+  d.querySelector(".vflx").onclick=()=>d.remove(); d.onclick=e=>{ if(e.target===d) d.remove(); };
+  d.querySelectorAll("[data-vfp]").forEach(b=>b.onclick=()=>vflGo(()=>{ vipSel=Math.max(Math.min(3,cur),+b.dataset.vfp); shopMode="vip"; goView("shop"); }));
+  d.querySelectorAll("[data-vfg]").forEach(b=>b.onclick=goBtn);
+  d.querySelectorAll("[data-vfh]").forEach(b=>b.onclick=()=>vflGo(()=>{ shopMode="prem"; goView("shop"); setTimeout(()=>buyHeroDialog(b.dataset.vfh),250); }));
+  d.querySelector(".vflgo").onclick=goBtn;
+}
+function vflGo(fn){ const v=$("#vfl"); if(v){ vflEv(v.dataset.k,"click"); v.remove(); } fn(); try{ renderShop(); }catch(e){} }
+/* counters for the owner: how many saw each offer, tapped it, and bought during it */
+const VFL_SENT={};
+function vflEv(k,e){ if(!k||!UID) return; const key=k+e, now=Date.now(); if(VFL_SENT[key]&&now-VFL_SENT[key]<8000) return; VFL_SENT[key]=now; try{ d1Post("ev",{k,e}).catch(()=>{}); }catch(err){} }
+function vflBuy(type){ const k=type==="vip"?"vip":type==="gear"?"gear":type==="hero"?"hero":null; if(k&&vflOn(k)) vflEv(k,"buy"); }
+function vflBannerHTML(kind){ if(!vflOn(kind)) return ""; const es=S.lang==="es", u=vflUntil(kind);
+  const what=kind==="gear"?(es?"Armas":"Weapons"):(es?"Héroes VIP":"VIP heroes");
+  return `<div class="firstoff vflash" style="margin-bottom:10px">⚡ <b>${what} -${VFL_PCT}%</b><span>${es?"Quedan":"Ends in"} <span class="vflleft" data-u="${u}">${leftStr(u-Date.now())}</span></span></div>`; }
+/* clocks: popup + shop banners; when the 15 minutes end the price goes back to normal */
+let vflWas="";
+setInterval(()=>{ const on=["vip","gear","hero"].filter(k=>vflOn(k)).join();
+  document.querySelectorAll(".vflleft").forEach(el=>{ const ms=+el.dataset.u-Date.now(); el.textContent=el.closest(".vflclock")?leftStr(ms).slice(3):leftStr(ms); });
+  const v=$("#vfl"); if(v){ const el=v.querySelector(".vflleft"); if(el&&+el.dataset.u<=Date.now()) v.remove(); }
+  if(vflWas!==on){ try{ if($("#v-shop")&&$("#v-shop").classList.contains("on")) renderShop(); }catch(e){} }
+  vflWas=on; },1000);
 setInterval(()=>{ document.querySelectorAll(".firstoff .dealleft").forEach(el=>{ const ms=(S.dealUntil||0)-Date.now(); if(ms<=0){ try{ renderVip(); }catch(e){} } else el.textContent=leftStr(ms); }); },1000);
 
-function complete(n){S.done=n;countAd();save();setTimeout(popArm,600);dealTick();renderMap();renderPay(); if(n===5||n===10) queuePromo(n===5?"offer":"vip"); if(n===20) queueMagicOpen();}
+function complete(n){S.done=n;countAd();save();setTimeout(popArm,600);dealTick();renderMap();renderPay(); if(n===5) vflQueue("vip"); if(n===12) vflQueue("gear"); if(n===18) vflQueue("hero"); if(n===20) queueMagicOpen();}
 const leftStr=ms=>{const s=Math.max(0,Math.floor(ms/1000));return `${String(Math.floor(s/3600)).padStart(2,"0")}:${String(Math.floor(s%3600/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;};
 function flashBanner(){
   const f=ensureFlash(); if(!f) return "";
@@ -4472,9 +4576,9 @@ const pendingItem=id=>(S.orders||[]).some(o=>o.type==="gear"&&o.item===id&&o.sta
 const livePrice=tk=>(liveStatus==="est"||liveStatus==="loading")?null:LIVE[tk];
 function coinQuote(usdAmt){const c=coinBy(S.payCoin), pr=livePrice(c.t); return pr?`${nf(usdAmt/pr,8)} ${c.t}`:null;}
 function buyDialog(id){
-  const combo=isCombo(id), hid=combo?id.split(":")[1]:id.split(":")[0], ci=combo?0:id.split(":")[1], hi=hIdx(hid), pts=piecePrice(id), usdFull=pts*POINT_USD, usdAmt=tixP(usdFull), units=Math.round(usdAmt*1e5), q=coinQuote(usdAmt);
+  const combo=isCombo(id), hid=combo?id.split(":")[1]:id.split(":")[0], ci=combo?0:id.split(":")[1], hi=hIdx(hid), pts=piecePrice(id), usdFull=pts*POINT_USD, usdAmt=offP("gear",usdFull), units=Math.round(usdAmt*1e5), q=coinQuote(usdAmt);
   showModal(itemName(id),`${combo?`<div class="combopieces" style="--c:${GEAR_HEROES[hi].c}">${comboParts(id).map(x=>gearSVG(hi,+x.split(":")[1])).join("")}</div><p class="offerline"><s>$${(comboFull(id)*POINT_USD).toFixed(2)}</s> · ${fmt(t("saveOff"),{p:offFor(id)})}</p>`:`<div class="item" style="--c:${GEAR_HEROES[hi].c};max-width:180px;margin:0 auto 8px">${gearSVG(hi,+ci)}</div>`}
-    <p class="amt">${tixOn()?`<s style="opacity:.6;font-size:.7em">$${usdFull.toFixed(2)}</s> 🎟️ `:""}$${usdAmt.toFixed(2)} USD<small>${q?"≈ "+q+" · CoinGecko":t("payNoLive")}</small></p>
+    <p class="amt">${usdAmt<usdFull?`<s style="opacity:.6;font-size:.7em">$${usdFull.toFixed(2)}</s> ${tixOn()?"🎟️":"⚡"} `:""}$${usdAmt.toFixed(2)} USD<small>${q?"≈ "+q+" · CoinGecko":t("payNoLive")}</small></p>
     <div class="vipbtns paylist">
       <button class="gold" id="pBal" ${(S.bal||0)>=units?"":"disabled"}>${ic("pay",24)}${t("payBal")} (${usd(S.bal||0)})</button>
       <button data-pm="faucetpay"><img src="${PAY.fp}" alt="">FaucetPay</button>
@@ -4494,7 +4598,7 @@ function cryptoDialog(o){
     [[t("close"),"no",closeModal],[t("vipSendBtn"),"go",async()=>{
       const tx=($("#cpTx").value||"").trim(); if(tx.length<4){ toast(t("vipTx")); return; }
       const id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-      const ord={id,type:o.type,item:o.item||null,tokens:o.tokens||null,usd:o.usd.toFixed(2),units:Math.round(o.usd*1e5),coin:c.t,coinAmt:LIVE[c.t]?o.usd/LIVE[c.t]:null,method:o.method,tx,status:"pending",at:Date.now()};
+      try{ vflBuy(o.type); }catch(e){} const ord={id,type:o.type,item:o.item||null,tokens:o.tokens||null,usd:o.usd.toFixed(2),units:Math.round(o.usd*1e5),coin:c.t,coinAmt:LIVE[c.t]?o.usd/LIVE[c.t]:null,method:o.method,tx,status:"pending",at:Date.now()};
       if(tixOn()&&TIX_TYPES.includes(o.type)){ ord.ticket=TIX_PCT; tixUse(o.type); }
       S.orders=[...(S.orders||[]),ord]; save();
       if(DB&&UID){ try{ await DB.doc("orders/"+UID).set({updatedAt:Date.now()}); await DB.doc("orders/"+UID).collection("list").doc(id).set(ord); }catch(e){} }
@@ -4556,7 +4660,7 @@ function cryptoPay(o){
   const submit=async(amt)=>{
     const tx=($("#cpHash").value||"").trim(); if(tx.length<8){ toast(t("txHash")); return; }
     const id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-    const ord={id,type:o.type,item:o.item||null,tokens:o.tokens||null,usd:o.usd.toFixed(2),units:Math.round(o.usd*1e5),coin:cpCoin,coinAmt:amt,network:OWNER_WALLETS[cpCoin].net,method:"crypto",tx,status:"pending",at:Date.now()};
+    try{ vflBuy(o.type); }catch(e){} const ord={id,type:o.type,item:o.item||null,tokens:o.tokens||null,usd:o.usd.toFixed(2),units:Math.round(o.usd*1e5),coin:cpCoin,coinAmt:amt,network:OWNER_WALLETS[cpCoin].net,method:"crypto",tx,status:"pending",at:Date.now()};
     if(tixOn()&&TIX_TYPES.includes(o.type)){ ord.ticket=TIX_PCT; tixUse(o.type); }
     S.orders=[...(S.orders||[]),ord]; if(o.type==="vip") S.vipReq={method:"crypto",tx,status:"pending",at:Date.now()}; save();
     if(DB&&UID){ try{ await DB.doc("orders/"+UID).set({updatedAt:Date.now()}); await DB.doc("orders/"+UID).collection("list").doc(id).set(ord); }catch(e){} }
