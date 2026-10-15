@@ -3012,18 +3012,20 @@ async function pushLb(){
 function countAd(){ claimMark(); const before=lvlInfo().L; wkAds().ads++; S.claims=(S.claims||0)+1; save(); pushLb(); renderLevel(); const v=lvlInfo(); if(v.L>before) setTimeout(()=>toast(fmt(t("levelUp"),{n:v.L,p:v.pct}),"trophy"),900); }
 /* ---- Firestore read savers: the free plan allows 50,000 reads/day, so big lists are cached on the phone ---- */
 const cacheGet=(k,ttl)=>{ try{ const v=JSON.parse(localStorage.getItem("dc-"+k)||"null"); if(v&&Date.now()-v.at<ttl) return v.d; }catch(e){} return null; };
+/* Firestore keeps retrying when the daily limit is hit, so we stop waiting after a few seconds */
+const withTO=(p,ms=7000)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),ms))]);
 const cacheSet=(k,d)=>{ try{ localStorage.setItem("dc-"+k,JSON.stringify({at:Date.now(),d})); }catch(e){} };
 async function loadComp(force){
   if(!(DB&&UID)){ renderComp(); return; }
   const k=weekInfo().key;
   { const c=cacheGet("comp"+k,force?5*60000:20*60000); if(c){ COMP={...c,loaded:true}; renderComp(); return; } }
   const F=fortInfo(), fk=String(F.key||F.start||"");
-  try{ const b=await DB.doc("board/comp").get(); const x=b.exists?b.data():null;
+  try{ const b=await withTO(DB.doc("board/comp").get()); const x=b.exists?b.data():null;
     if(x&&x.week===k&&x.fk===fk&&Date.now()-(x.at||0)<45*60000){ COMP={ads:x.ads||[],refs:x.refs||[],names:x.names||{},heroes:x.heroes||{},vips:x.vips||{},loaded:true};
-      cacheSet("comp"+k,{ads:COMP.ads,refs:COMP.refs,names:COMP.names,heroes:COMP.heroes,vips:COMP.vips}); renderComp(); return; } }catch(e){}
-  try{
+      cacheSet("comp"+k,{ads:COMP.ads,refs:COMP.refs,names:COMP.names,heroes:COMP.heroes,vips:COMP.vips}); renderComp(); return; } }catch(e){ var fbDown=true; }
+  try{ if(typeof fbDown!=="undefined"&&fbDown) throw new Error("firebase down");
     /* only this week's active players and this fortnight's referrals (not the whole history) */
-    const [all,refs]=await Promise.all([DB.collection("lbads").where("week","==",k).get(),DB.collection("refs").where("at",">=",F.start-BOGOTA_OFFSET).get()]);
+    const [all,refs]=await withTO(Promise.all([DB.collection("lbads").where("week","==",k).get(),DB.collection("refs").where("at",">=",F.start-BOGOTA_OFFSET).get()]),12000);
     const names={}, heroes={}; const ads=[];
     const vips={}; all.docs.forEach(d=>{const x=d.data(); names[d.id]=x.nick||("Hero-"+(x.code||"")); heroes[d.id]=x.hero; if(x.vipNow) vips[d.id]=x.vipNow; if(x.week===k&&x.ads>0) ads.push({uid:d.id,n:x.ads});});
     const cnt={}; refs.docs.forEach(d=>{const x=d.data(); if(x.via==="bought") return; if(x.by&&inFort(x.at,F)) cnt[x.by]=(cnt[x.by]||0)+1;});
@@ -3068,7 +3070,7 @@ function renderComp(){
   html+=`<div class="seg two"><button class="${compBoard==="ads"?"on":""}" data-b="ads">${ic("ad",24)}<span>${t("boardAds")}</span></button><button class="${compBoard==="refs"?"on":""}" data-b="refs">${ic("heroes",24)}<span>${t("boardRefs")}</span></button></div>`;
   html+=`<div class="panel lb">${!COMP.loaded?`<p class="hint">${t("mkLoading")}</p>`:list.length?list.slice(0,10).map((r,i)=>{const hsrc=heroImg(COMP.heroes[r.uid]||"princess");
     return `<div class="lbrow ${r.uid===UID?"me":""}">${medal(i)}<img src="${hsrc}" alt=""><div class="grow"><span class="nmrow"><b>${escapeHtml(r.uid===UID?myNick()+" ("+t("you")+")":(COMP.names[r.uid]||"Hero"))}</b>${vipBadge(vipOf(r.uid),true)}</span><small>${r.n} ${unit}</small></div><span class="prize">$${(PRIZES[i]/1e5).toFixed(2)}</span></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("notRanked")}</p>`}
-    ${myIdx>=10?`<div class="lbrow me">${medal(myIdx)}<div class="grow"><b>${fmt(t("myPos"),{n:myIdx+1,c:list[myIdx].n+" "+unit})}</b></div></div>`:""}</div>`;
+    ${myIdx>=10?`<div class="lbrow me">${medal(myIdx)}<div class="grow"><b>${fmt(t("myPos"),{n:myIdx+1,c:list[myIdx].n+" "+unit})}</b></div></div>`:""}${myIdx<0&&compBoard==="ads"&&(wkAds().ads||0)>0?`<div class="lbrow me"><span class="medal plain">•</span><div class="grow"><b>${escapeHtml(myNick())} (${t("you")})</b><small>${wkAds().ads} ${unit} · ${S.lang==="es"?"tu puesto aparece en la próxima actualización":"your place shows on the next update"}</small></div></div>`:""}</div>`;
   html+=`<div class="panel"><h2>${t("nick")}</h2><div class="amtrow"><input class="field" id="nickIn" maxlength="20" value="${escapeHtml(myNick())}"><button class="maxbtn" id="nickSave">${t("save")}</button></div></div>`;
   html+=`<div class="panel"><h2>${ic("heroes",28)} ${t("inviteTitle")}</h2><div class="reflife">${ic("heroes",34)}<div><b>${fmt(t("refLife"),{p:refPct()})}</b><small>${fmt(t("refStats"),{n:REF_COUNT,x:usd(S.refEarned||0)})}</small></div></div>${refTiersHTML()}<p class="hint" style="margin-top:8px">${t("inviteSub")}</p>
     <div class="codebox"><small>${t("myLink")}</small><div class="reflink" id="refLinkTxt">${escapeHtml(refLink())}</div></div>
@@ -4514,9 +4516,9 @@ async function loadProofs(){
   try{
     const cut=Date.now()-30*86400000; let all;
     if(OWNER){ const [q,pl]=await Promise.all([DB.collection("proofs").get(),DB.collection("lbads").get()]); all=q.docs.map(d=>({...d.data(),_id:d.id})); PLAYERS=pl.size; DB.doc("config/stats").set({players:pl.size},{merge:true}).catch(()=>{}); }
-    else { let bp=null; try{ const b=await DB.doc("board/proofs").get(); bp=b.exists?b.data():null; }catch(e){}
+    else { let bp=null; try{ const b=await withTO(DB.doc("board/proofs").get()); bp=b.exists?b.data():null; }catch(e){}
       if(bp&&Date.now()-(bp.at||0)<60*60000){ PROOFS=bp.p||[]; PLAYERS=bp.n||PLAYERS; PROOF_STATS=bp.s||null; cacheSet("proofs",{p:PROOFS,n:PLAYERS,s:PROOF_STATS}); renderProofs(); return; }
-      const q=await DB.collection("proofs").orderBy("at","desc").limit(20).get(); all=q.docs.map(d=>({...d.data(),_id:d.id})); }
+      const q=await withTO(DB.collection("proofs").orderBy("at","desc").limit(20).get()); all=q.docs.map(d=>({...d.data(),_id:d.id})); }
     PROOFS=all.filter(x=>(x.at||0)>=cut).sort((a,b)=>b.at-a.at);
     try{ const st=await DB.doc("config/stats").get(); PROOF_STATS=st.exists?st.data():null; if(!OWNER&&PROOF_STATS&&PROOF_STATS.players) PLAYERS=PROOF_STATS.players; }catch(e){}
     cacheSet("proofs",{p:PROOFS.slice(0,40),n:PLAYERS,s:PROOF_STATS});
