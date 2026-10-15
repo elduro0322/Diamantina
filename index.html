@@ -2734,10 +2734,12 @@ async function loadMarket(force){
   if(!force&&marketLoaded&&Date.now()-MARKET_AT<10*60000){ renderMarket(); renderBag(); return; }
   if(!force&&!marketLoaded){ const c=cacheGet("mk"+UID,10*60000); if(c){ MY_NFTS=c.my||[]; NFT_TAKEN=c.taken||0; Object.assign(NFT_TRADES,c.tr||{}); MARKET=c.mk||[]; (S.nft500||[]).forEach(id=>{ if(!MY_NFTS.includes(id)) MY_NFTS.push(id); }); marketLoaded=true; MARKET_AT=Date.now(); renderMarket(); renderBag(); return; } }
   try{
-    const [nf,mk]=await Promise.all([DB.collection(NFT_COL).get(),DB.collection(MARKET_COL).where("status","==","open").get()]);
-    MY_NFTS=[]; NFT_TAKEN=0; nf.docs.forEach(d=>{const x=d.data(); if(x) NFT_TRADES[+d.id]=x.trades||0; if(x&&x.owner){NFT_TAKEN++; if(x.owner===UID) MY_NFTS.push(+d.id);}});
-    const ownerOf={}; nf.docs.forEach(d=>{const x=d.data(); if(x&&x.owner) ownerOf[+d.id]=x.owner;});
-    for(const id of (S.nft500||[])){ if(MY_NFTS.includes(id)) continue; const o=ownerOf[id];
+    const [mine,mk]=await Promise.all([DB.collection(NFT_COL).where("owner","==",UID).get(),DB.collection(MARKET_COL).where("status","==","open").get()]);
+    MY_NFTS=mine.docs.map(d=>+d.id);
+    let st=null; try{ const b=await DB.doc("board/nft").get(); st=b.exists?b.data():null; }catch(e){}
+    if(!st||Date.now()-(st.at||0)>30*60000){ const nf=await DB.collection(NFT_COL).get(); const tr={}; let taken=0; nf.docs.forEach(d=>{const x=d.data(); if(x&&x.trades) tr[d.id]=x.trades; if(x&&x.owner) taken++;}); st={taken,tr,at:Date.now()}; DB.doc("board/nft").set(st).catch(()=>{}); }
+    NFT_TAKEN=st.taken||0; Object.entries(st.tr||{}).forEach(([id,v])=>{ NFT_TRADES[+id]=v; });
+    for(const id of (S.nft500||[])){ if(MY_NFTS.includes(id)) continue; let o=null; try{ const d=await DB.doc(NFT_COL+"/"+id).get(); o=d.exists?d.data().owner:null; }catch(e){}
       if(!o){ MY_NFTS.push(id); NFT_TAKEN++; DB.doc(NFT_COL+"/"+id).set({id,owner:UID,claimedAt:Date.now()},{merge:true}).catch(()=>{}); } }
     MARKET=mk.docs.map(d=>({...d.data(),docId:d.id}));
     const now=Date.now(); MARKET.sort((a,b)=>((b.promotedUntil||0)>now)-((a.promotedUntil||0)>now)||(b.at||0)-(a.at||0));
@@ -3014,14 +3016,20 @@ async function loadComp(force){
   if(!(DB&&UID)){ renderComp(); return; }
   const k=weekInfo().key;
   { const c=cacheGet("comp"+k,force?5*60000:20*60000); if(c){ COMP={...c,loaded:true}; renderComp(); return; } }
+  const F=fortInfo(), fk=String(F.key||F.start||"");
+  try{ const b=await DB.doc("board/comp").get(); const x=b.exists?b.data():null;
+    if(x&&x.week===k&&x.fk===fk&&Date.now()-(x.at||0)<20*60000){ COMP={ads:x.ads||[],refs:x.refs||[],names:x.names||{},heroes:x.heroes||{},vips:x.vips||{},loaded:true}; if(x.players) PLAYERS=x.players;
+      cacheSet("comp"+k,{ads:COMP.ads,refs:COMP.refs,names:COMP.names,heroes:COMP.heroes,vips:COMP.vips}); renderComp(); return; } }catch(e){}
   try{
-    const F=fortInfo(); const [all,refs]=await Promise.all([DB.collection("lbads").get(),DB.collection("refs").get()]);
+    const [all,refs]=await Promise.all([DB.collection("lbads").get(),DB.collection("refs").get()]);
     const names={}, heroes={}; const ads=[];
     const vips={}; all.docs.forEach(d=>{const x=d.data(); names[d.id]=x.nick||("Hero-"+(x.code||"")); heroes[d.id]=x.hero; if(x.vipNow) vips[d.id]=x.vipNow; if(x.week===k&&x.ads>0) ads.push({uid:d.id,n:x.ads});});
     const cnt={}; refs.docs.forEach(d=>{const x=d.data(); if(x.via==="bought") return; if(x.by&&inFort(x.at,F)) cnt[x.by]=(cnt[x.by]||0)+1;});
     COMP={ads:ads.sort((a,b)=>b.n-a.n),refs:Object.entries(cnt).map(([uid,n])=>({uid,n})).sort((a,b)=>b.n-a.n),names,heroes,vips,loaded:true};
     { const keep=new Set([UID,...COMP.ads.slice(0,150).map(x=>x.uid),...COMP.refs.slice(0,150).map(x=>x.uid)]), pick=o=>Object.fromEntries(Object.entries(o).filter(([u])=>keep.has(u)));
-      cacheSet("comp"+k,{ads:COMP.ads.slice(0,150),refs:COMP.refs.slice(0,150),names:pick(names),heroes:pick(heroes),vips:pick(vips)}); }
+      const snap={ads:COMP.ads.slice(0,150),refs:COMP.refs.slice(0,150),names:pick(names),heroes:pick(heroes),vips:pick(vips)};
+      cacheSet("comp"+k,snap); PLAYERS=all.size||PLAYERS;
+      DB.doc("board/comp").set({...snap,week:k,fk,players:all.size,at:Date.now()}).catch(()=>{}); }
     if(!S.refBy||!S.refByName) { const me=await DB.doc("refs/"+UID).get(); if(me.exists){ const by=me.data().by; S.refBy=by; S.refByName=names[by]||me.data().code; save(); } }
   }catch(e){ COMP.loaded=true; }
   renderComp();
