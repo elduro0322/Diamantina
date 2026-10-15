@@ -3021,11 +3021,12 @@ async function loadComp(force){
   { const c=cacheGet("comp"+k,force?5*60000:20*60000); if(c){ COMP={...c,loaded:true}; renderComp(); return; } }
   const F=fortInfo(), fk=String(F.key||F.start||"");
   try{ const b=await withTO(DB.doc("board/comp").get()); const x=b.exists?b.data():null;
-    if(x&&x.week===k&&x.fk===fk&&Date.now()-(x.at||0)<45*60000){ COMP={ads:x.ads||[],refs:x.refs||[],names:x.names||{},heroes:x.heroes||{},vips:x.vips||{},loaded:true};
+    if(x&&x.week===k&&x.fk===fk&&Date.now()-(x.at||0)<45*60000&&((x.ads||[]).length||(x.refs||[]).length)){ COMP={ads:x.ads||[],refs:x.refs||[],names:x.names||{},heroes:x.heroes||{},vips:x.vips||{},loaded:true};
       cacheSet("comp"+k,{ads:COMP.ads,refs:COMP.refs,names:COMP.names,heroes:COMP.heroes,vips:COMP.vips}); renderComp(); return; } }catch(e){ var fbDown=true; }
   try{ if(typeof fbDown!=="undefined"&&fbDown) throw new Error("firebase down");
     /* only this week's active players and this fortnight's referrals (not the whole history) */
-    const [all,refs]=await withTO(Promise.all([DB.collection("lbads").where("week","==",k).get(),DB.collection("refs").where("at",">=",F.start-BOGOTA_OFFSET).get()]),12000);
+    const srv={source:"server"}; const [all,refs]=await withTO(Promise.all([DB.collection("lbads").where("week","==",k).get(srv),DB.collection("refs").where("at",">=",F.start-BOGOTA_OFFSET).get(srv)]),12000);
+    if((all.metadata&&all.metadata.fromCache)||!all.size) throw new Error("no server data");
     const names={}, heroes={}; const ads=[];
     const vips={}; all.docs.forEach(d=>{const x=d.data(); names[d.id]=x.nick||("Hero-"+(x.code||"")); heroes[d.id]=x.hero; if(x.vipNow) vips[d.id]=x.vipNow; if(x.week===k&&x.ads>0) ads.push({uid:d.id,n:x.ads});});
     const cnt={}; refs.docs.forEach(d=>{const x=d.data(); if(x.via==="bought") return; if(x.by&&inFort(x.at,F)) cnt[x.by]=(cnt[x.by]||0)+1;});
