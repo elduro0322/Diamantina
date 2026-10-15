@@ -3034,7 +3034,7 @@ async function loadComp(force){
       cacheSet("comp"+k,snap);
       DB.doc("board/comp").set({...snap,week:k,fk,at:Date.now()}).catch(()=>{}); }
     if(!S.refBy||!S.refByName) { const me=await DB.doc("refs/"+UID).get(); if(me.exists){ const by=me.data().by; S.refBy=by; S.refByName=names[by]||me.data().code; save(); } }
-  }catch(e){ COMP.loaded=true; }
+  }catch(e){ /* Firebase busy or over its daily limit: show the last ranking we had (up to 7 days old) */ const old=cacheGet("comp"+k,7*86400000); if(old) COMP={...old,loaded:true,stale:true}; else COMP.loaded=true; }
   renderComp();
 }
 function medal(i){const c=["#FFC93C","#D5DDE8","#E59A5B"][i]; return c?`<span class="medal" style="background:${c}">${i+1}</span>`:`<span class="medal plain">${i+1}</span>`;}
@@ -4522,7 +4522,7 @@ async function loadProofs(){
     if(OWNER){ // keep lifetime totals, then delete proofs older than 30 days
       try{ if(!PROOF_STATS||PROOF_STATS.paidUsd==null){ PROOF_STATS={paidUsd:all.reduce((a,x)=>a+parseFloat(x.amountUsd||0),0),paidN:all.length}; await DB.doc("config/stats").set(PROOF_STATS,{merge:true}); }
         for(const x of all.filter(x=>(x.at||0)<cut)) await DB.collection("proofs").doc(x._id).delete(); }catch(e){} }
-  }catch(e){}
+  }catch(e){ const old=cacheGet("proofs",7*86400000); if(old&&!PROOFS.length){ PROOFS=old.p||[]; PLAYERS=old.n||PLAYERS; PROOF_STATS=old.s||PROOF_STATS; } }
   renderProofs();
 }
 const proofWho=x=>x.code?`<span class="pcode">ID <b>${escapeHtml(x.code)}</b></span>`:(/^he/i.test(x.who||"")?`<span class="pcode">${S.lang==="es"?"Jugador":"Player"}</span>`:`<span class="pcode">${escapeHtml(x.who||"")}</span>`);
