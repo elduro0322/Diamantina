@@ -2502,7 +2502,7 @@ function renderShop(){ if(typeof navSync==="function") setTimeout(()=>navSync(),
   const modes=[["keys","magic"],["ads","ad"],["dmt","dmt"],["prem","heroes"],["gear","shop"],["market","gem"],["vip","vip"],["stake","stake"],["swap","swap"]];
   { const tb=$("#shopTix"); if(tb) tb.innerHTML=(shopMode==="stake"||shopMode==="swap"||shopMode==="market"||shopMode==="ads"||shopMode==="dmt")?"":tixBannerHTML(); }
   $("#shopMode").innerHTML=modes.map(([m,i])=>`<button class="${shopMode===m?"on":""}" data-m="${m}" aria-pressed="${shopMode===m}">${ic(i,26)}<span>${t(m+"Tab")}</span></button>`).join("");
-  $("#shopMode").querySelectorAll("button").forEach(b=>b.onclick=()=>{shopMode=b.dataset.m;renderShop();if(shopMode==="market")loadMarket();});
+  $("#shopMode").querySelectorAll("button").forEach(b=>b.onclick=()=>{shopMode=b.dataset.m;renderShop();if(shopMode==="market")loadMarket(true);});
   const gear=shopMode==="gear"; $("#shopTabs").style.display=gear?"":"none"; $("#shopList").style.display=gear?"":"none";
   $("#marketList").hidden=shopMode!=="market"; $("#vipPanel").hidden=shopMode!=="vip"; $("#stakePanel").hidden=shopMode!=="stake"; $("#swapPanel").hidden=shopMode!=="swap"; $("#dmtPanel").hidden=shopMode!=="dmt"; $("#adsPanel").hidden=shopMode!=="ads"; $("#keysPanel").hidden=shopMode!=="keys"; $("#premPanel").hidden=shopMode!=="prem";
   if(shopMode==="market"){ renderMarket(); return; }
@@ -2728,8 +2728,11 @@ async function claimNft(localOnly,pool){
   if(!free.length) return 0;
   const n=free[Math.floor(Math.random()*free.length)]; S.nft500=[...(S.nft500||[]),n.id]; save(); return n.id;
 }
-async function loadMarket(){
+let MARKET_AT=0;
+async function loadMarket(force){
   if(!(DB&&UID)){ marketLoaded=true; MY_NFTS=(S.nft500||[]).slice(); renderMarket(); renderBag(); return; }
+  if(!force&&marketLoaded&&Date.now()-MARKET_AT<10*60000){ renderMarket(); renderBag(); return; }
+  if(!force&&!marketLoaded){ const c=cacheGet("mk"+UID,10*60000); if(c){ MY_NFTS=c.my||[]; NFT_TAKEN=c.taken||0; Object.assign(NFT_TRADES,c.tr||{}); MARKET=c.mk||[]; (S.nft500||[]).forEach(id=>{ if(!MY_NFTS.includes(id)) MY_NFTS.push(id); }); marketLoaded=true; MARKET_AT=Date.now(); renderMarket(); renderBag(); return; } }
   try{
     const [nf,mk]=await Promise.all([DB.collection(NFT_COL).get(),DB.collection(MARKET_COL).where("status","==","open").get()]);
     MY_NFTS=[]; NFT_TAKEN=0; nf.docs.forEach(d=>{const x=d.data(); if(x) NFT_TRADES[+d.id]=x.trades||0; if(x&&x.owner){NFT_TAKEN++; if(x.owner===UID) MY_NFTS.push(+d.id);}});
@@ -2738,6 +2741,7 @@ async function loadMarket(){
       if(!o){ MY_NFTS.push(id); NFT_TAKEN++; DB.doc(NFT_COL+"/"+id).set({id,owner:UID,claimedAt:Date.now()},{merge:true}).catch(()=>{}); } }
     MARKET=mk.docs.map(d=>({...d.data(),docId:d.id}));
     const now=Date.now(); MARKET.sort((a,b)=>((b.promotedUntil||0)>now)-((a.promotedUntil||0)>now)||(b.at||0)-(a.at||0));
+    MARKET_AT=Date.now(); const tr={}; Object.entries(NFT_TRADES).forEach(([k,v])=>{ if(v) tr[k]=v; }); cacheSet("mk"+UID,{my:MY_NFTS,taken:NFT_TAKEN,tr,mk:MARKET.slice(0,200)});
   }catch(e){}
   marketLoaded=true; renderMarket(); renderBag();
 }
@@ -2747,7 +2751,7 @@ async function collectSales(){
     const s=await DB.collection("sales").where("seller","==",UID).where("claimed","==",false).get();
     for(const d of s.docs){ const x=d.data(); await DB.doc("sales/"+d.id).update({claimed:true}); S.bal=(S.bal||0)+x.sellerGets; incAdd(x.sellerGets); save();
       toast(fmt(t("soldToast"),{n:String(x.nft).padStart(3,"0")}),"gem"); }
-    if(s.docs.length){ renderPay(); loadMarket(); }
+    if(s.docs.length){ renderPay(); loadMarket(true); }
   }catch(e){}
 }
 const promoted=l=>(l.promotedUntil||0)>Date.now();
@@ -2776,7 +2780,7 @@ async function buyListing(l){
   try{
     const lease=await ref.acquire({holder:UID,ttlMs:8000}); if(!lease.acquired){ toast(t("mkBusy")); return; }
     const cur=await ref.get(), d=cur.exists?cur.data():null;
-    if(!d||d.status!=="open"){ closeModal(); toast(t("mkGone")); loadMarket(); return; }
+    if(!d||d.status!=="open"){ closeModal(); toast(t("mkGone")); loadMarket(true); return; }
     if(d.seller===UID) return;
     if((S.bal||0)<d.units){ toast(t("mkNoBal")); return; }
     const fee=Math.ceil(d.units*FEE_PCT/100), sellerGets=d.units-fee;
@@ -2797,11 +2801,11 @@ async function sellDialog(id){
       try{
         const own=await DB.doc(NFT_COL+"/"+id).get(); if(!own.exists||own.data().owner!==UID){ toast(t("mkErr")); return; }
         await DB.doc(MARKET_COL+"/"+id).set({nft:id,seller:UID,units,status:"open",promotedUntil:0,at:Date.now()});
-        closeModal(); toast(t("listed"),"shop"); loadMarket();
+        closeModal(); toast(t("listed"),"shop"); loadMarket(true);
       }catch(e){ toast(t("mkErr")); }
     }]]);
 }
-async function cancelListing(id){ try{ await DB.doc(MARKET_COL+"/"+id).update({status:"cancelled"}); toast(t("cancelled")); loadMarket(); }catch(e){ toast(t("mkErr")); } }
+async function cancelListing(id){ try{ await DB.doc(MARKET_COL+"/"+id).update({status:"cancelled"}); toast(t("cancelled")); loadMarket(true); }catch(e){ toast(t("mkErr")); } }
 async function promoteListing(id){
   if(S.coins<PROMO_COST){ toast(fmt(t("noCoins"),{n:PROMO_COST-S.coins})); return; }
   try{ await DB.doc(MARKET_COL+"/"+id).update({promotedUntil:Date.now()+PROMO_MS}); S.coins-=PROMO_COST; save(); renderText(); toast(t("promotedOk"),"shop"); loadMarket(); }catch(e){ toast(t("mkErr")); }
@@ -3003,16 +3007,22 @@ async function pushLb(){
   try{ await DB.doc("lbads/"+UID).set({week:w.week,ads:w.ads,nick:myNick().slice(0,20),code:myCode(),hero:curHero(),at:Date.now(),bal:Math.round(S.bal||0),staked:Math.round(stUsd),dmt:S.dmtPre||0,day:bogota().key,td:S.doneDate===bogota().key?(S.done||0):0,stk:(S.stakes||[]).filter(x=>(x.end||0)>Date.now()).slice(0,20).map(x=>({a:x.asset||"USD",amt:x.amt,rew:x.rew||0,end:x.end})),seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier(),fx:S.feeEx||0,fxn:S.feeExN||0,fm:S.feeMk||0,fmn:S.feeMkN||0,dev:DEV}); }catch(e){}
 }
 function countAd(){ claimMark(); const before=lvlInfo().L; wkAds().ads++; S.claims=(S.claims||0)+1; save(); pushLb(); renderLevel(); const v=lvlInfo(); if(v.L>before) setTimeout(()=>toast(fmt(t("levelUp"),{n:v.L,p:v.pct}),"trophy"),900); }
-async function loadComp(){
+/* ---- Firestore read savers: the free plan allows 50,000 reads/day, so big lists are cached on the phone ---- */
+const cacheGet=(k,ttl)=>{ try{ const v=JSON.parse(localStorage.getItem("dc-"+k)||"null"); if(v&&Date.now()-v.at<ttl) return v.d; }catch(e){} return null; };
+const cacheSet=(k,d)=>{ try{ localStorage.setItem("dc-"+k,JSON.stringify({at:Date.now(),d})); }catch(e){} };
+async function loadComp(force){
   if(!(DB&&UID)){ renderComp(); return; }
   const k=weekInfo().key;
+  { const c=cacheGet("comp"+k,force?5*60000:20*60000); if(c){ COMP={...c,loaded:true}; renderComp(); return; } }
   try{
     const F=fortInfo(); const [all,refs]=await Promise.all([DB.collection("lbads").get(),DB.collection("refs").get()]);
     const names={}, heroes={}; const ads=[];
     const vips={}; all.docs.forEach(d=>{const x=d.data(); names[d.id]=x.nick||("Hero-"+(x.code||"")); heroes[d.id]=x.hero; if(x.vipNow) vips[d.id]=x.vipNow; if(x.week===k&&x.ads>0) ads.push({uid:d.id,n:x.ads});});
     const cnt={}; refs.docs.forEach(d=>{const x=d.data(); if(x.via==="bought") return; if(x.by&&inFort(x.at,F)) cnt[x.by]=(cnt[x.by]||0)+1;});
     COMP={ads:ads.sort((a,b)=>b.n-a.n),refs:Object.entries(cnt).map(([uid,n])=>({uid,n})).sort((a,b)=>b.n-a.n),names,heroes,vips,loaded:true};
-    const me=await DB.doc("refs/"+UID).get(); if(me.exists){ const by=me.data().by; S.refBy=by; S.refByName=names[by]||me.data().code; save(); }
+    { const keep=new Set([UID,...COMP.ads.slice(0,150).map(x=>x.uid),...COMP.refs.slice(0,150).map(x=>x.uid)]), pick=o=>Object.fromEntries(Object.entries(o).filter(([u])=>keep.has(u)));
+      cacheSet("comp"+k,{ads:COMP.ads.slice(0,150),refs:COMP.refs.slice(0,150),names:pick(names),heroes:pick(heroes),vips:pick(vips)}); }
+    if(!S.refBy||!S.refByName) { const me=await DB.doc("refs/"+UID).get(); if(me.exists){ const by=me.data().by; S.refBy=by; S.refByName=names[by]||me.data().code; save(); } }
   }catch(e){ COMP.loaded=true; }
   renderComp();
 }
@@ -3707,7 +3717,7 @@ async function refreshPayouts(){
       if(loc && (loc.status!==r.status||!loc.synced)){loc.status=r.status;loc.synced=true;changed=true;}});
     if(changed){save();renderPay();}
   }catch(e){}
-  if(OWNER) loadAdmin();
+  if(OWNER&&$("#v-admin")&&$("#v-admin").classList.contains("on")) loadAdmin();
 }
 function riskFlags(r,R){ const c=r.chk, es=S.lang==="es", F=[]; if(!c) return null;
   const req=c.req||Math.round(parseFloat(r.amountUsd||"0")*1e5), net=(c.inc||0)-(c.out||0);
@@ -3794,7 +3804,7 @@ const startDB=(async()=>{
             const {synced,...body}=p; await DB.doc(`payouts/${UID}`).collection("requests").doc(p.date).set(body); p.synced=true;}catch(e){break;}
       }
       save(); renderPay(); refreshPayouts();
-      if(S.welcomePending&&!S.welcomeNft) setTimeout(welcomeGift,2200); loadMarket(); loadVip(); collectSales(); collectCredits(); pushLb().then(async()=>{ if(S.pendingRef&&!S.refBy) await applyRefCode(S.pendingRef,true); loadComp(); }); loadRefBy(); collectRef(); loadProofs(); setInterval(()=>{ if(!document.hidden){ pushLb(); loadComp(); loadProofs(); } },60000); setInterval(()=>{ if(!document.hidden){ collectSales(); collectCredits(); collectRef(); } },30000);
+      if(S.welcomePending&&!S.welcomeNft) setTimeout(welcomeGift,2200); loadMarket(); loadVip(); collectSales(); collectCredits(); pushLb().then(async()=>{ if(S.pendingRef&&!S.refBy) await applyRefCode(S.pendingRef,true); loadComp(); }); loadRefBy(); collectRef(); loadProofs(); setInterval(()=>{ if(!document.hidden){ loadComp(); loadProofs(); } },10*60000); setInterval(()=>{ if(!document.hidden){ collectSales(); collectCredits(); collectRef(); } },120000);
     }
   }catch(e){}
 });
@@ -3906,7 +3916,7 @@ window.addEventListener("click",e=>{
 },true);
 
 /* ---------- Live players + external banners ---------- */
-const LIVE_MS=150000;
+const LIVE_MS=240000;   // players send a heartbeat every 3 min
 async function beat(){ if(!(DB&&UID)||document.hidden) return; try{ await DB.doc("lbads/"+UID).set({seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier()},{merge:true}); }catch(e){} }
 async function liveCount(){
   if(!(DB&&OWNER)) return; const v=$("#v-admin"); if(!v||!v.classList.contains("on")||document.hidden) return;
@@ -3916,7 +3926,7 @@ async function liveCount(){
     $("#liveCoins").textContent=(Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,n])=>k+" "+n).join(" · "))+(vip?` · VIP ${vip}`:"");
   }catch(e){ $("#liveN").textContent="?"; }
 }
-setInterval(beat,60000); setInterval(liveCount,15000);
+setInterval(beat,180000); setInterval(liveCount,60000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ beat(); liveCount(); } });
 const DIRECT_TAG="<!--direct-->";
 const isDirect=c=>/^\s*<!--direct-->/.test(c||"")||/ytrgt\(/.test(c||"");   // header-bidding banners need the real page (not a frame) to get bids
@@ -3946,7 +3956,7 @@ function openTasks(){
   modal.addEventListener("close",()=>{ document.getElementById("modal").classList.remove("wide"); clearInterval(taskPoll); },{once:true});
   clearInterval(taskPoll); taskPoll=setInterval(()=>{ try{ collectCredits(); }catch(e){} },45000);
 }
-setInterval(()=>{ try{ if(!document.hidden) collectCredits(); }catch(e){} },180000);
+setInterval(()=>{ try{ if(!document.hidden) collectCredits(); }catch(e){} },300000);
 
 
 /* ===== Referral panel: % by VIP, my referrals, buy referrals ===== */
@@ -4483,11 +4493,14 @@ async function publishProof(r){
 }
 async function loadProofs(){
   if(!(DB&&UID)) return;
+  { const c=cacheGet("proofs",20*60000); if(c&&!OWNER){ PROOFS=c.p||[]; PLAYERS=c.n||0; PROOF_STATS=c.s||null; renderProofs(); return; } }
   try{
-    const [q,pl]=await Promise.all([DB.collection("proofs").get(),DB.collection("lbads").get()]);
-    const cut=Date.now()-30*86400000; const all=q.docs.map(d=>({...d.data(),_id:d.id}));
-    PROOFS=all.filter(x=>(x.at||0)>=cut).sort((a,b)=>b.at-a.at); PLAYERS=pl.size;
-    try{ const st=await DB.doc("config/stats").get(); PROOF_STATS=st.exists?st.data():null; }catch(e){}
+    const cut=Date.now()-30*86400000; let all;
+    if(OWNER){ const [q,pl]=await Promise.all([DB.collection("proofs").get(),DB.collection("lbads").get()]); all=q.docs.map(d=>({...d.data(),_id:d.id})); PLAYERS=pl.size; DB.doc("config/stats").set({players:pl.size},{merge:true}).catch(()=>{}); }
+    else { const q=await DB.collection("proofs").orderBy("at","desc").limit(40).get(); all=q.docs.map(d=>({...d.data(),_id:d.id})); }
+    PROOFS=all.filter(x=>(x.at||0)>=cut).sort((a,b)=>b.at-a.at);
+    try{ const st=await DB.doc("config/stats").get(); PROOF_STATS=st.exists?st.data():null; if(!OWNER&&PROOF_STATS&&PROOF_STATS.players) PLAYERS=PROOF_STATS.players; }catch(e){}
+    cacheSet("proofs",{p:PROOFS.slice(0,40),n:PLAYERS,s:PROOF_STATS});
     if(OWNER){ // keep lifetime totals, then delete proofs older than 30 days
       try{ if(!PROOF_STATS||PROOF_STATS.paidUsd==null){ PROOF_STATS={paidUsd:all.reduce((a,x)=>a+parseFloat(x.amountUsd||0),0),paidN:all.length}; await DB.doc("config/stats").set(PROOF_STATS,{merge:true}); }
         for(const x of all.filter(x=>(x.at||0)<cut)) await DB.collection("proofs").doc(x._id).delete(); }catch(e){} }
@@ -4564,7 +4577,7 @@ function goView(v){
   document.querySelectorAll(".view").forEach(el=>el.classList.toggle("on",el.id==="v-"+v));
   window.scrollTo({top:0});
   if(v==="pay"){ refreshPayouts(); renderDeposit(); collectCredits(); }
-  if(v==="comp"){ renderComp(); loadComp(); collectRef().then(renderComp); }
+  if(v==="comp"){ renderComp(); loadComp(true); collectRef().then(renderComp); }
   if(v==="admin"){ renderAdmin(); setTimeout(liveCount,300); }
   if(v==="bag"||(v==="shop"&&shopMode==="market")) loadMarket();
   if(v==="shop") renderShop();
