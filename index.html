@@ -3005,7 +3005,7 @@ const myCode=()=>UID?codeOf(UID):"——";
 const myNick=()=>S.nick||("Hero-"+myCode());
 function wkAds(){const k=weekInfo().key; if(!S.wk||S.wk.week!==k) S.wk={week:k,ads:0}; return S.wk;}
 async function pushLb(){
-  if(!(DB&&UID)) return; const w=wkAds();
+  if(!(DB&&UID)||!isReg()) return; const w=wkAds();
   const stUsd=(S.stakes||[]).filter(s=>(s.asset||"USD")==="USD").reduce((a,s)=>a+s.amt+s.rew,0);
   try{ await DB.doc("lbads/"+UID).set({week:w.week,ads:w.ads,nick:myNick().slice(0,20),code:myCode(),hero:curHero(),at:Date.now(),bal:Math.round(S.bal||0),staked:Math.round(stUsd),dmt:S.dmtPre||0,day:bogota().key,td:S.doneDate===bogota().key?(S.done||0):0,stk:(S.stakes||[]).filter(x=>(x.end||0)>Date.now()).slice(0,20).map(x=>({a:x.asset||"USD",amt:x.amt,rew:x.rew||0,end:x.end})),seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier(),fx:S.feeEx||0,fxn:S.feeExN||0,fm:S.feeMk||0,fmn:S.feeMkN||0,dev:DEV}); }catch(e){}
 }
@@ -3394,8 +3394,8 @@ async function loadAds(){
   try{
     const q=await DB.collection("ads").where("status","==","active").get();
     ACTIVE_ADS=q.docs.map(d=>({...d.data(),id:d.id})).filter(a=>(a.shown||0)<a.views);
-    const m=await DB.collection("ads").where("owner","==",UID).get();
-    MY_ADS=m.docs.map(d=>({...d.data(),id:d.id})).sort((a,b)=>b.at-a.at);
+    if(isReg()){ const m=await DB.collection("ads").where("owner","==",UID).get();
+    MY_ADS=m.docs.map(d=>({...d.data(),id:d.id})).sort((a,b)=>b.at-a.at); }
   }catch(e){}
   renderSponsorBanner(); if(shopMode==="ads"&&$("#v-shop").classList.contains("on")) renderAdsTab();
 }
@@ -3809,15 +3809,18 @@ const startDB=(async()=>{
     if(!window.claude||!window.claude.use){ loadMarket(); return; }
     const [db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")]);
     if(!db||!user){ loadMarket(); return; }
-    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); window.__OWNER=!!OWNER; if(OWNER){ try{ renderVip(); renderText(); }catch(e){} } loadCfg(); loadAds(); setTimeout(beat,4000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
-    if(UID){ // resend requests saved only on the phone
+    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); window.__OWNER=!!OWNER; if(OWNER){ try{ renderVip(); renderText(); }catch(e){} } loadCfg(); loadAds(); setTimeout(beat,4000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },10*60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
+    let fullStarted=false;
+    const startFull=async()=>{ if(fullStarted||!UID||!isReg()) return; fullStarted=true;
       for(const p of (S.payouts||[]).filter(p=>!p.synced)){
         try{await DB.doc(`payouts/${UID}`).set({updatedAt:new Date().toISOString(),last:p.date});
             const {synced,...body}=p; await DB.doc(`payouts/${UID}`).collection("requests").doc(p.date).set(body); p.synced=true;}catch(e){break;}
       }
       save(); renderPay(); refreshPayouts();
       if(S.welcomePending&&!S.welcomeNft) setTimeout(welcomeGift,2200); loadMarket(); loadVip(); collectSales(); collectCredits(); pushLb().then(async()=>{ if(S.pendingRef&&!S.refBy) await applyRefCode(S.pendingRef,true); loadComp(); }); loadRefBy(); collectRef(); loadProofs(); setInterval(()=>{ if(!document.hidden){ loadComp(); loadProofs(); } },10*60000); setInterval(()=>{ if(!document.hidden){ collectSales(); collectCredits(); collectRef(); } },120000);
-    }
+    };
+    window.__startFull=startFull;
+    if(UID&&isReg()) startFull(); else if(UID){ loadProofs(); }   /* not registered yet: only the payment proofs (1 read); the rest starts when they register */
   }catch(e){}
 });
 if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",startDB,{once:true}); else startDB();
@@ -3857,7 +3860,7 @@ async function doAuth(mode){
   try{
     if(mode==="reg"){
       const u=a.currentUser;
-      if(u&&u.isAnonymous){ await u.linkWithCredential(firebase.auth.EmailAuthProvider.credential(em,pw)); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; if(!S.welcomeNft) S.welcomePending=true; save(); await cloudSave(true); closeModal(); renderAcc(); toast(au("welcome"),"trophy"); setTimeout(welcomeGift,900); }
+      if(u&&u.isAnonymous){ await u.linkWithCredential(firebase.auth.EmailAuthProvider.credential(em,pw)); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; if(!S.welcomeNft) S.welcomePending=true; save(); await cloudSave(true); closeModal(); renderAcc(); toast(au("welcome"),"trophy"); setTimeout(welcomeGift,900); try{ window.__startFull&&window.__startFull(); }catch(e){} }
       else { await a.createUserWithEmailAndPassword(em,pw); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; if(!S.welcomeNft) S.welcomePending=true; save(); location.reload(); }
     } else {
       await a.signInWithEmailAndPassword(em,pw);
@@ -3929,7 +3932,7 @@ window.addEventListener("click",e=>{
 
 /* ---------- Live players + external banners ---------- */
 const LIVE_MS=240000;   // players send a heartbeat every 3 min
-async function beat(){ if(!(DB&&UID)||document.hidden) return; try{ await DB.doc("lbads/"+UID).set({seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier()},{merge:true}); }catch(e){} }
+async function beat(){ if(!(DB&&UID)||document.hidden||!isReg()) return; try{ await DB.doc("lbads/"+UID).set({seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier()},{merge:true}); }catch(e){} }
 async function liveCount(){
   if(!(DB&&OWNER)) return; const v=$("#v-admin"); if(!v||!v.classList.contains("on")||document.hidden) return;
   try{ const q=await DB.collection("lbads").where("seen",">",Date.now()-LIVE_MS).get(); const by={}; let vip=0;
@@ -4509,10 +4512,13 @@ async function loadProofs(){
   try{
     const cut=Date.now()-30*86400000; let all;
     if(OWNER){ const [q,pl]=await Promise.all([DB.collection("proofs").get(),DB.collection("lbads").get()]); all=q.docs.map(d=>({...d.data(),_id:d.id})); PLAYERS=pl.size; DB.doc("config/stats").set({players:pl.size},{merge:true}).catch(()=>{}); }
-    else { const q=await DB.collection("proofs").orderBy("at","desc").limit(20).get(); all=q.docs.map(d=>({...d.data(),_id:d.id})); }
+    else { let bp=null; try{ const b=await DB.doc("board/proofs").get(); bp=b.exists?b.data():null; }catch(e){}
+      if(bp&&Date.now()-(bp.at||0)<60*60000){ PROOFS=bp.p||[]; PLAYERS=bp.n||PLAYERS; PROOF_STATS=bp.s||null; cacheSet("proofs",{p:PROOFS,n:PLAYERS,s:PROOF_STATS}); renderProofs(); return; }
+      const q=await DB.collection("proofs").orderBy("at","desc").limit(20).get(); all=q.docs.map(d=>({...d.data(),_id:d.id})); }
     PROOFS=all.filter(x=>(x.at||0)>=cut).sort((a,b)=>b.at-a.at);
     try{ const st=await DB.doc("config/stats").get(); PROOF_STATS=st.exists?st.data():null; if(!OWNER&&PROOF_STATS&&PROOF_STATS.players) PLAYERS=PROOF_STATS.players; }catch(e){}
     cacheSet("proofs",{p:PROOFS.slice(0,40),n:PLAYERS,s:PROOF_STATS});
+    DB.doc("board/proofs").set({p:PROOFS.slice(0,20).map(({_id,...x})=>x),n:PLAYERS||0,s:PROOF_STATS||null,at:Date.now()}).catch(()=>{});
     if(OWNER){ // keep lifetime totals, then delete proofs older than 30 days
       try{ if(!PROOF_STATS||PROOF_STATS.paidUsd==null){ PROOF_STATS={paidUsd:all.reduce((a,x)=>a+parseFloat(x.amountUsd||0),0),paidN:all.length}; await DB.doc("config/stats").set(PROOF_STATS,{merge:true}); }
         for(const x of all.filter(x=>(x.at||0)<cut)) await DB.collection("proofs").doc(x._id).delete(); }catch(e){} }
