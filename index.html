@@ -4505,7 +4505,11 @@ function agoStr(ms){ try{ const r=new Intl.RelativeTimeFormat(LOC(),{numeric:"au
 async function publishProof(r){
   try{
     let nick=""; try{ const lb=await DB.doc("lbads/"+r.uid).get(); if(lb.exists) nick=lb.data().nick||lb.data().code||""; }catch(e){}
-    await DB.collection("proofs").add({at:Date.now(),coin:r.coin,method:r.method,amountUsd:r.amountUsd,amountCoin:r.amountCoin||null,who:maskName(nick),code:codeOf(r.uid)});
+    const pf={at:Date.now(),coin:r.coin,method:r.method,amountUsd:r.amountUsd,amountCoin:r.amountCoin||null,who:maskName(nick),code:codeOf(r.uid)};
+    await DB.collection("proofs").add(pf);
+    /* show it to everybody right away: update the shared proofs doc + this phone's copy */
+    try{ PROOFS=[pf,...(PROOFS||[])].slice(0,20); const st0=PROOF_STATS||{}; PROOF_STATS={...st0,paidUsd:(+st0.paidUsd||0)+parseFloat(r.amountUsd||0),paidN:(+st0.paidN||0)+1};
+      DB.doc("board/proofs").set({p:PROOFS.map(({_id,...x})=>x),n:PLAYERS||0,s:PROOF_STATS,at:Date.now()}).catch(()=>{}); cacheSet("proofs",{p:PROOFS,n:PLAYERS,s:PROOF_STATS}); renderProofs(); }catch(e){}
     try{ const st=await DB.doc("config/stats").get();
       if(st.exists&&st.data().paidUsd!=null&&window.firebase&&firebase.firestore.FieldValue) await DB.doc("config/stats").set({paidUsd:firebase.firestore.FieldValue.increment(parseFloat(r.amountUsd||0)),paidN:firebase.firestore.FieldValue.increment(1)},{merge:true});
       else { const all=await DB.collection("proofs").get(); await DB.doc("config/stats").set({paidUsd:all.docs.reduce((a,d)=>a+parseFloat(d.data().amountUsd||0),0),paidN:all.size},{merge:true}); } }catch(e){}
