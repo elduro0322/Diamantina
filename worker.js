@@ -138,12 +138,12 @@ async function nftSnap(db) {
     db.prepare("SELECT id, trades FROM nfts WHERE owner IS NOT NULL AND owner != ''"),
     db.prepare("SELECT nft, seller, units, promo AS promotedUntil, at FROM market WHERE status = 'open'"),
     db.prepare("SELECT id, owner FROM wnft"),
-    db.prepare("SELECT COALESCE(SUM(fee), 0) AS sum, COUNT(*) AS n FROM sales"),
+    db.prepare("SELECT v FROM meta WHERE k = 'fee'"),
     db.prepare("SELECT v FROM meta WHERE k = 'nftimp'")
   ]);
   const tr = {}; for (const x of own.results || []) if (x.trades) tr[x.id] = x.trades;
   const wo = {}; for (const x of w.results || []) if (x.owner) wo[x.id] = x.owner;
-  const v = { taken: (own.results || []).length, tr, mk: mk.results || [], w: wo, fee: (fee.results || [])[0] || { sum: 0, n: 0 }, imp: !!(imp.results || []).length };
+  const v = { taken: (own.results || []).length, tr, mk: mk.results || [], w: wo, fee: (fee.results || []).length ? JSON.parse(fee.results[0].v) : { sum: 0, n: 0 }, imp: !!(imp.results || []).length };
   await metaSet(db, "nft", v).run();
   return { ...v, at: Date.now() };
 }
@@ -196,6 +196,8 @@ async function nftPost(a, db, me, body, now) {
       db.prepare("UPDATE market SET status = 'sold', buyer = ?, soldAt = ? WHERE nft = ? AND status = 'open' AND seller != ? AND units = ? AND seller = (SELECT owner FROM nfts WHERE id = ?)").bind(me.uid, now, id, me.uid, units, id),
       db.prepare("INSERT INTO sales (nft, seller, buyer, units, fee, gets, at, claimed) SELECT nft, seller, buyer, units, ?, ?, soldAt, 0 FROM market WHERE nft = ? AND buyer = ? AND soldAt = ? AND status = 'sold'").bind(fee, units - fee, id, me.uid, now),
       db.prepare("UPDATE nfts SET prev = owner, owner = ?, trades = trades + 1, at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM market WHERE nft = ? AND buyer = ? AND soldAt = ? AND status = 'sold')").bind(me.uid, now, id, id, me.uid, now),
+      /* running total of market fees (so nobody has to add up every sale) */
+      db.prepare("INSERT INTO meta (k, v, at) SELECT 'fee', json_object('sum', ?, 'n', 1), ? WHERE EXISTS (SELECT 1 FROM market WHERE nft = ? AND buyer = ? AND soldAt = ?) ON CONFLICT(k) DO UPDATE SET v = json_object('sum', json_extract(meta.v, '$.sum') + ?, 'n', json_extract(meta.v, '$.n') + 1), at = excluded.at").bind(fee, now, id, me.uid, now, fee),
       dropNft(db)
     ]);
     if (!(r.meta && r.meta.changes)) return { error: "gone" };
