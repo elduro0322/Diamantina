@@ -3034,7 +3034,7 @@ async function loadComp(force){
       cacheSet("comp"+k,snap);
       DB.doc("board/comp").set({...snap,week:k,fk,at:Date.now()}).catch(()=>{}); }
     if(!S.refBy||!S.refByName) { const me=await DB.doc("refs/"+UID).get(); if(me.exists){ const by=me.data().by; S.refBy=by; S.refByName=names[by]||me.data().code; save(); } }
-  }catch(e){ /* Firebase busy or over its daily limit: show the last ranking we had (up to 7 days old) */ const old=cacheGet("comp"+k,7*86400000); if(old) COMP={...old,loaded:true,stale:true}; else COMP.loaded=true; }
+  }catch(e){ /* Firebase busy or over its daily limit: show the last ranking we had (up to 7 days old) */ const old=cacheGet("comp"+k,7*86400000); if(old) COMP={...old,loaded:true,stale:true}; else COMP={...COMP,loaded:true,err:true}; }
   renderComp();
 }
 function medal(i){const c=["#FFC93C","#D5DDE8","#E59A5B"][i]; return c?`<span class="medal" style="background:${c}">${i+1}</span>`:`<span class="medal plain">${i+1}</span>`;}
@@ -3061,6 +3061,8 @@ function renderComp(){
   const prizes=`<div class="prizes"><div class="pz p1">${ic("trophy",26)}<b>$1</b><small>1°</small></div><div class="pz p2"><b>$0.50</b><small>2°</small></div><div class="pz p3"><b>$0.25</b><small>3°</small></div><div class="pz"><b>$0.10</b><small>${t("places")}</small></div></div><p class="hint" style="text-align:center;margin:6px 0 0">${compBoard==="refs"?t("prizeNoteRefs"):t("prizeNote")}</p>`;
   let html=`<div class="panel comphead"><div class="ctimer"><span>${t("endsIn")}</span><b>${dd}d ${hh}:${mm}</b></div>${prizes}</div>`;
   if(!(DB&&UID)){ box.innerHTML=html+`<div class="empty">${t("compOffline")}</div>`; return; }
+  if(COMP.err||COMP.stale){ const es=S.lang==="es", mine=compBoard==="ads"?(wkAds().ads||0):(REF_COUNT||0);
+    html+=`<div class="panel" style="text-align:center;border:1px solid rgba(253,224,71,.4)"><b>⏳ ${es?"El ranking se está actualizando":"The ranking is updating"}</b><p class="hint" style="margin:6px 0 0">${es?`Tranquilo: ${compBoard==="ads"?"tus anuncios":"tus referidos"} se siguen contando. Llevas <b>${mine}</b> ${compBoard==="ads"?"anuncios esta semana":"referidos"}. La tabla vuelve en unas horas.`:`Don't worry: your ${compBoard==="ads"?"ads":"referrals"} keep counting. You have <b>${mine}</b> so far. The table will be back in a few hours.`}</p></div>`; }
   const list=compBoard==="ads"?COMP.ads:COMP.refs, unit=compBoard==="ads"?t("adsW"):t("refsW");
   const myIdx=list.findIndex(r=>r.uid===UID);
   html+=`<div class="seg two"><button class="${compBoard==="ads"?"on":""}" data-b="ads">${ic("ad",24)}<span>${t("boardAds")}</span></button><button class="${compBoard==="refs"?"on":""}" data-b="refs">${ic("heroes",24)}<span>${t("boardRefs")}</span></button></div>`;
