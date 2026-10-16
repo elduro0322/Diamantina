@@ -107,7 +107,9 @@ async function d1Init(db) {
     "CREATE INDEX IF NOT EXISTS lb_code ON lb (code)",
     "CREATE TABLE IF NOT EXISTS refvis (day TEXT, iph TEXT, PRIMARY KEY (day, iph))",
     "CREATE TABLE IF NOT EXISTS visits (uid TEXT, day TEXT, n INTEGER DEFAULT 0, paid INTEGER DEFAULT 0, PRIMARY KEY (uid, day))",
-    "CREATE INDEX IF NOT EXISTS visits_day ON visits (day)"
+    "CREATE INDEX IF NOT EXISTS visits_day ON visits (day)",
+    "CREATE TABLE IF NOT EXISTS vislog (at INTEGER, uid TEXT, kind TEXT, via TEXT)",
+    "CREATE INDEX IF NOT EXISTS vislog_at ON vislog (at)"
   ].map(q => db.prepare(q)));
   D1_READY = true;
 }
@@ -256,8 +258,10 @@ async function visit(db, me, body, request, env, now) {
   const ins = await db.prepare("INSERT OR IGNORE INTO refvis (day, iph) VALUES (?, ?)").bind(day, iph).run();
   if (!(ins.meta && ins.meta.changes)) return { counted: false };            // this connection already counted today
   const r = await db.prepare("INSERT INTO visits (uid, day, n, paid) VALUES (?, ?, 1, 0) ON CONFLICT(uid, day) DO UPDATE SET n = n + 1 WHERE visits.n < ?").bind(ref.uid, day, VIS_CAP).run();
-  if (Math.random() < 0.01) await db.prepare("DELETE FROM refvis WHERE day < ?").bind(today(now - 2 * 86400000)).run();
-  return { counted: !!(r.meta && r.meta.changes) };
+  const counted = !!(r.meta && r.meta.changes);
+  if (counted) await db.prepare("INSERT INTO vislog (at, uid, kind, via) VALUES (?, ?, 'visit', '')").bind(now, ref.uid).run();
+  if (Math.random() < 0.01) await db.batch([db.prepare("DELETE FROM refvis WHERE day < ?").bind(today(now - 2 * 86400000)), db.prepare("DELETE FROM vislog WHERE at < ?").bind(now - 2 * 86400000)]);
+  return { counted };
 }
 async function visStats(db, uid, now) {
   const r = await db.prepare("SELECT day, n, paid FROM visits WHERE uid = ?").bind(uid).all(), d = today(now);
@@ -320,6 +324,24 @@ async function d1(request, env) {
   }
   if (a === "visit") return json({ ok: true, ...(await visit(db, me, body, request, env, now)) });
   if (a === "visstats") return json({ ok: true, ...(await visStats(db, me.uid, now)) });
+  if (a === "share") {                                     // a player tapped copy / WhatsApp / Telegram / Facebook / share
+    const via = ["copy", "wa", "tg", "fb", "native", "banner"].includes(body.via) ? body.via : "native";
+    await db.prepare("INSERT INTO vislog (at, uid, kind, via) VALUES (?, ?, 'share', ?)").bind(now, me.uid, via).run();
+    return json({ ok: true });
+  }
+  if (a === "reflive") {                                   // owner: live view of who shares the link and who gets visits
+    if (!me.owner) return json({ ok: false, error: "owner" }, 403);
+    const d = today(now), since = now - 24 * 3600000;
+    const [top, feed, sh] = await db.batch([
+      db.prepare("SELECT uid, n FROM visits WHERE day = ? ORDER BY n DESC LIMIT 20").bind(d),
+      db.prepare("SELECT at, uid, kind, via FROM vislog WHERE at >= ? ORDER BY at DESC LIMIT 25").bind(since),
+      db.prepare("SELECT COUNT(*) AS n, COUNT(DISTINCT uid) AS u FROM vislog WHERE at >= ? AND kind = 'share'").bind(since)
+    ]);
+    const snap = { names: {}, heroes: {}, vips: {} };
+    await namesFor(db, [...(top.results || []), ...(feed.results || [])].map(x => x.uid), snap);
+    const tv = await db.prepare("SELECT COALESCE(SUM(n), 0) AS n, COUNT(*) AS u FROM visits WHERE day = ?").bind(d).first();
+    return json({ ok: true, top: top.results || [], feed: feed.results || [], names: snap.names, visits: tv ? tv.n : 0, referrers: tv ? tv.u : 0, shares: ((sh.results || [])[0] || {}).n || 0, sharers: ((sh.results || [])[0] || {}).u || 0 });
+  }
   if (a === "ev") {                                        // flash-sale counters: seen / tapped / bought
     const k = str(body.k, 8), e = str(body.e, 8);
     if (!["vip", "gear", "hero"].includes(k) || !["view", "click", "buy"].includes(e)) return json({ ok: false, error: "bad" }, 400);

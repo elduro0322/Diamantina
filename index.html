@@ -866,6 +866,7 @@ main{overscroll-behavior-y:contain}
 .vflplan{border:2px solid rgba(255,255,255,.25);border-radius:14px;padding:8px 6px;background:rgba(255,255,255,.08);color:#fff;font-weight:800;cursor:pointer}
 .vflplan.best{border-color:#FFC93C;background:rgba(255,201,60,.16)}
 .vflplans.hgrid{grid-template-columns:repeat(3,1fr);gap:6px}.vflhero{padding:6px 3px}.vflhero img{width:46px;height:46px;object-fit:contain;display:block;margin:0 auto 2px}.vflhero b{font-size:12px!important;line-height:1.15}.vflhero small{display:block;color:#FFC93C;font-weight:900;font-size:11px}.vflhero em{font-size:15px!important}
+.reffeed{max-height:340px;overflow:auto}.reffeed .req{padding:8px 10px}
 .vfltab{width:100%;border-collapse:collapse;font-size:13px}.vfltab th,.vfltab td{padding:5px 4px;border-bottom:1px solid rgba(255,255,255,.1);text-align:center}.vfltab td:first-child{text-align:left}
 .rfpbox{background:radial-gradient(120% 70% at 50% 0%,#2B7BFF 0%,#1A3A9C 40%,#0B1240 100%)}
 .rfpstage{position:relative;height:150px;margin:-4px auto 4px;max-width:320px}
@@ -3231,8 +3232,8 @@ function renderComp(){
   $("#nickSave").onclick=()=>{const v=($("#nickIn").value||"").trim().slice(0,20); if(v.length<2) return; S.nick=v; save(); pushLb(true).then(()=>loadComp(true)); toast(t("saved"));};
   bindRefBanners(); { const br=$("#buyRefBtn"); if(br) br.onclick=buyRefsDialog; const mr=$("#refMore"); if(mr) mr.onclick=()=>{ $("#refList").classList.toggle("open"); }; }
   $("#cpCode").onclick=async()=>{ try{ await navigator.clipboard.writeText(myCode()); toast(t("copied")); }catch(e){ toast(myCode()); } };
-  $("#cpLink").onclick=async()=>{ try{ await navigator.clipboard.writeText(refLink()); toast(t("linkCopied")); }catch(e){ toast(refLink()); } };
-  $("#shCode").onclick=async()=>{ const txt=fmt(t("shareText2"),{l:refLink(),c:myCode()}); try{ if(navigator.share) await navigator.share({title:"Diamantina",text:txt,url:refLink()}); else { await navigator.clipboard.writeText(txt); toast(t("linkCopied")); } }catch(e){} };
+  $("#cpLink").onclick=async()=>{ refShare("copy"); try{ await navigator.clipboard.writeText(refLink()); toast(t("linkCopied")); }catch(e){ toast(refLink()); } };
+  $("#shCode").onclick=async()=>{ refShare("native"); const txt=fmt(t("shareText2"),{l:refLink(),c:myCode()}); try{ if(navigator.share) await navigator.share({title:"Diamantina",text:txt,url:refLink()}); else { await navigator.clipboard.writeText(txt); toast(t("linkCopied")); } }catch(e){} };
   const rg=$("#refGo"); if(rg) rg.onclick=async()=>{ const c=($("#refIn").value||"").trim().toUpperCase(); if(c.length<4) return; if(await applyRefCode(c,false)) loadComp(); else renderComp(); };
 }
 /* ---------- Referral banners: players share them with their own link ---------- */
@@ -3244,7 +3245,7 @@ function refBannersHTML(){ const es=S.lang==="es";
     ${REF_BANNERS.map((b,i)=>`<div class="rbitem"><img src="${banUrl(b)}" alt="" loading="lazy" style="aspect-ratio:${b[0]}/${b[1]}"><small>${b[0]}×${b[1]}</small><div class="rbbtns"><button class="mini" data-rbs="${i}">📤 ${es?"Compartir":"Share"}</button><button class="mini gray" data-rbc="${i}">&lt;/&gt; ${es?"Copiar código":"Copy code"}</button><a class="mini gray" href="${banUrl(b)}" download target="_blank" rel="noopener">⬇ ${es?"Descargar":"Download"}</a></div></div>`).join("")}</div>`; }
 function bindRefBanners(){ const es=S.lang==="es";
   document.querySelectorAll("[data-rbc]").forEach(x=>x.onclick=async()=>{ const c=banCode(REF_BANNERS[+x.dataset.rbc]); try{ await navigator.clipboard.writeText(c); toast(es?"Código del banner copiado":"Banner code copied"); }catch(e){ showModal(es?"Código del banner":"Banner code",`<textarea class="field" style="width:100%;height:140px;font-size:12px">${escapeHtml(c)}</textarea>`,[[t("close"),"go",closeModal]]); } });
-  document.querySelectorAll("[data-rbs]").forEach(x=>x.onclick=async()=>{ const b=REF_BANNERS[+x.dataset.rbs], txt=(es?"💎 Gana cripto gratis jugando Diamantina. Únete con mi link: ":"💎 Earn free crypto playing Diamantina. Join with my link: ")+refLink();
+  document.querySelectorAll("[data-rbs]").forEach(x=>x.onclick=async()=>{ refShare("banner"); const b=REF_BANNERS[+x.dataset.rbs], txt=(es?"💎 Gana cripto gratis jugando Diamantina. Únete con mi link: ":"💎 Earn free crypto playing Diamantina. Join with my link: ")+refLink();
     try{ const r=await fetch(banUrl(b)); const bl=await r.blob(); const f=new File([bl],`diamantina-${b[0]}x${b[1]}.png`,{type:"image/png"});
       if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f],text:txt,title:"Diamantina"}); return; } }catch(e){}
     try{ if(navigator.share){ await navigator.share({title:"Diamantina",text:txt,url:refLink()}); return; } await navigator.clipboard.writeText(txt); toast(t("linkCopied")); }catch(e){} }); }
@@ -3265,6 +3266,7 @@ function visPaint(){ document.querySelectorAll("[data-vis]").forEach(el=>{ const
   try{ if(localStorage.getItem("dc-vis")===day+c) return; }catch(e){}
   const iv=setInterval(async()=>{ if(document.hidden) return; ms+=1000; if(ms<15000||typeof UID==="undefined"||!UID) return; clearInterval(iv);
     try{ await d1Post("visit",{code:c}); try{ localStorage.setItem("dc-vis",day+c); }catch(e){} }catch(e){} },1000); })();
+let SHARE_AT=0; function refShare(via){ if(!(UID&&isReg())||Date.now()-SHARE_AT<10000) return; SHARE_AT=Date.now(); try{ d1Post("share",{via}).catch(()=>{}); }catch(e){} }
 function shareTxt(){ return (S.lang==="es"?"💎 Juega Diamantina y gana cripto GRATIS viendo anuncios. Entra aquí 👉 ":S.lang==="pt"?"💎 Jogue Diamantina e ganhe cripto GRÁTIS. Entre aqui 👉 ":"💎 Play Diamantina and earn FREE crypto. Join here 👉 ")+refLink(); }
 function refPopQueue(){ const k=bogota().key; if(S.refPop===k) return;
   const show=()=>{ if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; } if($("#vfl")||$("#rfp")){ setTimeout(show,2500); return; } refPopShow(); };
@@ -3293,7 +3295,7 @@ function refPopShow(){
   const close=()=>{ d.remove(); clearInterval(rfpTimer); };
   d.querySelector(".vflx").onclick=close; d.onclick=e=>{ if(e.target===d) close(); };
   d.querySelector("[data-go-vis]").onclick=()=>{ close(); compBoard="vis"; goView("comp"); };
-  d.querySelectorAll("[data-sh]").forEach(b=>b.onclick=async e=>{ const k=b.dataset.sh;
+  d.querySelectorAll("[data-sh]").forEach(b=>b.onclick=async e=>{ const k=b.dataset.sh; if(k!=="reg") refShare(k);
     if(k==="reg"){ e.preventDefault(); close(); try{ openAuth("up"); }catch(err){} return; }
     if(k==="copy"){ e.preventDefault(); try{ await navigator.clipboard.writeText(link); toast(t("linkCopied")); }catch(err){ toast(link); } return; }
     if(k==="native"){ e.preventDefault(); try{ if(navigator.share) await navigator.share({title:"Diamantina",text:shareTxt(),url:link}); else { await navigator.clipboard.writeText(shareTxt()); toast(t("linkCopied")); } }catch(err){} } });
@@ -3414,13 +3416,29 @@ async function loadVflStats(){
     const tbl=(p,h)=>`<p class="hint" style="margin:8px 0 4px;font-weight:800">${h}</p><table class="vfltab"><tr><th></th><th>${es?"Vieron":"Seen"}</th><th>${es?"Tocaron":"Tapped"}</th><th>${es?"Compraron":"Bought"}</th><th>%</th></tr>${["vip","gear","hero"].map(k=>row(p,k)).join("")}</table>`;
     el.innerHTML=`<div class="panel" style="margin-top:12px"><h2>⚡ ${es?"Ofertas relámpago":"Flash sales"}</h2>${tbl("t",es?"Hoy":"Today")}${tbl("w",es?"Últimos 14 días":"Last 14 days")}
       <p class="hint" style="margin:6px 0 0">${es?"«Compraron» cuenta las compras hechas mientras la oferta estaba activa (con saldo o pedidos por FaucetPay/Cwallet/cripto).":"«Bought» counts purchases made while the offer was active."}</p></div>`;
-  }catch(e){ el.innerHTML=""; }
+  }catch(e){ el.innerHTML=`<div class="panel" style="margin-top:12px"><h2>⚡ ${es?"Ofertas relámpago":"Flash sales"}</h2><p class="hint">⚠️ ${es?"No se pudo leer el conteo":"Couldn't load the counters"}: ${escapeHtml(String(e&&e.message||e))}</p></div>`; }
+}
+const VIA_TXT={copy:"📋 copió el link",wa:"🟢 compartió por WhatsApp",tg:"🔵 compartió por Telegram",fb:"🔷 compartió por Facebook",native:"🚀 compartió el link",banner:"🖼️ compartió un banner"};
+let refLiveT=null;
+async function loadRefLive(){
+  const el=$("#refLive"); if(!el) return; const es=S.lang==="es";
+  try{ const d=await d1Post("reflive",{}); const nm=u=>escapeHtml(d.names[u]||("ID "+codeOf(u)));
+    const ago=at=>{ const m=Math.max(0,Math.round((Date.now()-at)/60000)); return m<1?(es?"ahora":"now"):m<60?(es?`hace ${m} min`:`${m} min ago`):(es?`hace ${Math.round(m/60)} h`:`${Math.round(m/60)} h ago`); };
+    el.innerHTML=`<div class="panel" style="margin-top:12px"><h2><span class="rfpdot"></span> ${es?"En vivo: links de referidos":"Live: referral links"}</h2>
+      <div class="stgrid"><div class="stcard hi"><small>${es?"Visitas hoy":"Visits today"}</small><b>${nf(d.visits)}</b></div><div class="stcard"><small>${es?"Jugadores con visitas":"Players with visits"}</small><b>${nf(d.referrers)}</b></div>
+      <div class="stcard"><small>${es?"Veces compartido (24 h)":"Shares (24 h)"}</small><b>${nf(d.shares)}</b></div><div class="stcard"><small>${es?"Jugadores que comparten":"Players sharing"}</small><b>${nf(d.sharers)}</b></div></div>
+      <p class="hint" style="margin:10px 0 4px;font-weight:800">${es?"Últimos movimientos":"Latest activity"}</p>
+      <div class="reffeed">${d.feed.length?d.feed.map(x=>`<div class="req"><div class="grow"><b>${nm(x.uid)}</b> ${x.kind==="visit"?(es?"👀 recibió una visita (+0.00001 USDT)":"👀 got a visit"):(VIA_TXT[x.via]||VIA_TXT.native)}<br><small style="color:var(--muted)">${ago(x.at)}</small></div></div>`).join(""):`<p class="hint">${es?"Todavía nadie ha compartido hoy.":"Nobody has shared yet today."}</p>`}</div>
+      ${d.top.length?`<p class="hint" style="margin:10px 0 4px;font-weight:800">${es?"Más visitas hoy":"Most visits today"}</p>${d.top.map((x,i)=>`<div class="req">${medal(i)}<div class="grow"><b>${nm(x.uid)}</b></div><b>${nf(x.n)}</b></div>`).join("")}`:""}
+      <p class="hint" style="margin:6px 0 0">${es?"Se actualiza solo cada 20 segundos mientras miras esta pantalla.":"Refreshes every 20 seconds while this screen is open."}</p></div>`;
+  }catch(e){ el.innerHTML=`<div class="panel" style="margin-top:12px"><h2>${es?"En vivo: links de referidos":"Live: referral links"}</h2><p class="hint">⚠️ ${escapeHtml(String(e&&e.message||e))}</p></div>`; }
+  clearTimeout(refLiveT); refLiveT=setTimeout(()=>{ const v=$("#v-admin"); if(v&&v.classList.contains("on")&&adminTab==="stats"&&!document.hidden&&$("#refLive")) loadRefLive(); },20000);
 }
 async function loadStats(){
   const box=$("#adminStats"); if(!box||!(DB&&UID)) return; box.innerHTML=`<div class="panel"><p class="hint">${t("mkLoading")}</p></div>`;
   const STK=[]; const k=bogota().key, wk=weekInfo().key, S0={players:0,today:0,fToday:0,fWeek:0,refs:0,nfts:0,sales:0,proofs:0,paid:0,vip:0,pendPay:0,pendOrd:0,dmt:0};
   try{
-    const [lb,refs,nfts,sales,proofs,vip,pay,ord,wl]=await Promise.all(["lbads","refs",NFT_COL,"sales","proofs","vip","payouts","orders","waitlist"].map(c=>aCol(c)));
+    const [lb,refs,nfts,sales,proofs,vip,pay,ord,wl]=await Promise.all(["lbads","refs",NFT_COL,"sales","proofs","vip","payouts","orders","waitlist"].map(c=>aCol(c,60*60000)));   /* stats: Firebase is read at most once an hour */
     lb.docs.forEach(d=>{const x=d.data(); if(Array.isArray(x.stk)&&x.stk.length) STK.push({uid:d.id,nick:x.nick||"",code:x.code||"",stk:x.stk}); S0.players++; if(x.day===k){S0.today++; S0.fToday+=x.td||0;} if(x.week===wk) S0.fWeek+=x.ads||0; S0.dmt+=x.dmt||0;});
     S0.refs=refs.size; S0.wait=wl.size; nfts.docs.forEach(d=>{ if(d.data().owner) S0.nfts++; }); S0.sales=sales.size;
     proofs.docs.forEach(d=>{S0.proofs++; S0.paid+=parseFloat(d.data().amountUsd||0);});
@@ -3436,9 +3454,9 @@ async function loadStats(){
     ${card("gem","stNfts",`${S0.nfts}/${NFT_TOTAL}`)}${card("shop","stSales",nf(S0.sales))}
     ${card("pay","stPaid",`$${S0.paid.toFixed(S0.paid<1?4:2)}`)}${card("pay","stProofs",nf(S0.proofs))}
     ${card("pay","stPendPay",nf(S0.pendPay),S0.pendPay?"warn":"")}${card("shop","stPendOrd",nf(S0.pendOrd),S0.pendOrd?"warn":"")}${card("pay","stWait",nf(S0.wait||0))}
-  </div><p class="hint">${t("stNote")}</p><div id="vflStats"></div>${stakeAdminHTML(STK)}
+  </div><p class="hint">${t("stNote")}</p><div id="refLive"></div><div id="vflStats"></div>${stakeAdminHTML(STK)}
   <p class="hint" style="margin:12px 0 6px;font-weight:800">${t("magicPrev")}</p><div class="bwrow">${BW_ORDER.map(id=>`<button class="bwchip open" data-pv="${id}" style="--k1:${(BW[id].key||["#FDE047"])[0]};--k2:${(BW[id].key||["#FDE047","#DC2626"])[1]}">${ic(BW[id].icon,34)}<b>${t(BW[id].name)}</b><small>${t("magicPrevSub")}</small></button>`).join("")}</div></div>`;
-  loadVflStats();
+  loadVflStats(); loadRefLive();
   box.querySelectorAll("[data-pv]").forEach(b=>b.onclick=()=>{ magicPreview=true; bwId=b.dataset.pv; magicMode=true; viewDay=null; goView("map"); renderMap(); });
 }
 const stkAmt=x=>x.a==="USD"?usd(x.amt||0):x.a==="DMT"?nf(x.amt||0)+" DMT":nf(x.amt||0,8)+" "+x.a;
