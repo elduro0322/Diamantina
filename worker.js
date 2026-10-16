@@ -297,6 +297,7 @@ async function d1(request, env) {
     return json({ ok: true, ...snap, at: Date.now() });
   }
   if (a === "nft") return json({ ok: true, ...(await nftSnap(db)) });
+  if (a === "dl") { const m = await metaGet(db, "dlinks"); return json({ ok: true, set: !!m, ...((m && m.v) || { on: false, links: [], label: "" }) }); }
   if (request.method !== "POST") return json({ ok: false, error: "bad_request" }, 400);
   let me; try { me = await who(body.t); } catch (e) { return json({ ok: false, error: String(e.message || e) }, 401); }
   const now = Date.now();
@@ -324,6 +325,18 @@ async function d1(request, env) {
   }
   if (a === "visit") return json({ ok: true, ...(await visit(db, me, body, request, env, now)) });
   if (a === "visstats") return json({ ok: true, ...(await visStats(db, me.uid, now)) });
+  if (a === "dlclick") {                                   // tap on the Direct Link button (which link of the rotation)
+    const i = int(body.i, 19); const day = today(now);
+    await db.prepare("INSERT INTO offstat (day, k, e, n) VALUES (?, 'dl', ?, 1) ON CONFLICT(day, k, e) DO UPDATE SET n = n + 1").bind(day, String(i)).run();
+    return json({ ok: true });
+  }
+  if (a === "setdl") {                                     // owner: Direct Links list
+    if (!me.owner) return json({ ok: false, error: "owner" }, 403);
+    const links = (Array.isArray(body.links) ? body.links : []).map(x => str(x, 500).trim()).filter(x => /^https:\/\/[^\s"'<>]+$/.test(x)).slice(0, 20);
+    const v = { on: !!body.on && links.length > 0, links, label: str(body.label, 30) };
+    await metaSet(db, "dlinks", v).run();
+    return json({ ok: true, ...v });
+  }
   if (a === "share") {                                     // a player tapped copy / WhatsApp / Telegram / Facebook / share
     const via = ["copy", "wa", "tg", "fb", "native", "banner"].includes(body.via) ? body.via : "native";
     await db.prepare("INSERT INTO vislog (at, uid, kind, via) VALUES (?, ?, 'share', ?)").bind(now, me.uid, via).run();
