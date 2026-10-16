@@ -4105,8 +4105,8 @@ async function doAuth(mode){
   try{
     if(mode==="reg"){
       const u=a.currentUser;
-      if(u&&u.isAnonymous){ await u.linkWithCredential(firebase.auth.EmailAuthProvider.credential(em,pw)); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; if(!S.welcomeNft) S.welcomePending=true; save(); await cloudSave(true); closeModal(); renderAcc(); toast(au("welcome"),"trophy"); setTimeout(welcomeGift,900); try{ window.__startFull&&window.__startFull(); }catch(e){} }
-      else { await a.createUserWithEmailAndPassword(em,pw); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; if(!S.welcomeNft) S.welcomePending=true; save(); location.reload(); }
+      if(u&&u.isAnonymous){ await u.linkWithCredential(firebase.auth.EmailAuthProvider.credential(em,pw)); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; CLOUD_OK=true; if(!S.welcomeNft) S.welcomePending=true; save(); await cloudSave(true); closeModal(); renderAcc(); toast(au("welcome"),"trophy"); setTimeout(welcomeGift,900); try{ window.__startFull&&window.__startFull(); }catch(e){} }
+      else { await a.createUserWithEmailAndPassword(em,pw); try{ await a.currentUser.sendEmailVerification(); }catch(e){} S.email=em; CLOUD_OK=true; if(!S.welcomeNft) S.welcomePending=true; save(); location.reload(); }
     } else {
       await a.signInWithEmailAndPassword(em,pw);
       let d=null; try{ d=await firebase.firestore().doc("upgrades/"+a.currentUser.uid+"/save/state").get(); }catch(e){}
@@ -4153,18 +4153,23 @@ async function logout(){ try{ await cloudSave(true); }catch(e){} try{ await FA()
   try{ localStorage.removeItem(KEY); localStorage.removeItem(CAP_KEY); }catch(e){} location.href=location.pathname; }
 function renderAcc(){ const b=$("#accBtn"); if(!b) return; b.hidden=!FA(); b.classList.toggle("on",isReg()); b.setAttribute("aria-label",isReg()?au("acct"):au("in")); }
 let csT=null;
+/* CLOUD_OK: the cloud copy was checked first. If Firebase can't be read (daily limit), we DON'T save,
+   so a player on a new phone never overwrites his real progress with an empty game. */
+let CLOUD_OK=false, CL_RETRY=null;
 async function cloudSave(now){
   try{ if(!(DB&&UID)||!isReg()) return; }catch(e){ return; }
+  if(!CLOUD_OK){ if(!CL_RETRY) CL_RETRY=setTimeout(()=>{ CL_RETRY=null; cloudLoad(); },3*60000); return; }
   const run=async()=>{ try{ await DB.doc(SAVE_PATH()).set({s:JSON.stringify(S),at:Date.now()}); }catch(e){} };
   if(now){ clearTimeout(csT); csT=null; return run(); }
   if(csT) return; csT=setTimeout(()=>{ csT=null; run(); },120000);
 }
 async function cloudLoad(){
   if(!(DB&&UID)||!isReg()) return false;
-  try{ if(sessionStorage.getItem("diamantina-synced")){ sessionStorage.removeItem("diamantina-synced"); return false; } }catch(e){}
-  try{ const d=await DB.doc(SAVE_PATH()).get(); if(!d.exists){ cloudSave(true); return false; }
+  try{ if(sessionStorage.getItem("diamantina-synced")){ sessionStorage.removeItem("diamantina-synced"); CLOUD_OK=true; return false; } }catch(e){}
+  try{ const d=await withTO(DB.doc(SAVE_PATH()).get({source:"server"}),12000); if(!d.exists){ CLOUD_OK=true; cloudSave(true); return false; }
     const c=JSON.parse(d.data().s||"{}"); if((c._at||0)>(S._at||0)+5000){ try{ localStorage.setItem(KEY,d.data().s); sessionStorage.setItem("diamantina-synced","1"); }catch(e){} location.reload(); return true; }
-  }catch(e){} return false;
+    CLOUD_OK=true; cloudSave();
+  }catch(e){ CLOUD_OK=false; if(!CL_RETRY) CL_RETRY=setTimeout(()=>{ CL_RETRY=null; cloudLoad(); },3*60000); } return false;
 }
 document.addEventListener("visibilitychange",()=>{ if(document.hidden&&csT) cloudSave(true); });
 const AUTH_FREE="nav.bottom,#payCoinBtn,#coinMenu,#langBtn,#soundBtn,#accBtn,#termsBtn,.socials,.xbans,#modal,.brand,#adminBtn,.legal";
