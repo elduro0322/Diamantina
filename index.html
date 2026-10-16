@@ -889,6 +889,7 @@ main{overscroll-behavior-y:contain}
 .rfpshare [data-sh=wa]{background:#25D366}.rfpshare [data-sh=tg]{background:#229ED9}.rfpshare [data-sh=fb]{background:#1877F2}
 .rfpprize{margin:0 0 10px;padding:8px 10px;border-radius:12px;background:linear-gradient(90deg,#F5A400,#FFE15A);color:#3A2400;font-weight:800;font-size:13px;cursor:pointer}
 .rfpnote{display:block;margin-top:8px;font-size:11px;opacity:.75}
+.tixbox{background:radial-gradient(120% 80% at 50% 0%,#12B76A 0%,#0B5E43 45%,#062A22 100%)}
 .vflplan b{display:block;font-size:17px}.vflplan s{opacity:.6;font-size:12px}.vflplan em{display:block;font-style:normal;color:#7CF0C2;font-size:18px}
 .vflgo{width:100%;padding:15px;border:0;border-radius:16px;font-size:19px;font-weight:900;color:#3A2400;background:linear-gradient(#FFE15A,#F5A400);box-shadow:0 5px 0 #A86A00;cursor:pointer}
 .firstoff.vflash{background:linear-gradient(90deg,#FF3D6E,#7B2CFF);color:#fff;animation:vflBlink 1s infinite alternate}
@@ -3411,9 +3412,9 @@ async function loadVflStats(){
   const el=$("#vflStats"); if(!el) return; const es=S.lang==="es";
   try{ const d=await d1Post("offstats",{}); const T={}, today=new Date(Date.now()+BOGOTA_OFFSET).toISOString().slice(0,10);
     d.list.forEach(x=>{ for(const p of [x.day===today?"t":null,"w"]){ if(!p) continue; const r=(T[p+x.k]=T[p+x.k]||{view:0,click:0,buy:0}); r[x.e]+=x.n; } });
-    const nm={vip:es?"Planes VIP (casilla 5)":"VIP plans (circle 5)",gear:es?"Armas (casilla 12)":"Weapons (circle 12)",hero:es?"Héroes VIP (casilla 18)":"VIP heroes (circle 18)"};
+    const nm={vip:es?"Planes VIP (casilla 5)":"VIP plans (circle 5)",gear:es?"Armas (casilla 12)":"Weapons (circle 12)",hero:es?"Héroes VIP (casilla 18)":"VIP heroes (circle 18)",tix:es?"Ticket 50% (casilla 5)":"50% ticket (circle 5)"};
     const row=(p,k)=>{ const r=T[p+k]||{view:0,click:0,buy:0}; return `<tr><td>${nm[k]}</td><td>${r.view}</td><td>${r.click}</td><td><b>${r.buy}</b></td><td>${r.view?(r.buy*100/r.view).toFixed(1)+"%":"—"}</td></tr>`; };
-    const tbl=(p,h)=>`<p class="hint" style="margin:8px 0 4px;font-weight:800">${h}</p><table class="vfltab"><tr><th></th><th>${es?"Vieron":"Seen"}</th><th>${es?"Tocaron":"Tapped"}</th><th>${es?"Compraron":"Bought"}</th><th>%</th></tr>${["vip","gear","hero"].map(k=>row(p,k)).join("")}</table>`;
+    const tbl=(p,h)=>`<p class="hint" style="margin:8px 0 4px;font-weight:800">${h}</p><table class="vfltab"><tr><th></th><th>${es?"Vieron":"Seen"}</th><th>${es?"Tocaron":"Tapped"}</th><th>${es?"Compraron":"Bought"}</th><th>%</th></tr>${["vip","gear","hero","tix"].map(k=>row(p,k)).join("")}</table>`;
     el.innerHTML=`<div class="panel" style="margin-top:12px"><h2>⚡ ${es?"Ofertas relámpago":"Flash sales"}</h2>${tbl("t",es?"Hoy":"Today")}${tbl("w",es?"Últimos 14 días":"Last 14 days")}
       <p class="hint" style="margin:6px 0 0">${es?"«Compraron» cuenta las compras hechas mientras la oferta estaba activa (con saldo o pedidos por FaucetPay/Cwallet/cripto).":"«Bought» counts purchases made while the offer was active."}</p></div>`;
   }catch(e){ el.innerHTML=`<div class="panel" style="margin-top:12px"><h2>⚡ ${es?"Ofertas relámpago":"Flash sales"}</h2><p class="hint">⚠️ ${es?"No se pudo leer el conteo":"Couldn't load the counters"}: ${escapeHtml(String(e&&e.message||e))}</p></div>`; }
@@ -4406,11 +4407,38 @@ function vflShow(kind="vip"){
   d.querySelectorAll("[data-vfh]").forEach(b=>b.onclick=()=>vflGo(()=>{ shopMode="prem"; goView("shop"); setTimeout(()=>buyHeroDialog(b.dataset.vfh),250); }));
   d.querySelector(".vflgo").onclick=goBtn;
 }
+/* players holding the 50% ticket: once a day at circle 5, "use your ticket" (it really lasts until its date) */
+function tixPopQueue(){ const k=bogota().key; if(S.tixPop===k||!tixOn()) return;
+  const show=()=>{ if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; } if($("#vfl")||$("#rfp")){ setTimeout(show,2500); return; } tixPopShow(); };
+  setTimeout(show,1300); }
+function tixPopShow(){
+  if(!tixOn()) return; S.tixPop=bogota().key; save(); hideDeal();
+  const es=S.lang==="es", pt=S.lang==="pt", L=(a,b,c)=>es?a:pt?b:c, cur=window.__OWNER?4:vipTier(), days=tixDays();
+  const plans=VIP_TIERS.filter(v=>v.n>cur).map(v=>`<button class="vflplan ${v.n===4?"best":""}" data-tvp="${v.n-1}"><b>VIP ${v.n} ×${v.m}</b><s>$${v.usd.toFixed(2)}</s><em>$${(Math.round(v.usd*(100-TIX_PCT))/100).toFixed(2)}</em></button>`).join("");
+  const d=document.createElement("div"); d.id="vfl"; d.className="vfl"; d.dataset.k="tix";
+  d.innerHTML=`<div class="vflbox tixbox" role="dialog"><button class="vflx" aria-label="Cerrar">✕</button>
+    <div style="margin:2px 0 6px">${TIX_SVG(120)}</div>
+    <span class="vfltag" style="background:#12B76A;animation:none">🎟️ ${L("TU TICKET -50%","SEU TICKET -50%","YOUR TICKET -50%")}</span>
+    <h3>${L("¡Aprovecha tu ticket!","Aproveite seu ticket!","Use your ticket!")}</h3>
+    <p>${L("Tienes 50% de descuento en VIP, llaves, armas, héroes VIP, NFT y niveles. Tu ticket vence en:","Você tem 50% de desconto em VIP, chaves, armas, heróis, NFT e níveis. Seu ticket vence em:","You have 50% off VIP, keys, weapons, VIP heroes, NFTs and levels. Your ticket expires in:")}</p>
+    <div class="vflclock" style="font-size:24px">⏳ <span class="tixleft" data-u="${S.tix.until}">${leftLong(S.tix.until-Date.now())}</span></div>
+    ${plans?`<div class="vflplans">${plans}</div>`:""}
+    <button class="vflgo">🎟️ ${L("¡Usar mi ticket ahora!","Usar meu ticket agora!","Use my ticket now!")}</button>
+    <small class="rfpnote" style="display:block;margin-top:8px;opacity:.8">${L(`Solo sirve para 1 compra · quedan ${days} ${days===1?"día":"días"}`,`Vale para 1 compra · restam ${days} dias`,`Valid for 1 purchase · ${days} days left`)}</small></div>`;
+  document.body.appendChild(d);
+  if(!S.tixPopSeen||S.tixPopSeen!==S.tixPop){ S.tixPopSeen=S.tixPop; save(); vflEv("tix","view"); }
+  const close=()=>d.remove(); d.querySelector(".vflx").onclick=close; d.onclick=e=>{ if(e.target===d) close(); };
+  const go=i=>vflGo(()=>{ vipSel=Math.max(Math.min(3,cur),i); shopMode="vip"; goView("shop"); });
+  d.querySelectorAll("[data-tvp]").forEach(b=>b.onclick=()=>go(+b.dataset.tvp));
+  d.querySelector(".vflgo").onclick=()=>go(Math.min(3,cur));
+  const iv=setInterval(()=>{ const el=d.querySelector(".tixleft"); if(!document.body.contains(d)||!el){ clearInterval(iv); return; } el.textContent=leftLong(+el.dataset.u-Date.now()); },1000);
+}
 function vflGo(fn){ const v=$("#vfl"); if(v){ vflEv(v.dataset.k,"click"); v.remove(); } fn(); try{ renderShop(); }catch(e){} }
 /* counters for the owner: how many saw each offer, tapped it, and bought during it */
 const VFL_SENT={};
 function vflEv(k,e){ if(!k||!UID) return; const key=k+e, now=Date.now(); if(VFL_SENT[key]&&now-VFL_SENT[key]<8000) return; VFL_SENT[key]=now; try{ d1Post("ev",{k,e}).catch(()=>{}); }catch(err){} }
-function vflBuy(type){ const k=type==="vip"?"vip":type==="gear"?"gear":type==="hero"?"hero":null; if(k&&vflOn(k)) vflEv(k,"buy"); }
+function vflBuy(type){ const k=type==="vip"?"vip":type==="gear"?"gear":type==="hero"?"hero":null; if(k&&vflOn(k)) vflEv(k,"buy");
+  else if(tixOn()&&TIX_TYPES.includes(type)&&S.tixPop===bogota().key) vflEv("tix","buy"); }
 function vflBannerHTML(kind){ if(!vflOn(kind)) return ""; const es=S.lang==="es", u=vflUntil(kind);
   const what=kind==="gear"?(es?"Armas":"Weapons"):(es?"Héroes VIP":"VIP heroes");
   return `<div class="firstoff vflash" style="margin-bottom:10px">⚡ <b>${what} -${VFL_PCT}%</b><span>${es?"Quedan":"Ends in"} <span class="vflleft" data-u="${u}">${leftStr(u-Date.now())}</span></span></div>`; }
@@ -4423,7 +4451,7 @@ setInterval(()=>{ const on=["vip","gear","hero"].filter(k=>vflOn(k)).join();
   vflWas=on; },1000);
 setInterval(()=>{ document.querySelectorAll(".firstoff .dealleft").forEach(el=>{ const ms=(S.dealUntil||0)-Date.now(); if(ms<=0){ try{ renderVip(); }catch(e){} } else el.textContent=leftStr(ms); }); },1000);
 
-function complete(n){S.done=n;countAd();save();setTimeout(popArm,600);dealTick();renderMap();renderPay(); if(n===2) refPopQueue(); if(n===5) vflQueue("vip"); if(n===12) vflQueue("gear"); if(n===18) vflQueue("hero"); if(n===20) queueMagicOpen();}
+function complete(n){S.done=n;countAd();save();setTimeout(popArm,600);dealTick();renderMap();renderPay(); if(n===2) refPopQueue(); if(n===5){ if(tixOn()) tixPopQueue(); else vflQueue("vip"); } if(n===12) vflQueue("gear"); if(n===18) vflQueue("hero"); if(n===20) queueMagicOpen();}
 const leftStr=ms=>{const s=Math.max(0,Math.floor(ms/1000));return `${String(Math.floor(s/3600)).padStart(2,"0")}:${String(Math.floor(s%3600/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;};
 function flashBanner(){
   const f=ensureFlash(); if(!f) return "";

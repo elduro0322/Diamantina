@@ -344,7 +344,7 @@ async function d1(request, env) {
   }
   if (a === "ev") {                                        // flash-sale counters: seen / tapped / bought
     const k = str(body.k, 8), e = str(body.e, 8);
-    if (!["vip", "gear", "hero"].includes(k) || !["view", "click", "buy"].includes(e)) return json({ ok: false, error: "bad" }, 400);
+    if (!["vip", "gear", "hero", "tix"].includes(k) || !["view", "click", "buy"].includes(e)) return json({ ok: false, error: "bad" }, 400);
     const day = new Date(now - BOG).toISOString().slice(0, 10);
     await db.prepare("INSERT INTO offstat (day, k, e, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, k, e) DO UPDATE SET n = n + 1").bind(day, k, e).run();
     return json({ ok: true });
