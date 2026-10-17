@@ -109,7 +109,10 @@ async function d1Init(db) {
     "CREATE TABLE IF NOT EXISTS visits (uid TEXT, day TEXT, n INTEGER DEFAULT 0, paid INTEGER DEFAULT 0, PRIMARY KEY (uid, day))",
     "CREATE INDEX IF NOT EXISTS visits_day ON visits (day)",
     "CREATE TABLE IF NOT EXISTS vislog (at INTEGER, uid TEXT, kind TEXT, via TEXT)",
-    "CREATE INDEX IF NOT EXISTS vislog_at ON vislog (at)"
+    "CREATE INDEX IF NOT EXISTS vislog_at ON vislog (at)",
+    "CREATE TABLE IF NOT EXISTS msgs (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, body TEXT, at INTEGER, seen INTEGER DEFAULT 0, reply TEXT, rat INTEGER)",
+    "CREATE INDEX IF NOT EXISTS msgs_uid ON msgs (uid, seen)",
+    "CREATE INDEX IF NOT EXISTS msgs_at ON msgs (at)"
   ].map(q => db.prepare(q)));
   D1_READY = true;
 }
@@ -354,6 +357,37 @@ async function d1(request, env) {
     await namesFor(db, [...(top.results || []), ...(feed.results || [])].map(x => x.uid), snap);
     const tv = await db.prepare("SELECT COALESCE(SUM(n), 0) AS n, COUNT(*) AS u FROM visits WHERE day = ?").bind(d).first();
     return json({ ok: true, top: top.results || [], feed: feed.results || [], names: snap.names, visits: tv ? tv.n : 0, referrers: tv ? tv.u : 0, shares: ((sh.results || [])[0] || {}).n || 0, sharers: ((sh.results || [])[0] || {}).u || 0 });
+  }
+  /* ---- messages owner <-> player (popup in the game) ---- */
+  if (a === "inbox") {                                     // player: owner messages not answered yet
+    const r = await db.prepare("SELECT id, body, at FROM msgs WHERE uid = ? AND seen = 0 ORDER BY at LIMIT 5").bind(me.uid).all();
+    return json({ ok: true, list: r.results || [] });
+  }
+  if (a === "msgreply") {                                  // player answers (or just closes with "OK")
+    const r = await db.prepare("UPDATE msgs SET seen = 1, reply = ?, rat = ? WHERE id = ? AND uid = ? AND seen = 0").bind(str(body.reply, 500).trim() || null, now, int(body.id, 1e12), me.uid).run();
+    return json({ ok: true, n: (r.meta && r.meta.changes) || 0 });
+  }
+  if (a === "msgfind" || a === "msgsend" || a === "msglist" || a === "msgdel") {
+    if (!me.owner) return json({ ok: false, error: "owner" }, 403);
+    if (a === "msgfind") {                                 // by ranking name or player code
+      const q = str(body.q, 30).trim(); if (!q) return json({ ok: true, list: [] });
+      const r = await db.prepare("SELECT uid, nick, code, seen FROM lb WHERE code = ? OR nick LIKE ? ORDER BY seen DESC LIMIT 12").bind(q.toUpperCase(), "%" + q.replace(/[%_]/g, "") + "%").all();
+      return json({ ok: true, list: r.results || [] });
+    }
+    if (a === "msgsend") {
+      const uid = str(body.uid, 64), txt = str(body.body, 800).trim();
+      if (!uid || !txt) return json({ ok: false, error: "bad" }, 400);
+      await db.batch([
+        db.prepare("INSERT INTO msgs (uid, body, at) VALUES (?, ?, ?)").bind(uid, txt, now),
+        db.prepare("DELETE FROM msgs WHERE at < ?").bind(now - 60 * 86400000)
+      ]);
+      return json({ ok: true });
+    }
+    if (a === "msgdel") { await db.prepare("DELETE FROM msgs WHERE id = ?").bind(int(body.id, 1e12)).run(); return json({ ok: true }); }
+    const r = await db.prepare("SELECT id, uid, body, at, seen, reply, rat FROM msgs ORDER BY at DESC LIMIT 30").all();
+    const snap = { names: {}, heroes: {}, vips: {} }, L = r.results || [];
+    await namesFor(db, L.map(x => x.uid), snap);
+    return json({ ok: true, list: L, names: snap.names });
   }
   if (a === "ev") {                                        // flash-sale counters: seen / tapped / bought
     const k = str(body.k, 8), e = str(body.e, 8);

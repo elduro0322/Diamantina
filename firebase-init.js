@@ -45,7 +45,7 @@ window.DIAMANTINA_CAPTCHA = true;
     // Owner = Google account allowed by the Firestore rules (prizes/ is owner-only)
     let ownerCache=null;
     const isOwner=async()=>{ const c=fauth.currentUser; if(!c||c.isAnonymous) return false; if(ownerCache!==null) return ownerCache;
-      try{ await fdb.doc("prizes/_owner_check").get(); ownerCache=true; }catch(e){ ownerCache=false; } return ownerCache; };
+      try{ await fdb.doc("prizes/_owner_check").get(); ownerCache=true; }catch(e){ const er=String((e&&(e.code||e.message))||""); /* Firebase over its daily limit: still open the owner panel (the server checks the owner again on every action) */ ownerCache=/resource-exhausted|quota|unavailable/i.test(er)&&c.emailVerified===true&&String(c.email||"").toLowerCase()==="julioduluc01@gmail.com"; } return ownerCache; };
     window.claude={ use: async name=>{
       const u=await authReady; if(!u) return null;
       if(name==="db") return fdb;

@@ -863,6 +863,9 @@ main{overscroll-behavior-y:contain}
 @keyframes vflIn{from{opacity:0}to{opacity:1}}
 .vflbox{position:relative;width:min(400px,100%);max-height:calc(100vh - 32px);overflow:auto;border-radius:24px;padding:22px 16px 16px;text-align:center;color:#fff;background:radial-gradient(120% 80% at 50% 0%,#7B2CFF 0%,#3A1A8C 45%,#140B3A 100%);border:3px solid #FFC93C;box-shadow:0 0 0 4px rgba(255,201,60,.25),0 20px 60px rgba(0,0,0,.6);animation:vflPop .45s cubic-bezier(.2,1.4,.4,1)}
 @keyframes vflPop{from{transform:scale(.7)}to{transform:scale(1)}}
+.msgbody{background:rgba(255,255,255,.1);border-radius:14px;padding:12px;margin:10px 0;text-align:left;font-size:16px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+#msgPop textarea{width:100%;box-sizing:border-box;border-radius:12px;border:2px solid #FFC93C;padding:10px;font:inherit;font-size:15px;resize:vertical;min-height:70px}
+.msgrow{border:1px solid rgba(27,63,168,.15);border-radius:12px;padding:10px;margin:8px 0;font-size:14px}.msgrow .rep{background:#E8FFEF;color:#0B5A2A;border-radius:8px;padding:6px 8px;margin-top:6px;font-weight:800;word-break:break-all;user-select:all}
 .vflx{position:absolute;top:8px;right:8px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.18);color:#fff;font-size:22px;font-weight:900;line-height:40px;cursor:pointer}
 .vfltag{display:inline-block;padding:5px 14px;border-radius:999px;background:#FF3D6E;font-weight:900;font-size:13px;letter-spacing:1px;animation:vflBlink 1s infinite alternate}
 @keyframes vflBlink{from{opacity:1}to{opacity:.6}}
@@ -1095,7 +1098,7 @@ main{overscroll-behavior-y:contain}
     <div class="seg admseg" id="adminTabs"></div>
     <div class="panel livebox" id="liveBox"><span class="livedot"></span><b id="liveN">…</b><span id="liveTxt"> jugadores activos ahora</span><small id="liveCoins"></small></div>
     <div id="adminStats"></div>
-    <div class="panel" id="adminPanel" hidden><h2 data-t="admin"></h2><div id="adminList"></div></div>
+    <div class="panel" id="adminPanel" hidden><div id="msgAdm"></div><h2 data-t="admin"></h2><div id="adminList"></div></div>
     <div class="panel" id="acctPanel" hidden></div>
     <div class="panel" id="calcPanel" hidden></div>
     <div id="adminCfg" hidden></div><div id="adminAds" hidden></div>
@@ -3424,6 +3427,7 @@ function renderAdmin(){
   const show={ads:"#adminAds",stats:"#adminStats",pays:"#adminPanel",acct:"#acctPanel",calc:"#calcPanel",cfg:"#adminCfg"};
   Object.entries(show).forEach(([k,sel])=>{ const el=$(sel); if(el) el.hidden=adminTab!==k; });
   if(adminTab==="stats") loadStats();
+  if(adminTab==="pays"){ try{ msgAdmin(); }catch(e){} }
   if(adminTab==="pays") loadAdmin().then(()=>{ $("#acctPanel").hidden=true; $("#calcPanel").hidden=true; });
   if(adminTab==="acct") loadAccounting();
   if(adminTab==="calc") renderCalc();
@@ -3621,6 +3625,68 @@ function renderAdmAds(){
     if(ok){ applyAdsCfg(doc); ADM_ADS=null; renderAdmAds(); $("#aaMsg").textContent=t("cfgSaved"); toast(t("cfgSaved"),"ad"); }
     else { $("#aaMsg").textContent=(es?"No se pudo guardar: ":"Could not save: ")+err+(/permission/i.test(err)?(es?" (revisa que entraste como dueño con ?owner)":" (make sure you are signed in as owner)"):""); toast(t("mkErr")); }
   };
+}
+
+/* ===== Messages: owner -> player popup, player answers (Cloudflare D1, works even when Firebase is full) ===== */
+let INBOX_BUSY=false; const INBOX_SKIP=new Set();
+async function inboxCheck(){
+  if(INBOX_BUSY||typeof UID==="undefined"||!UID||OWNER||document.getElementById("msgPop")) return; INBOX_BUSY=true;
+  try{ const d=await d1Post("inbox",{}); const m=(d.list||[]).find(x=>!INBOX_SKIP.has(x.id)); if(m) msgShow(m); }catch(e){} INBOX_BUSY=false;
+}
+function msgShow(m){
+  const es=S.lang==="es", pt=S.lang==="pt", L=(a,b,c)=>es?a:pt?b:c;
+  const d=document.createElement("div"); d.id="msgPop"; d.className="vfl";
+  d.innerHTML=`<div class="vflbox" role="dialog"><button class="vflx" aria-label="Cerrar">✕</button>
+    <div style="font-size:44px;line-height:1">📩</div>
+    <h2 style="margin:6px 0 2px;color:#FFC93C">${L("Mensaje de Diamantina","Mensagem da Diamantina","Message from Diamantina")}</h2>
+    <div style="font-size:13px;opacity:.8">${L("Soporte del juego","Suporte do jogo","Game support")} · ${new Date(m.at).toLocaleString()}</div>
+    <div class="msgbody">${escapeHtml(m.body)}</div>
+    <textarea id="msgRep" maxlength="500" placeholder="${L("Escribe tu respuesta aquí…","Escreva sua resposta aqui…","Write your answer here…")}"></textarea>
+    <button class="vflgo" id="msgSend" style="margin-top:10px">${L("Enviar respuesta","Enviar resposta","Send answer")}</button>
+    <p id="msgErr" style="margin:8px 0 0;font-weight:800;color:#FFC93C"></p></div>`;
+  document.body.appendChild(d);
+  const close=()=>{ INBOX_SKIP.add(m.id); d.remove(); };
+  d.querySelector(".vflx").onclick=close;
+  $("#msgSend").onclick=async()=>{ const v=$("#msgRep").value.trim();
+    if(!v){ $("#msgErr").textContent=L("Escribe tu respuesta primero","Escreva sua resposta primeiro","Write your answer first"); return; }
+    const b=$("#msgSend"); b.disabled=true; b.textContent="…";
+    try{ await d1Post("msgreply",{id:m.id,reply:v}); d.remove(); toast(L("¡Respuesta enviada! Gracias","Resposta enviada! Obrigado","Answer sent! Thanks"),"pay"); setTimeout(inboxCheck,1500); }
+    catch(e){ b.disabled=false; b.textContent=L("Enviar respuesta","Enviar resposta","Send answer"); $("#msgErr").textContent=L("No se pudo enviar. Revisa tu internet.","Não foi possível enviar.","Could not send. Check your internet."); } };
+}
+const MSG_TPL=[["💳 Pedir billetera","Hola 👋 Hubo un problema con tu pago. Por favor respóndeme aquí con tu correo de FaucetPay o tu ID/correo de Cwallet para enviarte el pago. ¡Gracias! 💎"],["✅ Pago enviado","¡Hola! Ya te enviamos tu pago 💎 Revisa tu cuenta y dinos aquí si te llegó. ¡Gracias por jugar Diamantina!"]];
+let MSG_TO=null;
+async function msgAdmin(){
+  const box=$("#msgAdm"); if(!box) return; const es=S.lang==="es";
+  box.innerHTML=`<div style="border:2px solid #FFC93C;border-radius:16px;padding:12px;margin-bottom:14px"><h2 style="margin-top:0">✉️ ${es?"Escribir a un jugador":"Message a player"}</h2>
+    <p class="hint" style="margin-top:0">${es?"Le sale en una ventana grande cuando abra el juego y te puede responder. Funciona aunque Firebase esté lleno.":"Shows as a big popup when they open the game; they can answer."}</p>
+    <div style="display:flex;gap:6px"><input class="field" id="msgQ" placeholder="${es?"Nombre del ranking o código":"Ranking name or code"}" style="flex:1"><button class="mini" id="msgFind">${es?"Buscar":"Search"}</button></div>
+    <div id="msgRes"></div>
+    <div id="msgTo" style="margin:8px 0;font-weight:800">${MSG_TO?"➡️ "+escapeHtml(MSG_TO.nick||"")+" · ID "+codeOf(MSG_TO.uid):""}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${MSG_TPL.map((x,i)=>`<button class="mini" data-tp="${i}">${x[0]}</button>`).join("")}</div>
+    <textarea class="field" id="msgTxt" rows="4" maxlength="800" style="width:100%;box-sizing:border-box" placeholder="${es?"Escribe el mensaje…":"Write the message…"}"></textarea>
+    <button class="claimbtn" id="msgGo" style="margin-top:8px">${es?"Enviar mensaje":"Send message"}</button><p class="msg" id="msgM"></p>
+    <h3 style="margin:14px 0 4px">${es?"Mensajes y respuestas":"Messages and answers"} <button class="mini" id="msgRf">↻</button></h3><div id="msgList"><p class="hint">${t("mkLoading")}</p></div></div>`;
+  box.querySelectorAll("[data-tp]").forEach(b=>b.onclick=()=>{ $("#msgTxt").value=MSG_TPL[+b.dataset.tp][1]; });
+  const find=async()=>{ const q=$("#msgQ").value.trim(); if(!q) return; $("#msgRes").innerHTML=`<p class="hint">${t("mkLoading")}</p>`;
+    try{ const d=await d1Post("msgfind",{q}); const L=d.list||[];
+      $("#msgRes").innerHTML=L.length?L.map((x,i)=>`<div class="msgrow" style="display:flex;align-items:center;gap:8px"><div style="flex:1"><b>${escapeHtml(x.nick||"Hero-"+(x.code||""))}</b> · ID ${escapeHtml(x.code||codeOf(x.uid))}<br><span style="color:var(--muted);font-size:12px">${x.seen?(es?"Visto: ":"Seen: ")+new Date(x.seen).toLocaleString():""}</span></div><button class="mini" data-pk="${i}">${es?"Elegir":"Pick"}</button></div>`).join(""):`<p class="hint">${es?"No encontré a nadie con ese nombre":"Nobody found"}</p>`;
+      $("#msgRes").querySelectorAll("[data-pk]").forEach(b=>b.onclick=()=>{ MSG_TO=L[+b.dataset.pk]; $("#msgTo").textContent="➡️ "+(MSG_TO.nick||"")+" · ID "+codeOf(MSG_TO.uid); $("#msgRes").innerHTML=""; });
+    }catch(e){ $("#msgRes").innerHTML=`<p class="hint">⚠️ ${escapeHtml(String(e&&e.message||e))}</p>`; } };
+  $("#msgFind").onclick=find; $("#msgQ").onkeydown=e=>{ if(e.key==="Enter") find(); };
+  $("#msgGo").onclick=async()=>{ const txt=$("#msgTxt").value.trim();
+    if(!MSG_TO){ $("#msgM").textContent=es?"Primero busca y elige al jugador":"Pick a player first"; return; }
+    if(!txt){ $("#msgM").textContent=es?"Escribe el mensaje":"Write the message"; return; }
+    const b=$("#msgGo"); b.disabled=true;
+    try{ await d1Post("msgsend",{uid:MSG_TO.uid,body:txt}); $("#msgTxt").value=""; $("#msgM").textContent=es?"✅ Enviado. Le sale cuando abra el juego.":"✅ Sent."; toast(es?"Mensaje enviado":"Message sent","pay"); msgList(); }
+    catch(e){ $("#msgM").textContent="⚠️ "+String(e&&e.message||e); } b.disabled=false; };
+  $("#msgRf").onclick=msgList; msgList();
+}
+async function msgList(){
+  const el=$("#msgList"); if(!el) return; const es=S.lang==="es";
+  try{ const d=await d1Post("msglist",{}); const L=d.list||[];
+    el.innerHTML=L.length?L.map(x=>`<div class="msgrow"><b>${escapeHtml((d.names||{})[x.uid]||"")}</b> · ID ${codeOf(x.uid)} <span style="color:var(--muted);font-size:12px">· ${new Date(x.at).toLocaleString()}</span> <button class="mini" data-md="${x.id}" style="float:right;background:#5a2a3a">✕</button><div style="margin-top:4px;white-space:pre-wrap">${escapeHtml(x.body)}</div>${x.reply?`<div class="rep">💬 ${escapeHtml(x.reply)}</div><span style="color:var(--muted);font-size:12px">${es?"Respondió":"Answered"} ${new Date(x.rat).toLocaleString()}</span>`:x.seen?`<div style="color:var(--muted);margin-top:4px">${es?"Lo leyó, sin respuesta":"Read, no answer"}</div>`:`<div style="color:var(--muted);margin-top:4px">⏳ ${es?"Todavía no lo ha visto":"Not seen yet"}</div>`}</div>`).join(""):`<p class="hint">${es?"Aún no has enviado mensajes":"No messages yet"}</p>`;
+    el.querySelectorAll("[data-md]").forEach(b=>b.onclick=async()=>{ if(!confirm(es?"¿Borrar este mensaje?":"Delete?")) return; try{ await d1Post("msgdel",{id:+b.dataset.md}); msgList(); }catch(e){} });
+  }catch(e){ el.innerHTML=`<p class="hint">⚠️ ${escapeHtml(String(e&&e.message||e))}</p>`; }
 }
 
 async function dlAdmin(){
@@ -4096,7 +4162,7 @@ const startDB=(async()=>{
     if(!window.claude||!window.claude.use){ loadMarket(); return; }
     const [db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")]);
     if(!db||!user){ loadMarket(); return; }
-    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); window.__OWNER=!!OWNER; if(OWNER){ try{ renderVip(); renderText(); }catch(e){} } loadCfg(); loadAds(); setTimeout(beat,4000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },10*60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
+    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); window.__OWNER=!!OWNER; if(OWNER){ try{ renderVip(); renderText(); }catch(e){} } loadCfg(); loadAds(); setTimeout(beat,4000); setTimeout(inboxCheck,7000); setInterval(()=>{ if(!document.hidden) inboxCheck(); },10*60000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },10*60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
     let fullStarted=false;
     const startFull=async()=>{ if(fullStarted||!UID||!isReg()) return; fullStarted=true;
       for(const p of (S.payouts||[]).filter(p=>!p.synced)){
