@@ -1074,7 +1074,7 @@ main{overscroll-behavior-y:contain}
   <section class="view on" id="v-map">
     <button class="top3" id="top3" hidden></button>
     <button class="proofticker" id="proofTicker" hidden></button>
-    <div id="dlMap"></div>
+    <button class="taskcard" id="taskBtn" type="button"></button>
     <div class="lvbar" id="lvlBar"></div>
     <div id="sponsorBox"></div>
     <div class="week" id="week"></div>
@@ -1089,7 +1089,7 @@ main{overscroll-behavior-y:contain}
     <button class="reset" id="resetBtn" hidden data-t="newRound"></button>
     <div class="payhero"><button class="claimbtn" id="mapClaim"></button></div>
     <button class="depbtn" id="depMapBtn"></button>
-    <button class="taskcard" id="taskBtn" type="button"></button>
+    <div id="dlMap"></div>
     <button class="vipchip" id="vipChip"></button>
   </section>
 
@@ -4178,7 +4178,8 @@ async function fbImport2(){   /* owner, once: copy old withdrawals / purchases /
     const ou=await real(DB.collection("orders")); for(const u of ou.docs){ const ls=await real(DB.doc("orders/"+u.id).collection("list")); ls.docs.forEach(d=>{ const x=d.data(); O.push({uid:u.id,id:d.id,status:x.status||"pending",at:+x.at||Date.now(),d:{...x,id:d.id}}); }); }
     const vv=await real(DB.collection("vip")); vv.docs.forEach(d=>{ const x=d.data(); V.push({uid:d.id,until:x.until||0,tier:x.tier||1,at:x.at||0}); });
     const up=await real(DB.collection("upgrades")); up.docs.forEach(d=>{ const x=d.data(); if(x&&x.method) Q.push({uid:d.id,status:x.status||"pending",at:x.at||0,d:x}); });
-    for(let i=0;i<Math.max(P.length,O.length,V.length,Q.length);i+=10) await d1Post("imp2",{pays:P.slice(i,i+10),ords:O.slice(i,i+10),vips:V.slice(i,i+10),vreq:Q.slice(i,i+10)});
+    const C=[]; const cu=await real(DB.collection("credits")); for(const u of cu.docs){ const ls=await real(DB.doc("credits/"+u.id).collection("list")); ls.docs.forEach(d=>{ const x=d.data(); if(x.type==="task"||x.note==="weekly prize") C.push({uid:u.id,id:d.id,at:+x.at||0,d:x}); }); }
+    for(let i=0;i<Math.max(P.length,O.length,V.length,Q.length,C.length);i+=10) await d1Post("imp2",{pays:P.slice(i,i+10),ords:O.slice(i,i+10),vips:V.slice(i,i+10),vreq:Q.slice(i,i+10),creds:C.slice(i,i+10)});
     await d1Post("imp2",{done:true}); toast(S.lang==="es"?"✅ Retiros y compras copiados a Cloudflare":"✅ Withdrawals and purchases copied to Cloudflare","pay");
   }catch(e){ IMP2_RUN=false; }
 }
@@ -4211,10 +4212,13 @@ async function loadAdmin(){
     catch(e){ if(legacy){ try{ const [lb,rf]=await Promise.all([aCol("lbads"),aCol("refs")]); RISK={lb:{},rf:rf.docs.map(d=>({id:d.id,...d.data()}))}; lb.docs.forEach(d=>RISK.lb[d.id]=d.data()); }catch(e2){ RISK=null; } } } }
   list.innerHTML=rows.length?rows.map((r,i)=>{const pc=coinBy(r.coin);
     return `<div class="req"><img src="${pc.img}" alt=""><div class="grow">${NM[r.uid]?who(r.uid)+"<br>":""}${escapeHtml(r.date)} · ${pc.t} · ${METHODS[r.method]?.name||""} · $${escapeHtml(r.amountUsd)}${r.amountCoin?` ≈ ${nf(r.amountCoin,8)} ${pc.t}`:""}<br><span style="color:var(--muted)">${escapeHtml(r.account)}</span>${riskHTML(r,RISK)}</div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini" data-i="${i}">${t("markPaid")}</button><button class="mini wdref" data-r="${i}" style="background:#5a2a3a">${S.lang==="es"?"Devolver saldo":"Refund"}</button></div></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("noPending")}</p>`;
-  if(ADM&&ADM.tasks&&ADM.tasks.n){ const es=S.lang==="es", T=ADM.tasks; list.insertAdjacentHTML("afterbegin",`<div class="req">📋<div class="grow">${es?"Tareas AdsLab":"AdsLab tasks"} · ${T.n}<br><span style="color:var(--muted)">${es?"Pagado a jugadores":"Paid to players"}: ${usd(T.u||0)} · reward: ${nf(T.r||0,6)}</span></div></div>`); }
+  if(ADM){ const es=S.lang==="es", T=ADM.tasks||{}, TL=ADM.tlist||[];
+    list.insertAdjacentHTML("afterbegin",`<div class="req" style="display:block">📋 <b>${es?"Tareas pagadas (AdsLab)":"Paid tasks (AdsLab)"}</b><br>
+      <span style="color:var(--muted)">${es?"Total":"Total"}: <b>${nf(T.n||0)}</b> · ${es?"últimas 24 h":"last 24 h"}: <b>${nf(T.today||0)}</b> · ${es?"pagado a jugadores":"paid to players"}: <b>${usd(T.u||0)}</b> · ${es?"te pagó AdsLab":"AdsLab paid you"}: <b>$${nf(T.r||0,4)}</b></span>
+      ${TL.length?`<div style="margin-top:6px;font-size:13px">${TL.map(x=>`<div style="padding:4px 0;border-top:1px solid rgba(255,255,255,.08)">${escapeHtml(NM[x.uid]||"")} · ID ${codeOf(x.uid)} · ${escapeHtml(x.ttype||"")} · +${usd(x.units||0)} <span style="color:var(--muted)">· ${new Date(x.at||0).toLocaleString()}</span></div>`).join("")}</div>`:`<div style="margin-top:6px;color:var(--muted);font-size:13px">${es?"Todavía no hay tareas registradas en Cloudflare. Las nuevas aparecen aquí apenas el jugador las complete.":"No tasks yet."}</div>`}</div>`); }
   if(legacy) try{ const cr=await aCol("credits",30*60000); let tn=0, tu=0, tr=0, last=[];
     for(const u of cr.docs){ const ls=await aSub("credits",u,"list"); ls.docs.forEach(d=>{ const x=d.data(); if(x.type==="task"){ tn++; tu+=x.units||0; tr+=x.reward||0; last.push({...x,uid:u.id}); } }); }
-    if(tn){ last.sort((a,b)=>(b.at||0)-(a.at||0)); const es=S.lang==="es";
+    if(tn&&!(ADM&&ADM.imp2)){ last.sort((a,b)=>(b.at||0)-(a.at||0)); const es=S.lang==="es";
       list.insertAdjacentHTML("afterbegin",`<div class="req">📋<div class="grow">${es?"Tareas AdsLab":"AdsLab tasks"} · ${tn}<br><span style="color:var(--muted)">${es?"Pagado a jugadores":"Paid to players"}: ${usd(tu)} · reward: ${nf(tr,6)}<br>${last.slice(0,5).map(x=>`ID ${codeOf(x.uid)} · ${escapeHtml(x.ttype||"")} · reward ${x.reward} · vCur ${x.vCurrency} → ${usd(x.units||0)}`).join("<br>")}</span></div></div>`); } }catch(e){}
   { const es=S.lang==="es"; list.insertAdjacentHTML("afterbegin",`<div class="req" style="display:block">🪙 <b>${es?"Monedas para cobrar":"Payout coins"}</b><br><span style="color:var(--muted);font-size:13px">${es?"Toca una moneda para activarla o desactivarla. Verde = disponible · Rojo = no disponible":"Tap a coin to turn it on or off. Green = on · Red = off"}</span><div class="coinoffs" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${PAY.coins.map(c=>{ const on=coinOn(c.t); return `<button class="mini coinsw" data-c="${c.t}" data-on="${on?1:0}" style="background:${on?"#1E9E52":"#B3263A"};color:#fff;min-width:74px">${on?"✅":"🚫"} ${c.t}</button>`; }).join("")}</div></div>`);
     list.querySelectorAll(".coinsw").forEach(b=>b.onclick=async()=>{ const c=b.dataset.c, on=b.dataset.on==="1";

@@ -445,17 +445,18 @@ async function d1(request, env) {
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
     const cred = (uid, id, d) => db.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(str(uid, 64), str(id, 90), now, JSON.stringify({ ...d, at: now }).slice(0, 3000));
     if (a === "adm") {                                     // everything waiting for the owner
-      const [p, o, v, tk] = await db.batch([
+      const [p, o, v, tk, tl] = await db.batch([
         db.prepare("SELECT uid, date, at, d FROM pays WHERE st = 'pending' ORDER BY at LIMIT 300"),
         db.prepare("SELECT uid, id, at, d FROM ords WHERE st = 'pending' ORDER BY at LIMIT 300"),
         db.prepare("SELECT uid, at, d FROM vreq WHERE st = 'pending' ORDER BY at LIMIT 100"),
-        db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(json_extract(d, '$.units')), 0) AS u, COALESCE(SUM(json_extract(d, '$.reward')), 0) AS r FROM creds WHERE id LIKE 'task_%'")
+        db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(json_extract(d, '$.units')), 0) AS u, COALESCE(SUM(json_extract(d, '$.reward')), 0) AS r, COALESCE(SUM(CASE WHEN at > ? THEN 1 ELSE 0 END), 0) AS today FROM creds WHERE id LIKE 'task_%'").bind(now - 86400000),
+        db.prepare("SELECT uid, at, d FROM creds WHERE id LIKE 'task_%' ORDER BY at DESC LIMIT 15")
       ]);
       const snap = { names: {}, heroes: {}, vips: {} };
-      await namesFor(db, [...(p.results || []), ...(o.results || []), ...(v.results || [])].map(x => x.uid), snap);
+      await namesFor(db, [...(p.results || []), ...(o.results || []), ...(v.results || []), ...(tl.results || [])].map(x => x.uid), snap);
       return json({ ok: true, pays: (p.results || []).map(x => ({ ...J(x.d), uid: x.uid, id: x.date, date: x.date, status: "pending", src: "d1" })),
         ords: (o.results || []).map(x => ({ ...J(x.d), uid: x.uid, id: x.id, status: "pending", src: "d1" })),
-        vreq: (v.results || []).map(x => ({ ...J(x.d), uid: x.uid, status: "pending", src: "d1" })), names: snap.names, tasks: (tk.results || [])[0] || {}, imp2: !!(await metaGet(db, "imp2")) });
+        vreq: (v.results || []).map(x => ({ ...J(x.d), uid: x.uid, status: "pending", src: "d1" })), names: snap.names, tasks: (tk.results || [])[0] || {}, tlist: (tl.results || []).map(x => ({ ...J(x.d), uid: x.uid, at: x.at })), imp2: !!(await metaGet(db, "imp2")) });
     }
     if (a === "assignrefs") {                              // owner: "buy referrals" order -> give N recent players with no referrer
       const buyer = str(body.buyer, 64), n = int(body.n, 500), my = await db.prepare("SELECT by FROM refs WHERE uid = ?").bind(buyer).first();
@@ -511,6 +512,7 @@ async function d1(request, env) {
       for (const x of (body.ords || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO ords (uid, id, st, at, d) VALUES (?, ?, ?, ?, ?)").bind(str(x.uid, 64), str(x.id, 60), str(x.status, 12) || "pending", int(x.at, 9e15), JSON.stringify(x.d || {}).slice(0, 6000)));
       for (const x of (body.vips || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO vips (uid, until, tier, at) VALUES (?, ?, ?, ?)").bind(str(x.uid, 64), int(x.until, 9e15), int(x.tier, 4) || 1, int(x.at, 9e15)));
       for (const x of (body.vreq || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO vreq (uid, st, at, d) VALUES (?, ?, ?, ?)").bind(str(x.uid, 64), str(x.status, 12) || "pending", int(x.at, 9e15), JSON.stringify(x.d || {}).slice(0, 3000)));
+      for (const x of (body.creds || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(str(x.uid, 64), str(x.id, 90), int(x.at, 9e15), JSON.stringify(x.d || {}).slice(0, 3000)));
       if (body.done) q.push(metaSet(db, "imp2", { at: now }));
       if (q.length) await db.batch(q);
       return json({ ok: true, n: q.length });
