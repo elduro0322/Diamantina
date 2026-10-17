@@ -4719,6 +4719,7 @@ const FAUCETS_DEFAULT=FAUCETS.slice();
 const DL_DEFAULT=["https://bitcotasks.com/promote/79239","https://uplcm.com/4/12007092","https://www.profitableratecpmnetwork.com/bxp7p5gih?key=e3109eae900587a62acf00ea611486c5","https://speedy-links.com/s?0hHyrOOV","https://tq.gentlywarrant.com/iatN4R3o0EnV9t7q/158196","https://clck1.tclcktlu.com/direct?id=c756fa52036f4a3eba452c334938b4ca&zone_id=858","https://data527.click/e8fb6dc05eb157fa5f1c/0cfea3d97f/?placementName=default","https://massive-hall.com/5VvMZQ"];
 /* 8 sponsor cards that rotate in the ad window with the other banners. Honest text ("Sponsored"), and tapping them is optional:
    when one shows, that circle does not ask for the banner tap. */
+const SPB_IN_AD=false;   /* the ad window shows only the network banners: step 1 banner, step 2 ad (sponsor links stay on the map button) */
 const SPB=[["https://bitcotasks.com/promote/79239","🎁","#FFD34D",0],["https://uplcm.com/4/12007092","🎀","#FF454D",1],["https://www.profitableratecpmnetwork.com/bxp7p5gih?key=e3109eae900587a62acf00ea611486c5","💎","#28C5FF",2],["https://speedy-links.com/s?0hHyrOOV","🎁","#28C5FF",3],["https://tq.gentlywarrant.com/iatN4R3o0EnV9t7q/158196","👑","#FFD34D",0],["https://clck1.tclcktlu.com/direct?id=c756fa52036f4a3eba452c334938b4ca&zone_id=858","🎁","#FF454D",1],["https://data527.click/e8fb6dc05eb157fa5f1c/0cfea3d97f/?placementName=default","✨","#D65BFF",2],["https://massive-hall.com/5VvMZQ","💝","#FF454D",3]];
 const SPB_TX={es:[["Oferta de un patrocinador","Mira lo que te ofrece nuestro patrocinador."],["Promoción patrocinada","Descubre esta oferta de un socio de Diamantina."],["Visita a nuestro patrocinador","Nos ayuda a seguir pagando premios."],["Oferta especial patrocinada","Échale un vistazo si te interesa."]],
   pt:[["Oferta de um patrocinador","Veja o que nosso patrocinador oferece."],["Promoção patrocinada","Descubra esta oferta de um parceiro da Diamantina."],["Visite nosso patrocinador","Nos ajuda a continuar pagando prêmios."],["Oferta especial patrocinada","Dê uma olhada se tiver interesse."]],
@@ -4745,14 +4746,14 @@ function adModal(title,key,extra,onClaim,ctx){
   clearInterval(adTick);
   const paid=pickAd(); if(paid) countAdView(paid);
   const link=faucetFor(key)[1];
-  const nOwn=paid?0:liveBanners().length, spbI=paid?-1:(()=>{ const r=Math.floor(Math.random()*(nOwn+SPB.length)); return r>=nOwn?r-nOwn:-1; })();
+  const nOwn=paid?0:liveBanners().length, spbI=paid||!SPB_IN_AD?-1:(()=>{ const r=Math.floor(Math.random()*(nOwn+SPB.length)); return r>=nOwn?r-nOwn:-1; })();
   const own=paid||spbI>=0?"":ownBannerHTML();
   const hasBanner=spbI<0; // the banner step is required, except when a sponsor card shows (tapping it is optional)
   const banner=paid?sponsorCard(paid,"inslot"):spbI>=0?spbHTML(spbI):own?own:`<div class="adslot bannerph">${ic("ad",40)}<span>${t("bannerSpace")}</span></div>`;
   showModal(title,`${hasBanner?`<div class="adsteps"><span class="adstep" id="stB"><i>1</i>${t("stepBanner")}</span><span class="adstep" id="stA"><i>2</i>${t("viewAd")}</span></div>`:""}
     <div class="topbanner${spbI>=0?" opt":""}" id="topBan">${banner}</div>
     <a class="fbanner" id="fbBtn" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" style="--h:${(key*47)%360}"><span class="fbico">${ic("ad",30)}</span><span class="fbtx"><b>${t("viewAd")}</b><em>${t("adTap")}</em></span><span class="fbgo">›</span></a>
-    <div class="adtimer" id="adTm"><span class="adring" style="--p:0"><b>${AD_SECS}</b></span><span id="adMsg">${hasBanner?t("adNeedBoth"):t("adTapFirst")}</span></div>${extra}${dlBtnHTML("dlInAd")}`,
+    <div class="adtimer" id="adTm"><span class="adring" style="--p:0"><b>${AD_SECS}</b></span><span id="adMsg">${hasBanner?t("adNeedBoth"):t("adTapFirst")}</span></div>${extra}`,
     [[t("close"),"no",()=>{ clearInterval(adTick); closeModal(); }],[t("claim"),"go",()=>{ if(!btn||btn.disabled) return; clearInterval(adTick); captchaGate(ctx,onClaim,btn); }]]);
   const btn=$("#mFoot .btn.go"); btn.disabled=true;
   let left=AD_SECS, started=false, gotB=!hasBanner, gotA=false;
