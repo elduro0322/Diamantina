@@ -843,6 +843,7 @@ main{overscroll-behavior-y:contain}
 @media (prefers-reduced-motion:reduce){.fbanner::after,.fbgo,.btn.pulse{animation:none}}
 
 .topbanner.opt::before{display:none}
+.spbgal{display:flex;flex-direction:column;gap:10px;max-height:62vh;overflow:auto;padding:2px}.spbgal .spb{flex-shrink:0}
 .spb{--ac:#FFD34D;position:relative;display:flex;align-items:center;gap:12px;min-height:118px;padding:14px;border:2px solid var(--ac);border-radius:16px;overflow:hidden;text-decoration:none;color:#fff;text-align:left;background:radial-gradient(circle at 15% 50%,color-mix(in srgb,var(--ac) 28%,transparent),transparent 45%),linear-gradient(135deg,#09090d,#1d1822 65%,#08080b);box-shadow:0 0 14px color-mix(in srgb,var(--ac) 25%,transparent)}
 .spbsh{position:absolute;right:-30px;top:-40px;width:110px;height:110px;border-radius:50%;background:var(--ac);opacity:.12;filter:blur(20px);pointer-events:none}
 .spbic{flex:0 0 70px;font-size:52px;text-align:center;filter:drop-shadow(0 5px 8px #0009)}
@@ -3492,6 +3493,7 @@ async function loadStats(){
     for(const u of pay.docs){ const r=await aSub("payouts",u,"requests"); S0.pendPay+=r.docs.filter(d=>d.data().status==="pending").length; }
     for(const u of ord.docs){ const r=await aSub("orders",u,"list"); S0.pendOrd+=r.docs.filter(d=>d.data().status==="pending").length; }
   }catch(e){}
+  try{ const d=await d1Post("pstats",{}); S0.players=Math.max(S0.players,d.players||0); S0.today=Math.max(S0.today,d.today||0); S0.refs=Math.max(S0.refs,d.refs||0); }catch(e){}
   const card=(i,l,v,c="")=>`<div class="stcard ${c}">${ic(i,26)}<small>${t(l)}</small><b>${v}</b></div>`;
   box.innerHTML=`<div class="panel"><h2>${ic("trophy",28)} ${t("admStats")}</h2><div class="stgrid">
     ${card("heroes","stPlayers",nf(S0.players))}${card("map","stToday",nf(S0.today),"hi")}
@@ -4128,7 +4130,9 @@ let AC={}; try{ AC=JSON.parse(localStorage.getItem("dc-admc")||"{}")||{}; }catch
 let acT=null; const acSave=()=>{ clearTimeout(acT); acT=setTimeout(()=>{ try{ const now=Date.now(); for(const k in AC) if(now-AC[k].at>2*86400000) delete AC[k]; localStorage.setItem("dc-admc",JSON.stringify(AC)); }catch(e){ try{ localStorage.removeItem("dc-admc"); }catch(_){} } },500); };
 const aSnap=docs=>({docs:docs.map(d=>({id:d.id,exists:true,data:()=>d.v})),size:docs.length,empty:!docs.length});
 async function aGet(key,q,ttl){ const c=AC[key]; if(c&&Date.now()-c.at<(ttl||15*60000)) return aSnap(c.docs);
-  const r=await q.get(); const docs=r.docs.map(d=>({id:d.id,v:d.data()})); AC[key]={at:Date.now(),docs}; acSave(); return aSnap(docs); }
+  const r=await q.get(); const docs=r.docs.map(d=>({id:d.id,v:d.data()}));
+  if(!(r.metadata&&r.metadata.fromCache)){ AC[key]={at:Date.now(),docs}; acSave(); }   /* Firebase full/offline gives only this phone's copy: never keep that */
+  return aSnap(docs); }
 const aCol=(c,ttl)=>aGet(c,DB.collection(c),ttl);
 /* a player's sub-list is read again only when its parent doc changed (updatedAt) */
 const aSub=(p,u,sub)=>aGet(p+"/"+u.id+"/"+sub+"@"+((u.data()||{}).updatedAt||""),DB.doc(p+"/"+u.id).collection(sub),3*86400000);
@@ -4736,7 +4740,11 @@ function dlOpen(){ if(!dlOn()) return; let i=0; try{ i=(+localStorage.getItem("d
   try{ if(UID) d1Post("dlclick",{i}).catch(()=>{}); }catch(e){} }
 const DL_IC=`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><defs><linearGradient id="dlg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFE15A"/><stop offset="1" stop-color="#FF8A00"/></linearGradient></defs><rect x="3" y="9" width="18" height="12" rx="2.5" fill="url(#dlg)"/><rect x="2" y="6.5" width="20" height="4" rx="1.6" fill="#FFC93C"/><rect x="10.6" y="6.5" width="2.8" height="14.5" fill="#E0262B"/><path d="M12 6.5c-1.5-3.6-5.4-4-5.6-1.6-.2 2 3.6 1.9 5.6 1.6zm0 0c1.5-3.6 5.4-4 5.6-1.6.2 2-3.6 1.9-5.6 1.6z" fill="#E0262B"/></svg>`;
 const dlBtnHTML=id=>dlOn()?`<button class="dlbtn" id="${id}" type="button">${DL_IC}<span><b>${escapeHtml(dlLabel())}</b><small>${S.lang==="es"?"Opcional · descubre ofertas de nuestros patrocinadores":"Optional · offers from our sponsors"}</small></span><i>›</i></button>`:"";
-function renderDlMap(){ const el=document.getElementById("dlMap"); if(!el) return; el.innerHTML=dlBtnHTML("dlMapBtn"); const b=document.getElementById("dlMapBtn"); if(b) b.onclick=dlOpen; }
+function renderDlMap(){ const el=document.getElementById("dlMap"); if(!el) return; el.innerHTML=dlBtnHTML("dlMapBtn"); const b=document.getElementById("dlMapBtn"); if(b) b.onclick=spbGallery; }
+/* map button: a window with the 8 sponsor banners; the player picks one (optional) */
+function spbGallery(){ const es=S.lang==="es", pt=S.lang==="pt";
+  showModal(dlLabel(),`<p class="hint" style="margin:0 0 10px">${es?"Opcional · ofertas de nuestros patrocinadores. Toca la que te interese.":pt?"Opcional · ofertas dos nossos patrocinadores. Toque a que te interessar.":"Optional · offers from our sponsors. Tap the one you like."}</p><div class="spbgal">${SPB.map((x,i)=>spbHTML(i)).join("")}</div>`,[[t("close"),"no",closeModal]]);
+  document.querySelectorAll(".spbgal .spb").forEach(a=>a.addEventListener("click",()=>{ try{ if(UID) d1Post("dlclick",{i:+a.dataset.spb}).catch(()=>{}); }catch(e){} })); }
 setTimeout(()=>{ renderDlMap(); loadDl(); },1500);
 const AD_SECS=10;
 let adTick=null;
@@ -5031,7 +5039,7 @@ async function loadProofs(){
   if(D1_OK!==false){ try{ const d=await d1Get("proofs"); if(d.p.length||d.s){ PROOFS=d.p; PLAYERS=d.n||PLAYERS; PROOF_STATS=d.s||null; cacheSet("proofs",{p:PROOFS,n:PLAYERS,s:PROOF_STATS}); renderProofs(); return; } }catch(e){} }
   try{
     const cut=Date.now()-30*86400000; let all;
-    if(OWNER){ const [q,pl]=await Promise.all([DB.collection("proofs").get(),DB.collection("lbads").get()]); all=q.docs.map(d=>({...d.data(),_id:d.id})); PLAYERS=pl.size; DB.doc("config/stats").set({players:pl.size},{merge:true}).catch(()=>{}); }
+    if(OWNER){ const [q,pl]=await Promise.all([DB.collection("proofs").get(),DB.collection("lbads").get()]); all=q.docs.map(d=>({...d.data(),_id:d.id})); if(!(pl.metadata&&pl.metadata.fromCache)&&pl.size>=PLAYERS){ PLAYERS=pl.size; DB.doc("config/stats").set({players:pl.size},{merge:true}).catch(()=>{}); } }
     else { let bp=null; try{ const b=await withTO(DB.doc("board/proofs").get()); bp=b.exists?b.data():null; }catch(e){}
       if(bp&&Date.now()-(bp.at||0)<60*60000){ PROOFS=bp.p||[]; PLAYERS=bp.n||PLAYERS; PROOF_STATS=bp.s||null; cacheSet("proofs",{p:PROOFS,n:PLAYERS,s:PROOF_STATS}); renderProofs(); return; }
       const q=await withTO(DB.collection("proofs").orderBy("at","desc").limit(20).get()); all=q.docs.map(d=>({...d.data(),_id:d.id})); }

@@ -153,7 +153,7 @@ async function buildComp(db, week, fs, fe, mo) {
 }
 
 /* ===== NFT market in D1 (ownership, listings, sales, world NFTs) ===== */
-const NFT_FEE = 5, NFT_MAX = 500;
+const NFT_FEE = 5, NFT_MAX = 600;   // 500 silver-chest NFTs + 100 of the new collection (501-600)
 const dropNft = db => db.prepare("DELETE FROM meta WHERE k = 'nft'");
 async function nftSnap(db) {
   const old = await metaGet(db, "nft");
@@ -167,7 +167,7 @@ async function nftSnap(db) {
   ]);
   const tr = {}; for (const x of own.results || []) if (x.trades) tr[x.id] = x.trades;
   const wo = {}; for (const x of w.results || []) if (x.owner) wo[x.id] = x.owner;
-  const v = { taken: (own.results || []).length, tr, mk: mk.results || [], w: wo, fee: (fee.results || []).length ? JSON.parse(fee.results[0].v) : { sum: 0, n: 0 }, imp: !!(imp.results || []).length };
+  const v = { taken: (own.results || []).filter(x => x.id <= 500).length,   /* "X of 500 left" counts only the silver-chest NFTs */ tr, mk: mk.results || [], w: wo, fee: (fee.results || []).length ? JSON.parse(fee.results[0].v) : { sum: 0, n: 0 }, imp: !!(imp.results || []).length };
   await metaSet(db, "nft", v).run();
   return { ...v, at: Date.now() };
 }
@@ -430,6 +430,15 @@ async function d1(request, env) {
     const from = new Date(now - BOG - 14 * 86400000).toISOString().slice(0, 10);
     const r = await db.prepare("SELECT day, k, e, n FROM offstat WHERE day >= ? ORDER BY day DESC").bind(from).all();
     return json({ ok: true, list: r.results || [] });
+  }
+  if (a === "pstats") {                                    // owner: players counted in D1 (works even when Firebase is full)
+    if (!me.owner) return json({ ok: false, error: "owner" }, 403);
+    const [p, r] = await db.batch([
+      db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN seen > ? THEN 1 ELSE 0 END), 0) AS today FROM lb").bind(now - 86400000),
+      db.prepare("SELECT COUNT(*) AS n FROM refs")
+    ]);
+    const x = (p.results || [])[0] || {};
+    return json({ ok: true, players: x.n || 0, today: x.today || 0, refs: ((r.results || [])[0] || {}).n || 0 });
   }
   if (a === "live") {                                      // owner: players online now
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
