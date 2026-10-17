@@ -4184,7 +4184,7 @@ async function loadAdmin(){
       await DB.doc(`payouts/${r.uid}`).collection("requests").doc(r.id).update({status:"refunded",refundedAt:new Date().toISOString()}); toast(S.lang==="es"?"Saldo devuelto ✓":"Refunded ✓","pay");
       if(r.coin&&coinOn(r.coin)&&confirm(S.lang==="es"?`¿Marcar ${r.coin} como NO disponible para todos los jugadores? Les saldrá el aviso "No hay ${r.coin} disponible ahora, selecciona otra".`:`Mark ${r.coin} as NOT available for all players?`)) await setCoinOff(r.coin,true);
       aDrop("payouts/"+r.uid+"/"); loadAdmin(); }catch(e){ b.disabled=false; toast(t("mkErr")); } });
-  list.querySelectorAll(".mini:not(.vipok):not(.ordok):not(.prizeok):not(.adok):not(.adno):not(.wdref):not(.ordno):not(.vipno)").forEach(b=>b.onclick=async()=>{const r=rows[+b.dataset.i]; b.disabled=true;
+  list.querySelectorAll(".mini[data-i]:not(.vipok):not(.ordok):not(.prizeok):not(.adok):not(.adno):not(.wdref):not(.ordno):not(.vipno)").forEach(b=>b.onclick=async()=>{const r=rows[+b.dataset.i]; if(!r) return; b.disabled=true;
     try{await DB.doc(`payouts/${r.uid}`).collection("requests").doc(r.id).update({status:"paid",paidAt:new Date().toISOString()}); aDrop("payouts/"+r.uid+"/"); await publishProof(r); loadAdmin();}catch(e){b.disabled=false;}});
 }
 const startDB=(async()=>{
