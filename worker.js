@@ -46,8 +46,14 @@ async function tasksPostback(request, env, token) {
   const share = Math.min(1, Math.max(0, parseFloat(env.TASK_SHARE || "0.7") || 0.7));
   const usd = Math.min(reward, 1) * share;                    // safety cap: max $1 per task
   const units = Math.max(0, Math.round(usd * 1e5));            // game units ($0.00001)
-  const tok = await fbToken(env), now = Date.now();
+  const now = Date.now();
   const rec = { type: "task", units, reward, vCurrency: vcur, txid, pid: q.get("pid") || "", ttype: q.get("type") || "", sig: q.get("signature") || "", at: now };
+  if (env.DB) {                                               // D1 (does not use the Firebase quota)
+    await d1Init(env.DB);
+    await env.DB.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(uid, "task_" + txid, now, JSON.stringify(rec)).run();
+    return new Response("OK");
+  }
+  const tok = await fbToken(env);
   await fsSet(tok, "credits/" + uid, { updatedAt: now });
   await fsSet(tok, "credits/" + uid + "/list/task_" + txid, rec);
   return new Response("OK");
@@ -115,7 +121,19 @@ async function d1Init(db) {
     "CREATE INDEX IF NOT EXISTS msgs_at ON msgs (at)",
     "CREATE TABLE IF NOT EXISTS refearn (uid TEXT PRIMARY KEY, by TEXT, base REAL, total REAL, at INTEGER)",
     "CREATE INDEX IF NOT EXISTS refearn_by ON refearn (by)",
-    "CREATE INDEX IF NOT EXISTS refs_by ON refs (by)"
+    "CREATE INDEX IF NOT EXISTS refs_by ON refs (by)",
+    "CREATE TABLE IF NOT EXISTS pays (uid TEXT, date TEXT, st TEXT, at INTEGER, d TEXT, PRIMARY KEY (uid, date))",
+    "CREATE INDEX IF NOT EXISTS pays_st ON pays (st)",
+    "CREATE TABLE IF NOT EXISTS ords (uid TEXT, id TEXT, st TEXT, at INTEGER, d TEXT, PRIMARY KEY (uid, id))",
+    "CREATE INDEX IF NOT EXISTS ords_st ON ords (st)",
+    "CREATE TABLE IF NOT EXISTS creds (uid TEXT, id TEXT, at INTEGER, d TEXT, PRIMARY KEY (uid, id))",
+    "CREATE INDEX IF NOT EXISTS creds_at ON creds (uid, at)",
+    "CREATE TABLE IF NOT EXISTS vips (uid TEXT PRIMARY KEY, until INTEGER, tier INTEGER, at INTEGER)",
+    "CREATE TABLE IF NOT EXISTS vreq (uid TEXT PRIMARY KEY, st TEXT, at INTEGER, d TEXT)",
+    "CREATE INDEX IF NOT EXISTS vreq_st ON vreq (st)",
+    "CREATE TABLE IF NOT EXISTS lbd (uid TEXT, day TEXT, td INTEGER, PRIMARY KEY (uid, day))",
+    "CREATE INDEX IF NOT EXISTS lbd_day ON lbd (day)",
+    "CREATE TABLE IF NOT EXISTS lbx (uid TEXT PRIMARY KEY, bal INTEGER, staked INTEGER, dmt INTEGER, dev TEXT, stk TEXT, at INTEGER, fx REAL DEFAULT 0, fxn INTEGER DEFAULT 0, fm INTEGER DEFAULT 0, fmn INTEGER DEFAULT 0)"
   ].map(q => db.prepare(q)));
   D1_READY = true;
 }
@@ -328,6 +346,10 @@ async function d1(request, env) {
       if (by && by !== me.uid) q.push(db.prepare("INSERT INTO refearn (uid, by, base, total, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET base = MAX(refearn.base, excluded.base), total = MAX(refearn.total, excluded.total), at = excluded.at")
         .bind(me.uid, by, Math.min(1e9, +body.refBase || 0), Math.min(1e9, +body.refOwed || 0), now));
     }
+    if (body.day) q.push(db.prepare("INSERT INTO lbd (uid, day, td) VALUES (?, ?, ?) ON CONFLICT(uid, day) DO UPDATE SET td = MAX(lbd.td, excluded.td)").bind(me.uid, str(body.day, 10), int(body.td, 1000)));
+    if (body.x && typeof body.x === "object") q.push(db.prepare("INSERT INTO lbx (uid, bal, staked, dmt, dev, stk, at, fx, fxn, fm, fmn) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET bal = excluded.bal, staked = excluded.staked, dmt = excluded.dmt, dev = excluded.dev, stk = excluded.stk, at = excluded.at, fx = excluded.fx, fxn = excluded.fxn, fm = excluded.fm, fmn = excluded.fmn")
+      .bind(me.uid, int(body.x.bal, 1e12), int(body.x.staked, 1e12), int(body.x.dmt, 1e12), str(body.x.dev, 40), JSON.stringify(Array.isArray(body.x.stk) ? body.x.stk.slice(0, 20) : []).slice(0, 4000), now,
+        Math.max(0, Math.min(1e6, +body.x.fx || 0)), int(body.x.fxn, 1e9), int(body.x.fm, 1e12), int(body.x.fmn, 1e9)));
     q.push(db.prepare("SELECT COALESCE(SUM(n - paid), 0) AS v FROM visits WHERE uid = ? AND n > paid").bind(me.uid));
     q.push(db.prepare("UPDATE visits SET paid = n WHERE uid = ? AND n > paid").bind(me.uid));
     const res = await db.batch(q), vr = res[res.length - 2];
@@ -387,6 +409,113 @@ async function d1(request, env) {
     await db.prepare("INSERT INTO meta (k, v, at) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, at = excluded.at").bind("cfg:" + k, v, now).run();
     return json({ ok: true });
   }
+  /* ---- withdrawals, purchases, VIP and credits (moved from Firebase) ---- */
+  const J = v => { try { return JSON.parse(v); } catch (e) { return {}; } };
+  if (a === "payreq") {                                    // player asks for a withdrawal (one per game day; again only if it was refunded)
+    if (me.anon) return json({ ok: false, error: "register" }, 403);
+    const r0 = body.req || {}, date = str(r0.date, 10); if (!date) return json({ ok: false, error: "bad" }, 400);
+    const d = JSON.stringify({ ...r0, status: "pending" }).slice(0, 6000);
+    const r = await db.prepare("INSERT INTO pays (uid, date, st, at, d) VALUES (?, ?, 'pending', ?, ?) ON CONFLICT(uid, date) DO UPDATE SET st = 'pending', at = excluded.at, d = excluded.d WHERE pays.st = 'refunded'").bind(me.uid, date, now, d).run();
+    return json({ ok: true, n: (r.meta && r.meta.changes) || 0 });
+  }
+  if (a === "mypays") {
+    const r = await db.prepare("SELECT date, st FROM pays WHERE uid = ? ORDER BY at DESC LIMIT 60").bind(me.uid).all();
+    return json({ ok: true, list: r.results || [] });
+  }
+  if (a === "order") {                                     // player purchase waiting for the owner (crypto / FaucetPay / Cwallet / balance)
+    const o = body.ord || {}, id = str(o.id, 60); if (!id) return json({ ok: false, error: "bad" }, 400);
+    await db.prepare("INSERT OR IGNORE INTO ords (uid, id, st, at, d) VALUES (?, ?, 'pending', ?, ?)").bind(me.uid, id, now, JSON.stringify(o).slice(0, 6000)).run();
+    return json({ ok: true });
+  }
+  if (a === "vipreq") {
+    const v = body.req || {};
+    await db.prepare("INSERT INTO vreq (uid, st, at, d) VALUES (?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET st = excluded.st, at = excluded.at, d = excluded.d").bind(me.uid, str(v.status, 12) || "pending", now, JSON.stringify(v).slice(0, 3000)).run();
+    return json({ ok: true });
+  }
+  if (a === "myvip") {
+    const [v, q] = await db.batch([db.prepare("SELECT until, tier FROM vips WHERE uid = ?").bind(me.uid), db.prepare("SELECT st, d FROM vreq WHERE uid = ?").bind(me.uid)]);
+    const vv = (v.results || [])[0] || null, qq = (q.results || [])[0] || null;
+    return json({ ok: true, vip: vv, req: qq ? { ...J(qq.d), status: qq.st } : null, imp2: !!(await metaGet(db, "imp2")) });
+  }
+  if (a === "mycreds") {                                   // new credits since a time (deposits, approved purchases, refunds, prizes, tasks)
+    const r = await db.prepare("SELECT id, at, d FROM creds WHERE uid = ? AND at >= ? ORDER BY at LIMIT 200").bind(me.uid, Math.max(0, +body.since || 0)).all();
+    return json({ ok: true, list: (r.results || []).map(x => ({ id: x.id, at: x.at, ...J(x.d) })) });
+  }
+  if (["adm", "paystat", "ordstat", "vipset", "credit", "prizes", "prizeset", "acct", "imp2", "risk", "assignrefs"].includes(a)) {
+    if (!me.owner) return json({ ok: false, error: "owner" }, 403);
+    const cred = (uid, id, d) => db.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(str(uid, 64), str(id, 90), now, JSON.stringify({ ...d, at: now }).slice(0, 3000));
+    if (a === "adm") {                                     // everything waiting for the owner
+      const [p, o, v, tk] = await db.batch([
+        db.prepare("SELECT uid, date, at, d FROM pays WHERE st = 'pending' ORDER BY at LIMIT 300"),
+        db.prepare("SELECT uid, id, at, d FROM ords WHERE st = 'pending' ORDER BY at LIMIT 300"),
+        db.prepare("SELECT uid, at, d FROM vreq WHERE st = 'pending' ORDER BY at LIMIT 100"),
+        db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(json_extract(d, '$.units')), 0) AS u, COALESCE(SUM(json_extract(d, '$.reward')), 0) AS r FROM creds WHERE id LIKE 'task_%'")
+      ]);
+      const snap = { names: {}, heroes: {}, vips: {} };
+      await namesFor(db, [...(p.results || []), ...(o.results || []), ...(v.results || [])].map(x => x.uid), snap);
+      return json({ ok: true, pays: (p.results || []).map(x => ({ ...J(x.d), uid: x.uid, id: x.date, date: x.date, status: "pending", src: "d1" })),
+        ords: (o.results || []).map(x => ({ ...J(x.d), uid: x.uid, id: x.id, status: "pending", src: "d1" })),
+        vreq: (v.results || []).map(x => ({ ...J(x.d), uid: x.uid, status: "pending", src: "d1" })), names: snap.names, tasks: (tk.results || [])[0] || {}, imp2: !!(await metaGet(db, "imp2")) });
+    }
+    if (a === "assignrefs") {                              // owner: "buy referrals" order -> give N recent players with no referrer
+      const buyer = str(body.buyer, 64), n = int(body.n, 500), my = await db.prepare("SELECT by FROM refs WHERE uid = ?").bind(buyer).first();
+      const r = await db.prepare("SELECT uid FROM lb WHERE uid NOT IN (SELECT uid FROM refs) AND uid != ? AND uid != ? AND uid != ? ORDER BY seen DESC LIMIT ?").bind(buyer, me.uid, (my && my.by) || "", n).all();
+      const L = (r.results || []).map(x => x.uid);
+      if (L.length) await db.batch(L.map(u => db.prepare("INSERT OR IGNORE INTO refs (uid, by, at, via) VALUES (?, ?, ?, 'bought')").bind(u, buyer, now)));
+      return json({ ok: true, got: L.length });
+    }
+    if (a === "risk") {                                    // device + age info for the withdrawal risk check
+      const [l, x, r] = await db.batch([db.prepare("SELECT uid, nick, code, at FROM lb"), db.prepare("SELECT uid, dev, stk FROM lbx"), db.prepare("SELECT uid, by, at, via FROM refs")]);
+      return json({ ok: true, lb: l.results || [], dev: x.results || [], refs: r.results || [] });
+    }
+    if (a === "paystat") {                                 // owner: paid / refunded
+      const st = body.st === "refunded" ? "refunded" : "paid", uid = str(body.uid, 64), date = str(body.date, 10);
+      const q = [db.prepare("UPDATE pays SET st = ?, d = json_set(d, '$.status', ?) WHERE uid = ? AND date = ?").bind(st, st, uid, date)];
+      if (st === "refunded" && body.units > 0) q.push(cred(uid, "refund-" + date + "-" + now.toString(36), { type: "refund", item: date, units: int(body.units, 1e9), coin: str(body.coin, 10) }));
+      await db.batch(q); return json({ ok: true });
+    }
+    if (a === "ordstat") {                                 // owner: approve / reject a purchase
+      const uid = str(body.uid, 64), id = str(body.id, 60), st = body.st === "rejected" ? "rejected" : "approved";
+      const q = [db.prepare("UPDATE ords SET st = ? WHERE uid = ? AND id = ?").bind(st, uid, id)];
+      if (st === "rejected") q.push(cred(uid, "rej-" + id, { type: "reject", item: id }));
+      else if (body.vip) q.push(db.prepare("INSERT INTO vips (uid, until, tier, at) VALUES (?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET until = excluded.until, tier = excluded.tier, at = excluded.at").bind(uid, int(body.vip.until, 9e15), int(body.vip.tier, 4) || 1, now));
+      else if (body.credit) q.push(cred(uid, id, body.credit));
+      await db.batch(q); return json({ ok: true });
+    }
+    if (a === "vipset") {                                  // owner: activate / reject a VIP payment
+      const uid = str(body.uid, 64), q = [db.prepare("UPDATE vreq SET st = ? WHERE uid = ?").bind(body.ok ? "active" : "rejected", uid)];
+      if (body.ok) q.push(db.prepare("INSERT INTO vips (uid, until, tier, at) VALUES (?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET until = excluded.until, tier = excluded.tier, at = excluded.at").bind(uid, int(body.until, 9e15), int(body.tier, 4) || 1, now));
+      await db.batch(q); return json({ ok: true });
+    }
+    if (a === "credit") { await cred(body.uid, body.id, body.d || {}).run(); return json({ ok: true }); }
+    if (a === "prizes") {                                  // which weekly / 15-day / monthly prizes were already credited
+      const keys = (Array.isArray(body.keys) ? body.keys : []).slice(0, 6).map(k => "prize:" + str(k, 20));
+      const r = keys.length ? await db.prepare("SELECT k, v FROM meta WHERE k IN (" + keys.map(() => "?").join(",") + ")").bind(...keys).all() : { results: [] };
+      const o = {}; for (const x of r.results || []) o[x.k.slice(6)] = J(x.v); return json({ ok: true, done: o });
+    }
+    if (a === "prizeset") {                                // credit one prize (only once)
+      const k = "prize:" + str(body.k, 20), id = str(body.id, 20), old = (await metaGet(db, k)) || { v: {} };
+      if (old.v[id]) return json({ ok: true, already: true });
+      await db.batch([metaSet(db, k, { ...old.v, [id]: true }), cred(body.uid, "prize_" + str(body.k, 20) + "_" + id, { type: "deposit", units: int(body.units, 1e9), note: "weekly prize" })]);
+      return json({ ok: true });
+    }
+    if (a === "acct") {                                    // accounting from D1
+      const [o, p, c, x] = await db.batch([db.prepare("SELECT st, d FROM ords"), db.prepare("SELECT st, d FROM pays"),
+        db.prepare("SELECT d FROM creds WHERE d LIKE '%weekly prize%'"), db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(bal), 0) AS bal, COALESCE(SUM(staked), 0) AS st, COALESCE(SUM(dmt), 0) AS dmt, COALESCE(SUM(fx), 0) AS fx, COALESCE(SUM(fxn), 0) AS fxn, COALESCE(SUM(fm), 0) AS fm, COALESCE(SUM(fmn), 0) AS fmn FROM lbx")]);
+      return json({ ok: true, ords: (o.results || []).map(r => ({ ...J(r.d), status: r.st })), pays: (p.results || []).map(r => ({ amountUsd: J(r.d).amountUsd, status: r.st })),
+        prizes: (c.results || []).reduce((s, r) => s + (+J(r.d).units || 0), 0), lbx: (x.results || [])[0] || {} });
+    }
+    if (a === "imp2") {                                    // owner, once: copy the old Firebase withdrawals / purchases / VIP into D1
+      const q = [];
+      for (const x of (body.pays || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO pays (uid, date, st, at, d) VALUES (?, ?, ?, ?, ?)").bind(str(x.uid, 64), str(x.date, 10), str(x.status, 12) || "pending", int(x.at, 9e15), JSON.stringify(x.d || {}).slice(0, 6000)));
+      for (const x of (body.ords || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO ords (uid, id, st, at, d) VALUES (?, ?, ?, ?, ?)").bind(str(x.uid, 64), str(x.id, 60), str(x.status, 12) || "pending", int(x.at, 9e15), JSON.stringify(x.d || {}).slice(0, 6000)));
+      for (const x of (body.vips || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO vips (uid, until, tier, at) VALUES (?, ?, ?, ?)").bind(str(x.uid, 64), int(x.until, 9e15), int(x.tier, 4) || 1, int(x.at, 9e15)));
+      for (const x of (body.vreq || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO vreq (uid, st, at, d) VALUES (?, ?, ?, ?)").bind(str(x.uid, 64), str(x.status, 12) || "pending", int(x.at, 9e15), JSON.stringify(x.d || {}).slice(0, 3000)));
+      if (body.done) q.push(metaSet(db, "imp2", { at: now }));
+      if (q.length) await db.batch(q);
+      return json({ ok: true, n: q.length });
+    }
+  }
   /* ---- messages owner <-> player (popup in the game) ---- */
   if (a === "inbox") {                                     // player: owner messages not answered yet
     const r = await db.prepare("SELECT id, body, at FROM msgs WHERE uid = ? AND seen = 0 ORDER BY at LIMIT 5").bind(me.uid).all();
@@ -431,14 +560,23 @@ async function d1(request, env) {
     const r = await db.prepare("SELECT day, k, e, n FROM offstat WHERE day >= ? ORDER BY day DESC").bind(from).all();
     return json({ ok: true, list: r.results || [] });
   }
-  if (a === "pstats") {                                    // owner: players counted in D1 (works even when Firebase is full)
+  if (a === "pstats") {                                    // owner: panel numbers from D1 (work even when Firebase is full)
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
-    const [p, r] = await db.batch([
-      db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN seen > ? THEN 1 ELSE 0 END), 0) AS today FROM lb").bind(now - 86400000),
-      db.prepare("SELECT COUNT(*) AS n FROM refs")
+    const [p, r, wk, nf, sl, pr, mt, pe] = await db.batch([
+      db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN seen > ? THEN 1 ELSE 0 END), 0) AS today, COALESCE(SUM(CASE WHEN vip > 0 AND seen > ? THEN 1 ELSE 0 END), 0) AS vip FROM lb").bind(now - 86400000, now - 30 * 86400000),
+      db.prepare("SELECT COUNT(*) AS n FROM refs"),
+      db.prepare("SELECT COALESCE(SUM(ads), 0) AS n FROM lbw WHERE week = ?").bind(weekKey()),
+      db.prepare("SELECT COUNT(*) AS n FROM nfts WHERE owner IS NOT NULL AND owner != ''"),
+      db.prepare("SELECT COUNT(*) AS n FROM sales"),
+      db.prepare("SELECT COUNT(*) AS n FROM proofs"),
+      db.prepare("SELECT k, v FROM meta WHERE k IN ('stats', 'fee')"),
+      db.prepare("SELECT (SELECT COUNT(*) FROM pays WHERE st = 'pending') AS pp, (SELECT COUNT(*) FROM ords WHERE st = 'pending') + (SELECT COUNT(*) FROM vreq WHERE st = 'pending') AS po, (SELECT COALESCE(SUM(td), 0) FROM lbd WHERE day = ?) AS ft").bind(str(body.day, 10))
     ]);
-    const x = (p.results || [])[0] || {};
-    return json({ ok: true, players: x.n || 0, today: x.today || 0, refs: ((r.results || [])[0] || {}).n || 0 });
+    const one = q => ((q.results || [])[0] || {}), M = {}; for (const x of mt.results || []) M[x.k] = JSON.parse(x.v);
+    const st = M.stats || {}, fee = M.fee || {};
+    return json({ ok: true, players: one(p).n || 0, today: one(p).today || 0, vip: one(p).vip || 0, refs: one(r).n || 0, fWeek: one(wk).n || 0,
+      nfts: one(nf).n || 0, sales: Math.max(one(sl).n || 0, +fee.n || 0), feeUnits: +fee.sum || 0, proofs30: one(pr).n || 0, paidUsd: +st.paidUsd || 0, paidN: +st.paidN || 0,
+      pendPay: one(pe).pp || 0, pendOrd: one(pe).po || 0, fToday: one(pe).ft || 0, imp2: !!(await metaGet(db, "imp2")) });
   }
   if (a === "live") {                                      // owner: players online now
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
