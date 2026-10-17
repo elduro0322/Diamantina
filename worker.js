@@ -112,7 +112,10 @@ async function d1Init(db) {
     "CREATE INDEX IF NOT EXISTS vislog_at ON vislog (at)",
     "CREATE TABLE IF NOT EXISTS msgs (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, body TEXT, at INTEGER, seen INTEGER DEFAULT 0, reply TEXT, rat INTEGER)",
     "CREATE INDEX IF NOT EXISTS msgs_uid ON msgs (uid, seen)",
-    "CREATE INDEX IF NOT EXISTS msgs_at ON msgs (at)"
+    "CREATE INDEX IF NOT EXISTS msgs_at ON msgs (at)",
+    "CREATE TABLE IF NOT EXISTS refearn (uid TEXT PRIMARY KEY, by TEXT, base REAL, total REAL, at INTEGER)",
+    "CREATE INDEX IF NOT EXISTS refearn_by ON refearn (by)",
+    "CREATE INDEX IF NOT EXISTS refs_by ON refs (by)"
   ].map(q => db.prepare(q)));
   D1_READY = true;
 }
@@ -300,6 +303,11 @@ async function d1(request, env) {
     return json({ ok: true, ...snap, at: Date.now() });
   }
   if (a === "nft") return json({ ok: true, ...(await nftSnap(db)) });
+  if (a === "cfg") {                                      // game settings (coins on/off, accounts, ads, banners): 1 call instead of 4 Firebase reads
+    const r = await db.prepare("SELECT k, v FROM meta WHERE k IN ('cfg:coins', 'cfg:main', 'cfg:ads', 'cfg:xbans')").all();
+    const o = {}; for (const x of r.results || []) o[x.k.slice(4)] = JSON.parse(x.v);
+    return json({ ok: true, ...o });
+  }
   if (a === "dl") { const m = await metaGet(db, "dlinks"); return json({ ok: true, set: !!m, ...((m && m.v) || { on: false, links: [], label: "" }) }); }
   if (request.method !== "POST") return json({ ok: false, error: "bad_request" }, 400);
   let me; try { me = await who(body.t); } catch (e) { return json({ ok: false, error: String(e.message || e) }, 401); }
@@ -315,6 +323,11 @@ async function d1(request, env) {
       q.push(db.prepare("INSERT INTO lb (uid, nick, code, hero, vip, coin, seen, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET nick = excluded.nick, code = excluded.code, hero = excluded.hero, vip = excluded.vip, coin = excluded.coin, seen = excluded.seen, at = excluded.at")
         .bind(me.uid, str(body.nick, 20), str(body.code, 8), str(body.hero, 20), int(body.vip, 4), str(body.coin, 10), now, now));
     else q.push(db.prepare("UPDATE lb SET seen = ?, coin = ?, vip = ? WHERE uid = ?").bind(now, str(body.coin, 10), int(body.vip, 4), me.uid));
+    if (body.refBy && body.refBase > 0) {                   // what this player earned for the one who invited them (10% is paid from it)
+      const by = str(body.refBy, 64).replace(/[^A-Za-z0-9]/g, "");
+      if (by && by !== me.uid) q.push(db.prepare("INSERT INTO refearn (uid, by, base, total, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET base = MAX(refearn.base, excluded.base), total = MAX(refearn.total, excluded.total), at = excluded.at")
+        .bind(me.uid, by, Math.min(1e9, +body.refBase || 0), Math.min(1e9, +body.refOwed || 0), now));
+    }
     q.push(db.prepare("SELECT COALESCE(SUM(n - paid), 0) AS v FROM visits WHERE uid = ? AND n > paid").bind(me.uid));
     q.push(db.prepare("UPDATE visits SET paid = n WHERE uid = ? AND n > paid").bind(me.uid));
     const res = await db.batch(q), vr = res[res.length - 2];
@@ -357,6 +370,22 @@ async function d1(request, env) {
     await namesFor(db, [...(top.results || []), ...(feed.results || [])].map(x => x.uid), snap);
     const tv = await db.prepare("SELECT COALESCE(SUM(n), 0) AS n, COUNT(*) AS u FROM visits WHERE day = ?").bind(d).first();
     return json({ ok: true, top: top.results || [], feed: feed.results || [], names: snap.names, visits: tv ? tv.n : 0, referrers: tv ? tv.u : 0, shares: ((sh.results || [])[0] || {}).n || 0, sharers: ((sh.results || [])[0] || {}).u || 0 });
+  }
+  if (a === "myrefs") {                                    // my referrals' earnings (+ the list every 10-30 min) + who invited me
+    const q = [db.prepare("SELECT uid, base, total FROM refearn WHERE by = ?").bind(me.uid),
+               db.prepare("SELECT r.by, l.code FROM refs r LEFT JOIN lb l ON l.uid = r.by WHERE r.uid = ?").bind(me.uid)];
+    if (body.list) q.push(db.prepare("SELECT r.uid, r.at, r.via, l.nick, l.code, l.seen FROM refs r LEFT JOIN lb l ON l.uid = r.uid WHERE r.by = ? ORDER BY r.at DESC LIMIT 300").bind(me.uid),
+                          db.prepare("SELECT COUNT(*) AS n FROM refs WHERE by = ?").bind(me.uid));
+    const res = await db.batch(q), me2 = (res[1].results || [])[0] || null;
+    return json({ ok: true, earn: res[0].results || [], by: me2 ? me2.by : null, byCode: me2 ? me2.code : null,
+      list: body.list ? res[2].results || [] : null, n: body.list ? ((res[3].results || [])[0] || {}).n || 0 : null });
+  }
+  if (a === "setcfg") {                                    // owner saves game settings
+    if (!me.owner) return json({ ok: false, error: "owner" }, 403);
+    const k = String(body.k || ""); if (!["coins", "main", "ads", "xbans"].includes(k)) return json({ ok: false, error: "bad" }, 400);
+    const v = JSON.stringify(body.v || {}); if (v.length > 400000) return json({ ok: false, error: "too_big" }, 400);
+    await db.prepare("INSERT INTO meta (k, v, at) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, at = excluded.at").bind("cfg:" + k, v, now).run();
+    return json({ ok: true });
   }
   /* ---- messages owner <-> player (popup in the game) ---- */
   if (a === "inbox") {                                     // player: owner messages not answered yet

@@ -2576,7 +2576,7 @@ function renderShop(){ if(typeof navSync==="function") setTimeout(()=>navSync(),
   if(shopMode==="stake"){ renderStake(); return; }
   if(shopMode==="swap"){ renderSwap(); return; }
   if(shopMode==="dmt"){ renderPresale(); return; }
-  if(shopMode==="ads"){ renderAdsTab(); loadAds(); return; }
+  if(shopMode==="ads"){ renderAdsTab(); loadAds(true); return; }
   if(shopMode==="keys"){ renderKeysTab(); return; }
   if(shopMode==="prem"){ renderPremTab(); return; }
   const cats=[t("all"),...t("cat")];
@@ -3004,6 +3004,9 @@ async function sendVipReq(method,tx,status,T0){
 }
 async function loadVip(){
   if(!(DB&&UID)) return;
+  try{ const c=JSON.parse(localStorage.getItem("dc-vipc")||"null"), wait=S.vipReq&&S.vipReq.status==="pending";
+    if(c&&c.u===UID&&!wait&&Date.now()-c.at<6*3600000){ VIP_UNTIL=c.until||0; VIP_TIER_DB=c.tier||1; renderVip(); return; } }catch(e){}
+  setTimeout(()=>{ try{ localStorage.setItem("dc-vipc",JSON.stringify({u:UID,at:Date.now(),until:VIP_UNTIL,tier:VIP_TIER_DB})); }catch(e){} },8000);
   try{ const v=await DB.doc("vip/"+UID).get(); if(v.exists){ VIP_UNTIL=v.data().until||0; VIP_TIER_DB=v.data().tier||1; } }catch(e){}
   try{ const r=await DB.doc("upgrades/"+UID).get(); if(r.exists){ S.vipReq=r.data(); save(); } }catch(e){}
   renderVip();
@@ -3142,7 +3145,7 @@ async function d1Push(force){   /* weekly ads + profile + "online"; at most ever
   if(!force&&now-D1P.at<150000){ if(!D1P.tm) D1P.tm=setTimeout(()=>{ D1P.tm=null; d1Push(); },150000-(now-D1P.at)); return; }
   clearTimeout(D1P.tm); D1P.tm=null;
   const prof={nick:myNick().slice(0,20),code:myCode(),hero:curHero(),vip:vipTier(),coin:S.payCoin||""}, sig=JSON.stringify(prof);
-  const body={week:w.week,ads:w.ads,coin:prof.coin,vip:prof.vip}; if(sig!==D1P.sig||now-D1P.pat>3600000) Object.assign(body,prof);
+  const body={week:w.week,ads:w.ads,coin:prof.coin,vip:prof.vip}; if(S.refBy&&S.refBase>0) Object.assign(body,{refBy:S.refBy,refBase:S.refBase,refOwed:S.refOwed||0}); if(sig!==D1P.sig||now-D1P.pat>3600000) Object.assign(body,prof);
   D1P.at=now; try{ const pr=await d1Post("push",body); if(pr&&pr.vis>0) creditVis(pr.vis); D1P.ads=w.ads; if(body.nick!=null){ D1P.sig=sig; D1P.pat=now; } }catch(e){}
 }
 document.addEventListener("visibilitychange",()=>{ try{ if(document.hidden&&UID&&wkAds().ads!==D1P.ads) d1Push(true); }catch(e){} });
@@ -3393,27 +3396,37 @@ async function refCommission(u){
   if(!S.refBy||!(DB&&UID)) return;
   if(S.refBase==null) S.refBase=(S.refOwed||0)*100/REF_PCT;
   S.refBase+=u; S.refOwed=(S.refOwed||0)+u*REF_PCT/100; save();
-  try{ await DB.doc("refearn/"+UID).set({by:S.refBy,total:S.refOwed,base:S.refBase,at:Date.now()}); }catch(e){}
+  if(D1_OK===false){ const n=Date.now(); if(n-(S.refFbW||0)>10*60000){ S.refFbW=n; try{ await DB.doc("refearn/"+UID).set({by:S.refBy,total:S.refOwed,base:S.refBase,at:n}); }catch(e){} } }
 }
 let REF_AT=0;
 async function collectRef(force){
   if(!(DB&&UID)) return; if(!force&&Date.now()-REF_AT<15*60000) return; if(force&&Date.now()-REF_AT<3*60000) return; REF_AT=Date.now();
   try{
-    const q=await DB.collection("refearn").where("by","==",UID).get(); S.refCol=S.refCol||{}; S.refColB=S.refColB||{}; S.refGot=S.refGot||{}; let add=0; const pct=refPct();
-    q.docs.forEach(d=>{ const x=d.data(), id=d.id, base=x.base!=null?x.base:(x.total||0)*100/REF_PCT;
+    const wantList=Date.now()-REF_LIST_AT>(force?10:30)*60000; let d=null, rows=null;
+    if(D1_OK!==false&&isReg()){ try{ d=await d1Post("myrefs",{list:wantList}); rows=(d.earn||[]).map(x=>({id:x.uid,base:+x.base||0,total:+x.total||0})); }catch(e){ d=null; } }
+    /* old Firebase data: once a day for one more week (players still on the old version), or if D1 is down */
+    if(!d||(Date.now()<1792990800000&&Date.now()-(S.refFbAt||0)>86400000)){
+      try{ const q=await DB.collection("refearn").where("by","==",UID).get(); S.refFbAt=Date.now(); const m={}; (rows||[]).forEach(r=>m[r.id]=r);
+        q.docs.forEach(x=>{ const v=x.data(), b=v.base!=null?v.base:(v.total||0)*100/REF_PCT; if(!m[x.id]||b>m[x.id].base) m[x.id]={id:x.id,base:b,total:v.total||0}; }); rows=Object.values(m); }catch(e){}
+    }
+    S.refCol=S.refCol||{}; S.refColB=S.refColB||{}; S.refGot=S.refGot||{}; let add=0; const pct=refPct();
+    (rows||[]).forEach(x=>{ const id=x.id, base=x.base;
       if(S.refColB[id]==null){ S.refColB[id]=(S.refCol[id]||0)*100/REF_PCT; if(S.refGot[id]==null) S.refGot[id]=S.refCol[id]||0; }
       const dB=base-S.refColB[id]; if(dB>0){ const g=dB*pct/100; add+=g; S.refGot[id]=(S.refGot[id]||0)+g; S.refColB[id]=base; S.refCol[id]=Math.floor(x.total||0); } });
     if(add>0){ incAdd(add); S.bal=(S.bal||0)+add; S.refEarned=(S.refEarned||0)+add; save(); renderPay(); toast(fmt(t("refToast"),{x:usd(add)}),"heroes"); }
-    if(Date.now()-REF_LIST_AT>(force?10:30)*60000){   /* the list of my referrals changes rarely: read it at most every 10-30 min */
+    if(d&&d.by&&!S.refBy){ S.refBy=d.by; S.refByName=S.refByName||d.byCode||codeOf(d.by); save(); }
+    if(d&&d.list){ REF_COUNT=d.n||d.list.length; REF_LIST_AT=Date.now(); REF_LIST=d.list.map(x=>({id:x.uid,at:x.at||0,via:x.via||""}));
+      d.list.forEach(x=>{ REF_INFO[x.uid]={nick:x.nick||"",code:x.code||codeOf(x.uid),seen:x.seen||0}; });
+      try{ localStorage.setItem("dc-reflist",JSON.stringify({at:REF_LIST_AT,l:REF_LIST.slice(0,300),n:REF_COUNT})); localStorage.setItem("dc-refinfo",JSON.stringify({at:Date.now(),d:REF_INFO})); }catch(e){} }
+    else if(!d&&wantList){   /* D1 down: old way */
       const r=await DB.collection("refs").where("by","==",UID).get(); REF_COUNT=r.size; REF_LIST_AT=Date.now();
-      REF_LIST=r.docs.map(d=>({id:d.id,at:d.data().at||0,via:d.data().via||""})).sort((a,b)=>b.at-a.at);
+      REF_LIST=r.docs.map(x=>({id:x.id,at:x.data().at||0,via:x.data().via||""})).sort((a,b)=>b.at-a.at);
       try{ localStorage.setItem("dc-reflist",JSON.stringify({at:REF_LIST_AT,l:REF_LIST.slice(0,300),n:REF_COUNT})); }catch(e){} }
-    await Promise.all(REF_LIST.slice(0,100).filter(x=>!REF_INFO[x.id]).map(async x=>{ try{ const l=await DB.doc("lbads/"+x.id).get(); const y=l.exists?l.data():{}; REF_INFO[x.id]={nick:y.nick||"",code:y.code||codeOf(x.id),seen:y.seen||y.at||0}; try{ localStorage.setItem("dc-refinfo",JSON.stringify({at:Date.now(),d:REF_INFO})); }catch(_){} }catch(e){ REF_INFO[x.id]={code:codeOf(x.id)}; } }));
     if(typeof renderComp==="function"&&$("#v-comp")&&$("#v-comp").classList.contains("on")) renderComp();
   }catch(e){}
 }
 async function loadRefBy(){
-  if(!(DB&&UID)||S.refBy) return;
+  if(!(DB&&UID)||S.refBy||D1_OK!==false) return;   /* with D1 this comes from collectRef (no Firebase read) */
   try{ const me=await DB.doc("refs/"+UID).get(); if(me.exists){ S.refBy=me.data().by; S.refByName=S.refByName||me.data().code; save(); } }catch(e){}
 }
 
@@ -3506,9 +3519,17 @@ function applyCfg(c){
   if(typeof c.contact==="string"&&c.contact.trim()) CONTACT=c.contact.trim();
   if(c.USDTnet) OWNER_WALLETS.USDT.net=c.USDTnet;
 }
-async function loadCfg(){ if(!DB) return; try{ const cc=await DB.doc("config/coins").get(); if(cc.exists&&Array.isArray(cc.data().off)){ COIN_OFF=new Set(cc.data().off); renderPay(); setTimeout(coinOffNotice,2500); } }catch(e){} try{ const d=await DB.doc("config/main").get(); if(d.exists) applyCfg(d.data()); }catch(e){}
-  try{ const a=await DB.doc("config/ads").get(); if(a.exists) applyAdsCfg(a.data()); }catch(e){}
-  try{ const x=await DB.doc("config/xbans").get(); if(x.exists&&Array.isArray(x.data().xb)) applyAdsCfg({xb:x.data().xb,xbv:x.data().xbv||0,links:FAUCETS,banners:OWN_BANNERS}); }catch(e){} try{ loadXBans(); }catch(e){} }
+async function loadCfg(){ if(!DB) return; let D={};
+  try{ D=await d1Get("cfg"); }catch(e){ D={}; }
+  /* not in D1 yet: read Firebase once; the owner's phone copies it to D1 so players stop reading Firebase */
+  const fb=async k=>{ try{ const d=await DB.doc("config/"+k).get(); const v=d.exists?d.data():{none:1}; if(OWNER) d1Post("setcfg",{k,v}).catch(()=>{}); return d.exists?v:null; }catch(e){ return null; } };
+  const has=v=>v&&!v.none;
+  try{ const c=D.coins||await fb("coins"); if(has(c)&&Array.isArray(c.off)){ COIN_OFF=new Set(c.off); renderPay(); setTimeout(coinOffNotice,2500); } }catch(e){}
+  try{ const m=D.main||await fb("main"); if(has(m)) applyCfg(m); }catch(e){}
+  try{ const a=D.ads||await fb("ads"); if(has(a)) applyAdsCfg(a); }catch(e){}
+  try{ const x=D.xbans||await fb("xbans"); if(has(x)&&Array.isArray(x.xb)) applyAdsCfg({xb:x.xb,xbv:x.xbv||0,links:FAUCETS,banners:OWN_BANNERS}); }catch(e){}
+  try{ loadXBans(); }catch(e){} }
+async function saveCfgDoc(k,v){ let ok=false, err=""; try{ await d1Post("setcfg",{k,v}); ok=true; }catch(e){ err=String(e&&e.message||e); } try{ await DB.doc("config/"+k).set(v); ok=true; }catch(e){ if(!ok) err=err||String(e&&(e.code||e.message)||e); } if(!ok) throw new Error(err||"error"); }
 let OWN_BANNERS=[];
 /* ---------- Anti-cheat: income ledger, device id, claim rhythm, daily cap ---------- */
 const DEV=(()=>{ try{ let d=localStorage.getItem("diamantina-dev"); if(!d){ d=Math.random().toString(36).slice(2,10)+Date.now().toString(36); localStorage.setItem("diamantina-dev",d); } return d; }catch(e){ return "nodev"; } })();
@@ -3618,7 +3639,8 @@ function renderAdmAds(){
     if(JSON.stringify(doc).length>240000){ $("#aaMsg").textContent=t("aaTooBig"); return; }
     const es=S.lang==="es", btn=$("#aaSave"); if(btn) btn.disabled=true; $("#aaMsg").textContent=es?"Guardando…":"Saving…";
     let ok=false, err="";
-    try{ await DB.doc("config/ads").set(doc); ok=true; }catch(e){ err=(e&&(e.code||e.message))||"error";
+    try{ await d1Post("setcfg",{k:"ads",v:doc}); await d1Post("setcfg",{k:"xbans",v:{xb:doc.xb,xbv:6,at:doc.at}}); ok=true; }catch(e){ err=String(e&&e.message||e); }
+    try{ await DB.doc("config/ads").set(doc); ok=true; }catch(e){ err=err||(e&&(e.code||e.message))||"error";
       try{ await DB.doc("config/ads").set({links2:doc.links2,banners:doc.banners,pop:doc.pop,at:doc.at}); ok=true; err=""; }catch(e2){ err=(e2&&(e2.code||e2.message))||err; } }
     try{ await DB.doc("config/xbans").set({xb:doc.xb,xbv:6,at:doc.at}); }catch(e){ if(!ok) err=err||((e&&(e.code||e.message))||"error"); }
     if(btn) btn.disabled=false;
@@ -3640,7 +3662,7 @@ function msgShow(m){
     <div style="font-size:44px;line-height:1">📩</div>
     <h2 style="margin:6px 0 2px;color:#FFC93C">${L("Mensaje de Diamantina","Mensagem da Diamantina","Message from Diamantina")}</h2>
     <div style="font-size:13px;opacity:.8">${L("Soporte del juego","Suporte do jogo","Game support")} · ${new Date(m.at).toLocaleString()}</div>
-    <div class="msgbody">${escapeHtml(m.body)}</div>
+    <div class="msgbody">${escapeHtml(msgText(m.body,es?"es":pt?"pt":"en"))}</div>
     <textarea id="msgRep" maxlength="500" placeholder="${L("Escribe tu respuesta aquí…","Escreva sua resposta aqui…","Write your answer here…")}"></textarea>
     <button class="vflgo" id="msgSend" style="margin-top:10px">${L("Enviar respuesta","Enviar resposta","Send answer")}</button>
     <p id="msgErr" style="margin:8px 0 0;font-weight:800;color:#FFC93C"></p></div>`;
@@ -3653,8 +3675,11 @@ function msgShow(m){
     try{ await d1Post("msgreply",{id:m.id,reply:v}); d.remove(); toast(L("¡Respuesta enviada! Gracias","Resposta enviada! Obrigado","Answer sent! Thanks"),"pay"); setTimeout(inboxCheck,1500); }
     catch(e){ b.disabled=false; b.textContent=L("Enviar respuesta","Enviar resposta","Send answer"); $("#msgErr").textContent=L("No se pudo enviar. Revisa tu internet.","Não foi possível enviar.","Could not send. Check your internet."); } };
 }
-const MSG_TPL=[["💳 Pedir billetera","Hola 👋 Hubo un problema con tu pago. Por favor respóndeme aquí con tu correo de FaucetPay o tu ID/correo de Cwallet para enviarte el pago. ¡Gracias! 💎"],["✅ Pago enviado","¡Hola! Ya te enviamos tu pago 💎 Revisa tu cuenta y dinos aquí si te llegó. ¡Gracias por jugar Diamantina!"]];
-let MSG_TO=null;
+/* templates: each player reads them in their own language */
+const MSG_TPL=[["wallet","💳 Pedir billetera",{es:"Hola 👋 Hubo un problema con tu pago. Por favor respóndeme aquí con tu correo de FaucetPay o tu ID/correo de Cwallet para enviarte el pago. ¡Gracias! 💎",pt:"Olá 👋 Houve um problema com o seu pagamento. Por favor, responda aqui com o seu e-mail do FaucetPay ou o seu ID/e-mail do Cwallet para enviarmos o pagamento. Obrigado! 💎",en:"Hi 👋 There was a problem with your payment. Please reply here with your FaucetPay email or your Cwallet ID/email so we can send your payment. Thanks! 💎"}],
+  ["paid","✅ Pago enviado",{es:"¡Hola! Ya te enviamos tu pago 💎 Revisa tu cuenta y dinos aquí si te llegó. ¡Gracias por jugar Diamantina!",pt:"Olá! Já enviamos o seu pagamento 💎 Confira a sua conta e diga aqui se chegou. Obrigado por jogar Diamantina!",en:"Hi! We've sent your payment 💎 Check your account and tell us here if it arrived. Thanks for playing Diamantina!"}]];
+const msgText=(b,lang)=>{ const m=/^§(\w+)$/.exec(String(b||"")); const tp=m&&MSG_TPL.find(x=>x[0]===m[1]); return tp?(tp[2][lang]||tp[2].en):String(b||""); };
+let MSG_TO=null, MSG_TP=null;
 async function msgAdmin(){
   const box=$("#msgAdm"); if(!box) return; const es=S.lang==="es";
   box.innerHTML=`<div style="border:2px solid #FFC93C;border-radius:16px;padding:12px;margin-bottom:14px"><h2 style="margin-top:0">✉️ ${es?"Escribir a un jugador":"Message a player"}</h2>
@@ -3662,11 +3687,11 @@ async function msgAdmin(){
     <div style="display:flex;gap:6px"><input class="field" id="msgQ" placeholder="${es?"Nombre del ranking o código":"Ranking name or code"}" style="flex:1"><button class="mini" id="msgFind">${es?"Buscar":"Search"}</button></div>
     <div id="msgRes"></div>
     <div id="msgTo" style="margin:8px 0;font-weight:800">${MSG_TO?"➡️ "+escapeHtml(MSG_TO.nick||"")+" · ID "+codeOf(MSG_TO.uid):""}</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${MSG_TPL.map((x,i)=>`<button class="mini" data-tp="${i}">${x[0]}</button>`).join("")}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${MSG_TPL.map((x,i)=>`<button class="mini" data-tp="${i}">${x[1]}</button>`).join("")}</div>
     <textarea class="field" id="msgTxt" rows="4" maxlength="800" style="width:100%;box-sizing:border-box" placeholder="${es?"Escribe el mensaje…":"Write the message…"}"></textarea>
     <button class="claimbtn" id="msgGo" style="margin-top:8px">${es?"Enviar mensaje":"Send message"}</button><p class="msg" id="msgM"></p>
     <h3 style="margin:14px 0 4px">${es?"Mensajes y respuestas":"Messages and answers"} <button class="mini" id="msgRf">↻</button></h3><div id="msgList"><p class="hint">${t("mkLoading")}</p></div></div>`;
-  box.querySelectorAll("[data-tp]").forEach(b=>b.onclick=()=>{ $("#msgTxt").value=MSG_TPL[+b.dataset.tp][1]; });
+  box.querySelectorAll("[data-tp]").forEach(b=>b.onclick=()=>{ MSG_TP=MSG_TPL[+b.dataset.tp]; $("#msgTxt").value=MSG_TP[2].es; $("#msgM").textContent=es?"🌎 Este mensaje le llega traducido a su idioma":"🌎 Sent in the player's language"; });
   const find=async()=>{ const q=$("#msgQ").value.trim(); if(!q) return; $("#msgRes").innerHTML=`<p class="hint">${t("mkLoading")}</p>`;
     try{ const d=await d1Post("msgfind",{q}); const L=d.list||[];
       $("#msgRes").innerHTML=L.length?L.map((x,i)=>`<div class="msgrow" style="display:flex;align-items:center;gap:8px"><div style="flex:1"><b>${escapeHtml(x.nick||"Hero-"+(x.code||""))}</b> · ID ${escapeHtml(x.code||codeOf(x.uid))}<br><span style="color:var(--muted);font-size:12px">${x.seen?(es?"Visto: ":"Seen: ")+new Date(x.seen).toLocaleString():""}</span></div><button class="mini" data-pk="${i}">${es?"Elegir":"Pick"}</button></div>`).join(""):`<p class="hint">${es?"No encontré a nadie con ese nombre":"Nobody found"}</p>`;
@@ -3677,14 +3702,15 @@ async function msgAdmin(){
     if(!MSG_TO){ $("#msgM").textContent=es?"Primero busca y elige al jugador":"Pick a player first"; return; }
     if(!txt){ $("#msgM").textContent=es?"Escribe el mensaje":"Write the message"; return; }
     const b=$("#msgGo"); b.disabled=true;
-    try{ await d1Post("msgsend",{uid:MSG_TO.uid,body:txt}); $("#msgTxt").value=""; $("#msgM").textContent=es?"✅ Enviado. Le sale cuando abra el juego.":"✅ Sent."; toast(es?"Mensaje enviado":"Message sent","pay"); msgList(); }
+    const body=MSG_TP&&txt===MSG_TP[2].es?"§"+MSG_TP[0]:txt;
+    try{ await d1Post("msgsend",{uid:MSG_TO.uid,body}); MSG_TP=null; $("#msgTxt").value=""; $("#msgM").textContent=es?"✅ Enviado. Le sale cuando abra el juego.":"✅ Sent."; toast(es?"Mensaje enviado":"Message sent","pay"); msgList(); }
     catch(e){ $("#msgM").textContent="⚠️ "+String(e&&e.message||e); } b.disabled=false; };
   $("#msgRf").onclick=msgList; msgList();
 }
 async function msgList(){
   const el=$("#msgList"); if(!el) return; const es=S.lang==="es";
   try{ const d=await d1Post("msglist",{}); const L=d.list||[];
-    el.innerHTML=L.length?L.map(x=>`<div class="msgrow"><b>${escapeHtml((d.names||{})[x.uid]||"")}</b> · ID ${codeOf(x.uid)} <span style="color:var(--muted);font-size:12px">· ${new Date(x.at).toLocaleString()}</span> <button class="mini" data-md="${x.id}" style="float:right;background:#5a2a3a">✕</button><div style="margin-top:4px;white-space:pre-wrap">${escapeHtml(x.body)}</div>${x.reply?`<div class="rep">💬 ${escapeHtml(x.reply)}</div><span style="color:var(--muted);font-size:12px">${es?"Respondió":"Answered"} ${new Date(x.rat).toLocaleString()}</span>`:x.seen?`<div style="color:var(--muted);margin-top:4px">${es?"Lo leyó, sin respuesta":"Read, no answer"}</div>`:`<div style="color:var(--muted);margin-top:4px">⏳ ${es?"Todavía no lo ha visto":"Not seen yet"}</div>`}</div>`).join(""):`<p class="hint">${es?"Aún no has enviado mensajes":"No messages yet"}</p>`;
+    el.innerHTML=L.length?L.map(x=>`<div class="msgrow"><b>${escapeHtml((d.names||{})[x.uid]||"")}</b> · ID ${codeOf(x.uid)} <span style="color:var(--muted);font-size:12px">· ${new Date(x.at).toLocaleString()}</span> <button class="mini" data-md="${x.id}" style="float:right;background:#5a2a3a">✕</button><div style="margin-top:4px;white-space:pre-wrap">${/^§/.test(x.body)?"🌎 ":""}${escapeHtml(msgText(x.body,"es"))}</div>${x.reply?`<div class="rep">💬 ${escapeHtml(x.reply)}</div><span style="color:var(--muted);font-size:12px">${es?"Respondió":"Answered"} ${new Date(x.rat).toLocaleString()}</span>`:x.seen?`<div style="color:var(--muted);margin-top:4px">${es?"Lo leyó, sin respuesta":"Read, no answer"}</div>`:`<div style="color:var(--muted);margin-top:4px">⏳ ${es?"Todavía no lo ha visto":"Not seen yet"}</div>`}</div>`).join(""):`<p class="hint">${es?"Aún no has enviado mensajes":"No messages yet"}</p>`;
     el.querySelectorAll("[data-md]").forEach(b=>b.onclick=async()=>{ if(!confirm(es?"¿Borrar este mensaje?":"Delete?")) return; try{ await d1Post("msgdel",{id:+b.dataset.md}); msgList(); }catch(e){} });
   }catch(e){ el.innerHTML=`<p class="hint">⚠️ ${escapeHtml(String(e&&e.message||e))}</p>`; }
 }
@@ -3716,7 +3742,7 @@ function renderCfg0(){
   $("#cfgSave").onclick=async()=>{
     const n={}; box.querySelectorAll("input[data-k]").forEach(i=>n[i.dataset.k]=i.value.trim());
     if(n.gameUrl&&!/^https?:\/\//.test(n.gameUrl)){ $("#cfgMsg").textContent=t("cfgBadUrl"); return; }
-    try{ await DB.doc("config/main").set({...n,at:Date.now()}); applyCfg(n); $("#cfgMsg").textContent=t("cfgSaved"); toast(t("cfgSaved"),"heroes"); }catch(e){ $("#cfgMsg").textContent=t("mkErr"); }
+    try{ await saveCfgDoc("main",{...n,at:Date.now()}); applyCfg(n); $("#cfgMsg").textContent=t("cfgSaved"); toast(t("cfgSaved"),"heroes"); }catch(e){ $("#cfgMsg").textContent=t("mkErr"); }
   };
 }
 
@@ -3731,13 +3757,14 @@ function sponsorCard(a,cls=""){
     <div class="sptxt"><small>${t("sponsored")}</small><b>${escapeHtml(a.title||"")}</b><span>${escapeHtml(a.text||"")}</span></div>
     <span class="spgo">${t("adVisit")} ›</span></div>`;
 }
-async function loadAds(){
+let ADS_AT=0;
+async function loadAds(force){
   if(!(DB&&UID)) return;
   try{
-    const q=await DB.collection("ads").where("status","==","active").get();
-    ACTIVE_ADS=q.docs.map(d=>({...d.data(),id:d.id})).filter(a=>(a.shown||0)<a.views);
-    if(isReg()){ const m=await DB.collection("ads").where("owner","==",UID).get();
-    MY_ADS=m.docs.map(d=>({...d.data(),id:d.id})).sort((a,b)=>b.at-a.at); }
+    if(force||Date.now()-ADS_AT>30*60000){ ADS_AT=Date.now(); const q=await DB.collection("ads").where("status","==","active").get();
+      ACTIVE_ADS=q.docs.map(d=>({...d.data(),id:d.id})).filter(a=>(a.shown||0)<a.views); }
+    if(force&&isReg()){ const m=await DB.collection("ads").where("owner","==",UID).get();
+      MY_ADS=m.docs.map(d=>({...d.data(),id:d.id})).sort((a,b)=>b.at-a.at); }
   }catch(e){}
   renderSponsorBanner(); if(shopMode==="ads"&&$("#v-shop").classList.contains("on")) renderAdsTab();
 }
@@ -3993,7 +4020,7 @@ let coinOffShown=false;
 function coinOffNotice(){ if(coinOffShown||coinOn(S.payCoin)) return; coinOffShown=true; const es=S.lang==="es";
   showModal(es?"Moneda no disponible":"Coin not available",`<div class="promo" style="padding-top:6px"><img src="${coinBy(S.payCoin).img}" alt="" style="width:64px;height:64px;border-radius:50%;opacity:.55;filter:grayscale(1)"><p style="font-weight:800">${coinOffMsg(S.payCoin)}</p><p class="hint">${es?"Tu saldo no se pierde: puedes cambiarlo a otra moneda en el Exchange.":"Your balance is safe: you can convert it in the Exchange."}</p></div>`,
     [[t("close"),"no",closeModal],[es?"Elegir otra moneda":"Choose another coin","go",()=>{ closeModal(); goView("pay"); }]]); }
-async function setCoinOff(c,off){ if(off) COIN_OFF.add(c); else COIN_OFF.delete(c); try{ await DB.doc("config/coins").set({off:[...COIN_OFF],at:Date.now()}); }catch(e){ toast(t("mkErr")); } renderPay(); }
+async function setCoinOff(c,off){ if(off) COIN_OFF.add(c); else COIN_OFF.delete(c); try{ await saveCfgDoc("coins",{off:[...COIN_OFF],at:Date.now()}); toast((off?"🚫 ":"✅ ")+c+(S.lang==="es"?(off?" desactivada":" activada"):(off?" disabled":" enabled")),"pay"); }catch(e){ toast(t("mkErr")); } renderPay(); }
 const cwOnlyMsg=c=>S.lang==="es"?`${c} solo se puede cobrar por Cwallet`:S.lang==="pt"?`${c} só pode ser sacado pela Cwallet`:`${c} can only be withdrawn via Cwallet`;
 const METHODS={faucetpay:{name:"FaucetPay",img:PAY.fp,hint:"fpHint",ph:"fpPh"},cwallet:{name:"Cwallet",img:PAY.cw,hint:"cwHint",ph:"cwPh"}};
 function validAcct(m,v){v=v.trim(); if(m==="cwallet") return /^\d{5,}$/.test(v)||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); return v.length>=6 && !/\s/.test(v);}
@@ -4062,8 +4089,9 @@ async function submitPayout(){
   toast(synced?t("requested"):t("localOnly"),"pay");
 }
 $("#reqBtn").onclick=submitPayout;
+let PAYR_AT=0;
 async function refreshPayouts(){
-  if(!DB||!UID) return;
+  if(!DB||!UID) return; if(!(S.payouts||[]).some(p=>p.status==="pending"||!p.synced)) return; if(Date.now()-PAYR_AT<5*60000) return; PAYR_AT=Date.now();
   try{
     const snap=await DB.doc(`payouts/${UID}`).collection("requests").get();
     let changed=false;
@@ -4120,9 +4148,11 @@ async function loadAdmin(){
     for(const u of cr.docs){ const ls=await aSub("credits",u,"list"); ls.docs.forEach(d=>{ const x=d.data(); if(x.type==="task"){ tn++; tu+=x.units||0; tr+=x.reward||0; last.push({...x,uid:u.id}); } }); }
     if(tn){ last.sort((a,b)=>(b.at||0)-(a.at||0)); const es=S.lang==="es";
       list.insertAdjacentHTML("afterbegin",`<div class="req">📋<div class="grow">${es?"Tareas AdsLab":"AdsLab tasks"} · ${tn}<br><span style="color:var(--muted)">${es?"Pagado a jugadores":"Paid to players"}: ${usd(tu)} · reward: ${nf(tr,6)}<br>${last.slice(0,5).map(x=>`ID ${codeOf(x.uid)} · ${escapeHtml(x.ttype||"")} · reward ${x.reward} · vCur ${x.vCurrency} → ${usd(x.units||0)}`).join("<br>")}</span></div></div>`); } }catch(e){}
-  { const es=S.lang==="es"; list.insertAdjacentHTML("afterbegin",`<div class="req">🪙<div class="grow"><b>${es?"Monedas para cobrar":"Payout coins"}</b><br><span style="color:var(--muted)">${COIN_OFF.size?(es?"No disponibles ahora:":"Not available now:"):(es?"Todas disponibles ✓":"All available ✓")}</span><div class="coinoffs">${[...COIN_OFF].map(c=>`<button class="mini coinon" data-c="${c}">✅ ${es?"Activar":"Enable"} ${c}</button>`).join("")}<select class="field" id="coinOffSel" style="padding:6px;max-width:120px"><option value="">${es?"Desactivar…":"Disable…"}</option>${PAY.coins.filter(c=>coinOn(c.t)).map(c=>`<option>${c.t}</option>`).join("")}</select></div></div></div>`);
-    list.querySelectorAll(".coinon").forEach(b=>b.onclick=async()=>{ b.disabled=true; await setCoinOff(b.dataset.c,false); loadAdmin(); });
-    const sel=$("#coinOffSel"); if(sel) sel.onchange=async()=>{ const c=sel.value; if(!c) return; if(!confirm((es?"¿Marcar ":"Mark ")+c+(es?" como NO disponible para todos?":" as NOT available?"))){ sel.value=""; return; } await setCoinOff(c,true); loadAdmin(); }; }
+  { const es=S.lang==="es"; list.insertAdjacentHTML("afterbegin",`<div class="req" style="display:block">🪙 <b>${es?"Monedas para cobrar":"Payout coins"}</b><br><span style="color:var(--muted);font-size:13px">${es?"Toca una moneda para activarla o desactivarla. Verde = disponible · Rojo = no disponible":"Tap a coin to turn it on or off. Green = on · Red = off"}</span><div class="coinoffs" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${PAY.coins.map(c=>{ const on=coinOn(c.t); return `<button class="mini coinsw" data-c="${c.t}" data-on="${on?1:0}" style="background:${on?"#1E9E52":"#B3263A"};color:#fff;min-width:74px">${on?"✅":"🚫"} ${c.t}</button>`; }).join("")}</div></div>`);
+    list.querySelectorAll(".coinsw").forEach(b=>b.onclick=async()=>{ const c=b.dataset.c, on=b.dataset.on==="1";
+      if(on&&!confirm((es?"¿Marcar ":"Mark ")+c+(es?" como NO disponible para todos?":" as NOT available?"))) return;
+      if(!on&&!confirm((es?"¿Activar ":"Enable ")+c+(es?" otra vez para todos?":" again for everyone?"))) return;
+      b.disabled=true; await setCoinOff(c,on); b.dataset.on=on?"0":"1"; b.style.background=on?"#B3263A":"#1E9E52"; b.textContent=(on?"🚫 ":"✅ ")+c; b.disabled=false; }); }
   list.insertAdjacentHTML("afterbegin",`<div class="req">${ic("swap",32)}<div class="grow">${fmt(t("exFees"),{p:SWAP_FEE})}<br><span style="color:var(--muted)">${fmt(t("exCount"),{n:exN})}</span></div><b>$${nf(exSum,4)}</b></div>`);
   list.insertAdjacentHTML("afterbegin",`<div class="req">${ic("gem",32)}<div class="grow">${fmt(t("feesTotal"),{p:FEE_PCT})}<br><span style="color:var(--muted)">${fmt(t("feesCount"),{n:feeN})}</span></div><b>${usd(feeSum)}</b></div>`);
   try{
@@ -5021,7 +5051,7 @@ function renderProofs(){
 }
 let CRED_AT=0;
 async function collectCredits(force){
-  if(!(DB&&UID)) return; if(!force&&Date.now()-CRED_AT<4*60000) return; CRED_AT=Date.now();
+  if(!(DB&&UID)) return; if(!force&&Date.now()-CRED_AT<10*60000) return; if(force&&Date.now()-CRED_AT<60000) return; CRED_AT=Date.now();
   try{
     const lref=DB.doc("credits/"+UID).collection("list"), full=!S.credAt||Date.now()-(S.credFull||0)>86400000;
     const cs=await (full?lref.get():lref.where("at",">=",S.credAt-600000).get()); S.claimed=S.claimed||[]; let n=0;   /* only new credits: 1 read when there is nothing new */
