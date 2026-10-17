@@ -3366,7 +3366,9 @@ async function adminPrizes(list){
 
 /* ---------- Referrals: 10% for life ---------- */
 const REF_PCT=10;
-let REF_COUNT=0, REF_LIST=[], REF_INFO={};
+let REF_COUNT=0, REF_LIST=[], REF_INFO={}, REF_LIST_AT=0;
+try{ const c=JSON.parse(localStorage.getItem("dc-refinfo")||"null"); if(c&&Date.now()-c.at<3*86400000) REF_INFO=c.d||{}; }catch(e){}
+try{ const c=JSON.parse(localStorage.getItem("dc-reflist")||"null"); if(c&&Date.now()-c.at<30*60000){ REF_LIST=c.l||[]; REF_COUNT=c.n||0; REF_LIST_AT=c.at; } }catch(e){}
 const REF_TIERS=[10,15,20,25,30];                 // no VIP, VIP1..VIP4
 const refPct=()=>REF_TIERS[Math.min(4,vipTier())]||REF_PCT;
 const REF_PACKS=[{n:5,usd:0.5},{n:10,usd:0.9},{n:25,usd:2},{n:50,usd:3.75}];
@@ -3391,16 +3393,18 @@ async function refCommission(u){
 }
 let REF_AT=0;
 async function collectRef(force){
-  if(!(DB&&UID)) return; if(!force&&Date.now()-REF_AT<15*60000) return; REF_AT=Date.now();
+  if(!(DB&&UID)) return; if(!force&&Date.now()-REF_AT<15*60000) return; if(force&&Date.now()-REF_AT<3*60000) return; REF_AT=Date.now();
   try{
     const q=await DB.collection("refearn").where("by","==",UID).get(); S.refCol=S.refCol||{}; S.refColB=S.refColB||{}; S.refGot=S.refGot||{}; let add=0; const pct=refPct();
     q.docs.forEach(d=>{ const x=d.data(), id=d.id, base=x.base!=null?x.base:(x.total||0)*100/REF_PCT;
       if(S.refColB[id]==null){ S.refColB[id]=(S.refCol[id]||0)*100/REF_PCT; if(S.refGot[id]==null) S.refGot[id]=S.refCol[id]||0; }
       const dB=base-S.refColB[id]; if(dB>0){ const g=dB*pct/100; add+=g; S.refGot[id]=(S.refGot[id]||0)+g; S.refColB[id]=base; S.refCol[id]=Math.floor(x.total||0); } });
     if(add>0){ incAdd(add); S.bal=(S.bal||0)+add; S.refEarned=(S.refEarned||0)+add; save(); renderPay(); toast(fmt(t("refToast"),{x:usd(add)}),"heroes"); }
-    const r=await DB.collection("refs").where("by","==",UID).get(); REF_COUNT=r.size;
-    REF_LIST=r.docs.map(d=>({id:d.id,at:d.data().at||0,via:d.data().via||""})).sort((a,b)=>b.at-a.at);
-    await Promise.all(REF_LIST.slice(0,100).filter(x=>!REF_INFO[x.id]).map(async x=>{ try{ const l=await DB.doc("lbads/"+x.id).get(); const y=l.exists?l.data():{}; REF_INFO[x.id]={nick:y.nick||"",code:y.code||codeOf(x.id),seen:y.seen||y.at||0}; }catch(e){ REF_INFO[x.id]={code:codeOf(x.id)}; } }));
+    if(Date.now()-REF_LIST_AT>(force?10:30)*60000){   /* the list of my referrals changes rarely: read it at most every 10-30 min */
+      const r=await DB.collection("refs").where("by","==",UID).get(); REF_COUNT=r.size; REF_LIST_AT=Date.now();
+      REF_LIST=r.docs.map(d=>({id:d.id,at:d.data().at||0,via:d.data().via||""})).sort((a,b)=>b.at-a.at);
+      try{ localStorage.setItem("dc-reflist",JSON.stringify({at:REF_LIST_AT,l:REF_LIST.slice(0,300),n:REF_COUNT})); }catch(e){} }
+    await Promise.all(REF_LIST.slice(0,100).filter(x=>!REF_INFO[x.id]).map(async x=>{ try{ const l=await DB.doc("lbads/"+x.id).get(); const y=l.exists?l.data():{}; REF_INFO[x.id]={nick:y.nick||"",code:y.code||codeOf(x.id),seen:y.seen||y.at||0}; try{ localStorage.setItem("dc-refinfo",JSON.stringify({at:Date.now(),d:REF_INFO})); }catch(_){} }catch(e){ REF_INFO[x.id]={code:codeOf(x.id)}; } }));
     if(typeof renderComp==="function"&&$("#v-comp")&&$("#v-comp").classList.contains("on")) renderComp();
   }catch(e){}
 }
@@ -4952,7 +4956,9 @@ let CRED_AT=0;
 async function collectCredits(force){
   if(!(DB&&UID)) return; if(!force&&Date.now()-CRED_AT<4*60000) return; CRED_AT=Date.now();
   try{
-    const cs=await DB.doc("credits/"+UID).collection("list").get(); S.claimed=S.claimed||[]; let n=0;
+    const lref=DB.doc("credits/"+UID).collection("list"), full=!S.credAt||Date.now()-(S.credFull||0)>86400000;
+    const cs=await (full?lref.get():lref.where("at",">=",S.credAt-600000).get()); S.claimed=S.claimed||[]; let n=0;   /* only new credits: 1 read when there is nothing new */
+    { let mx=S.credAt||0; cs.docs.forEach(d=>{ const a=+(d.data().at)||0; if(a>mx) mx=a; }); S.credAt=mx||Date.now()-600000; if(full) S.credFull=Date.now(); }
     for(const d of cs.docs){ if(S.claimed.includes(d.id)) continue; const x=d.data();
       if(x.type==="deposit"){ incAdd(x.units); S.bal=(S.bal||0)+(x.units||0); toast(fmt(t("depOk"),{x:usd(x.units||0)}),"pay"); }
       else if(x.type==="reject"){ const o=(S.orders||[]).find(o=>o.id===x.item); if(o&&o.method==="balance"&&o.status!=="rejected"&&o.units) S.bal=(S.bal||0)+o.units; if(o) o.status="rejected";
