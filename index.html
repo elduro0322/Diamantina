@@ -871,7 +871,8 @@ main{overscroll-behavior-y:contain}
 .msgbody{background:rgba(255,255,255,.1);border-radius:14px;padding:12px;margin:10px 0;text-align:left;font-size:16px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
 #msgPop textarea{width:100%;box-sizing:border-box;border-radius:12px;border:2px solid #FFC93C;padding:10px;font:inherit;font-size:15px;resize:vertical;min-height:70px}
 .msgrow{border:1px solid rgba(27,63,168,.15);border-radius:12px;padding:10px;margin:8px 0;font-size:14px}.msgrow .rep{background:#E8FFEF;color:#0B5A2A;border-radius:8px;padding:6px 8px;margin-top:6px;font-weight:800;word-break:break-all;user-select:all}
-.vflx{position:absolute;top:8px;right:8px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.18);color:#fff;font-size:22px;font-weight:900;line-height:40px;cursor:pointer}
+.rfpstage{pointer-events:none}
+.vflx{z-index:30;touch-action:manipulation;position:absolute;top:8px;right:8px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.18);color:#fff;font-size:22px;font-weight:900;line-height:40px;cursor:pointer}
 .vfltag{display:inline-block;padding:5px 14px;border-radius:999px;background:#FF3D6E;font-weight:900;font-size:13px;letter-spacing:1px;animation:vflBlink 1s infinite alternate}
 @keyframes vflBlink{from{opacity:1}to{opacity:.6}}
 .vflbox h3{margin:10px 0 2px;font-family:var(--display);font-size:28px;line-height:1.1;color:#FFE15A;text-shadow:0 3px 0 rgba(0,0,0,.35)}
@@ -3299,7 +3300,7 @@ function visPaint(){ document.querySelectorAll("[data-vis]").forEach(el=>{ const
 let SHARE_AT=0; function refShare(via){ if(!(UID&&isReg())||Date.now()-SHARE_AT<10000) return; SHARE_AT=Date.now(); try{ d1Post("share",{via}).catch(()=>{}); }catch(e){} }
 function shareTxt(){ return (S.lang==="es"?"💎 Juega Diamantina y gana cripto GRATIS viendo anuncios. Entra aquí 👉 ":S.lang==="pt"?"💎 Jogue Diamantina e ganhe cripto GRÁTIS. Entre aqui 👉 ":"💎 Play Diamantina and earn FREE crypto. Join here 👉 ")+refLink(); }
 function refPopQueue(){ const k=bogota().key; if(S.refPop===k) return;
-  const show=()=>{ if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; } if($("#vfl")||$("#rfp")){ setTimeout(show,2500); return; } refPopShow(); };
+  const show=()=>{ if(S.refPop===k) return; if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; } if($("#vfl")||$("#rfp")){ setTimeout(show,2500); return; } refPopShow(); };
   setTimeout(show,1300); }
 let rfpTimer=null;
 function refPopShow(){
@@ -4507,7 +4508,7 @@ function vflCan(kind){
 function vflQueue(kind){   /* once a day per kind; waits until other windows are closed */
   const k=bogota().key; if(!S.vfo||S.vfo.day!==k) S.vfo={day:k};
   if(S.vfo[kind]||!vflCan(kind)) return;
-  const show=()=>{ if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; } if($("#vfl")){ setTimeout(show,2000); return; } vflShow(kind); };
+  const show=()=>{ if(S.vfo&&S.vfo.day===k&&S.vfo[kind]) return; if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; } if($("#vfl")){ setTimeout(show,2000); return; } vflShow(kind); };
   setTimeout(show,1300);
 }
 function vflShow(kind="vip"){
@@ -4551,7 +4552,7 @@ function vflShow(kind="vip"){
 }
 /* players holding the 50% ticket: once a day at circle 5, "use your ticket" (it really lasts until its date) */
 function tixPopQueue(){ const k=bogota().key; if(S.tixPop===k||!tixOn()) return;
-  const show=()=>{ if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; } if($("#vfl")||$("#rfp")){ setTimeout(show,2500); return; } tixPopShow(); };
+  const show=()=>{ if(S.tixPop===k) return; if(modal.open){ modal.addEventListener("close",()=>setTimeout(show,500),{once:true}); return; } if($("#vfl")||$("#rfp")){ setTimeout(show,2500); return; } tixPopShow(); };
   setTimeout(show,1300); }
 function tixPopShow(){
   if(!tixOn()) return; S.tixPop=bogota().key; save(); hideDeal();
