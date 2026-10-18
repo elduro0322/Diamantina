@@ -844,6 +844,10 @@ main{overscroll-behavior-y:contain}
 @media (prefers-reduced-motion:reduce){.fbanner::after,.fbgo,.btn.pulse{animation:none}}
 
 .topbanner.opt::before{display:none}
+.rechg{display:flex;flex-direction:column;align-items:center;gap:2px;width:100%;padding:12px;border:0;border-radius:14px;background:linear-gradient(#34D399,#059669);color:#fff;font:inherit;cursor:pointer;box-shadow:0 4px 0 #04603F}
+#modal .vipbtns button.rechg:not(.gold),#modal .paylist button.rechg:not(.gold),.vipbtns button.rechg:not(.gold),.paylist button.rechg:not(.gold){background:linear-gradient(#34D399,#059669)!important;color:#fff!important;border:0!important;box-shadow:0 4px 0 #04603F!important}
+.rechg span{font-size:20px;line-height:1}.rechg b{font-size:17px;font-weight:900}.rechg small{font-size:12px;opacity:.95}
+.rechg.low{animation:rechgPulse 1.4s infinite}@keyframes rechgPulse{50%{box-shadow:0 4px 0 #04603F,0 0 0 6px rgba(52,211,153,.35)}}
 .spbgal{display:flex;flex-direction:column;gap:10px;max-height:62vh;overflow:auto;padding:2px}.spbgal .spb{flex-shrink:0}
 .spb{--ac:#FFD34D;position:relative;display:flex;align-items:center;gap:12px;min-height:118px;padding:14px;border:2px solid var(--ac);border-radius:16px;overflow:hidden;text-decoration:none;color:#fff;text-align:left;background:radial-gradient(circle at 15% 50%,color-mix(in srgb,var(--ac) 28%,transparent),transparent 45%),linear-gradient(135deg,#09090d,#1d1822 65%,#08080b);box-shadow:0 0 14px color-mix(in srgb,var(--ac) 25%,transparent)}
 .spbsh{position:absolute;right:-30px;top:-40px;width:110px;height:110px;border-radius:50%;background:var(--ac);opacity:.12;filter:blur(20px);pointer-events:none}
@@ -3427,7 +3431,7 @@ async function collectRef(force){
     const wantList=Date.now()-REF_LIST_AT>(force?10:30)*60000; let d=null, rows=null;
     if(D1_OK!==false&&isReg()){ try{ d=await d1Post("myrefs",{list:wantList}); rows=(d.earn||[]).map(x=>({id:x.uid,base:+x.base||0,total:+x.total||0})); }catch(e){ d=null; } }
     /* old Firebase data: once a day for one more week (players still on the old version), or if D1 is down */
-    if(!d||(Date.now()<1792990800000&&Date.now()-(S.refFbAt||0)>86400000)){
+    if(!d){
       try{ const q=await DB.collection("refearn").where("by","==",UID).get(); S.refFbAt=Date.now(); const m={}; (rows||[]).forEach(r=>m[r.id]=r);
         q.docs.forEach(x=>{ const v=x.data(), b=v.base!=null?v.base:(v.total||0)*100/REF_PCT; if(!m[x.id]||b>m[x.id].base) m[x.id]={id:x.id,base:b,total:v.total||0}; }); rows=Object.values(m); }catch(e){}
     }
@@ -3820,8 +3824,10 @@ let ADS_AT=0;
 async function loadAds(force){
   if(!(DB&&UID)) return;
   try{
-    if(force||Date.now()-ADS_AT>30*60000){ ADS_AT=Date.now(); const q=await DB.collection("ads").where("status","==","active").get();
-      ACTIVE_ADS=q.docs.map(d=>({...d.data(),id:d.id})).filter(a=>(a.shown||0)<a.views); }
+    if(!force&&!ADS_AT){ try{ const c=JSON.parse(localStorage.getItem("dc-ads2")||"null"); if(c&&Date.now()-c.at<2*3600000&&Array.isArray(c.l)){ ACTIVE_ADS=c.l; ADS_AT=c.at; } }catch(e){} }
+    if(force||Date.now()-ADS_AT>2*3600000){ ADS_AT=Date.now(); const q=await DB.collection("ads").where("status","==","active").get();
+      ACTIVE_ADS=q.docs.map(d=>({...d.data(),id:d.id})).filter(a=>(a.shown||0)<a.views);
+      try{ localStorage.setItem("dc-ads2",JSON.stringify({at:ADS_AT,l:ACTIVE_ADS})); }catch(e){ try{ localStorage.setItem("dc-ads2",JSON.stringify({at:ADS_AT,l:ACTIVE_ADS.map(({img,...x})=>x)})); }catch(_){} } }
     if(force&&isReg()){ const m=await DB.collection("ads").where("owner","==",UID).get();
       MY_ADS=m.docs.map(d=>({...d.data(),id:d.id})).sort((a,b)=>b.at-a.at); }
   }catch(e){}
@@ -4229,7 +4235,7 @@ async function loadAdmin(){
   /* withdrawals, purchases and VIP payments come from Cloudflare D1. Firebase is read only for the old ones,
      until they are copied to D1 (done automatically once, when Firebase can be read) */
   let ADM=null; try{ ADM=await d1Post("adm",{}); }catch(e){ ADM=null; }
-  const legacy=!ADM||!ADM.imp2; if(ADM&&!ADM.imp3) fbImport2();
+  const legacy=!ADM||!ADM.imp2;   /* the old-data copy reads all of Firebase (thousands of reads): only with the button */
   const impBox=()=>{ const old=document.getElementById("imp2Box"); if(old) old.remove(); if(!(ADM&&!ADM.imp3)) return; const es=S.lang==="es"; const host=document.getElementById("adminPanel")||list; host.insertAdjacentHTML("afterbegin",`<div class="req" id="imp2Box" style="display:block;border:2px solid #38BDF8;background:rgba(56,189,248,.1);margin-bottom:12px">📥 <b>${es?"Copiar datos viejos de Firebase a Cloudflare":"Copy old Firebase data to Cloudflare"}</b><br><span style="font-size:13px">${es?"Retiros, compras, VIP, tareas hechas, saldos y staking de los jugadores. Se hace una sola vez.":"Withdrawals, purchases, VIP, tasks, balances and stakes. Only once."}</span><br><span id="imp2Msg" style="display:block;margin:6px 0;font-weight:800">${escapeHtml(IMP2_MSG||"")}</span><button class="mini" id="imp2Go">${es?"Copiar ahora":"Copy now"}</button></div>`);
     const b=document.getElementById("imp2Go"); if(b) b.onclick=()=>{ IMP2_RUN=false; fbImport2(); }; };
   const NM=(ADM&&ADM.names)||{}, who=u=>`<b>${escapeHtml(NM[u]||"")}</b> · ID ${codeOf(u)}`;
@@ -4560,7 +4566,7 @@ async function openWelcome(){
 /* ---------- Actions ---------- */
 const modal=$("#modal");
 function showModal(title,body,buttons){
-  setTimeout(()=>{ const mb=document.getElementById("mBody"); if(mb&&typeof bindSponsor==="function") bindSponsor(mb); },0);
+  setTimeout(()=>{ const mb=document.getElementById("mBody"); if(mb&&typeof bindSponsor==="function") bindSponsor(mb); try{ addRechargeBtn(mb); }catch(e){} },0);
   $("#mTitle").textContent=title; $("#mBody").innerHTML=body; $("#mFoot").innerHTML="";
   buttons.forEach(([label,cls,fn])=>{const b=document.createElement("button");b.className="btn "+cls;b.textContent=label;b.onclick=fn;$("#mFoot").appendChild(b);});
   if(!modal.open) modal.showModal();
@@ -5040,7 +5046,7 @@ function renderDeposit(target){
   if(target) depTarget=target; if(depTarget&&!document.body.contains(depTarget)) depTarget=null;
   const box=depTarget||$("#depPanel"); if(!box) return; if(depTarget&&target===undefined) renderDepositPanelToo(); const q=coinQuote(depAmt), c=coinBy(S.payCoin);
   const pend=(S.orders||[]).filter(o=>o.type==="deposit"&&o.status==="pending");
-  box.innerHTML=`<h2>${ic("pay",30)} ${t("depTitle")}</h2><p class="hint" style="margin-top:0">${t("depSub")}</p>
+  box.innerHTML=`<h2>${ic("pay",30)} ${t("depTitle")}</h2><p class="hint" style="margin-top:0">${t("depSub")} <b style="color:#34D399">${S.lang==="es"?"Desde $1.":S.lang==="pt"?"A partir de $1.":"From $1."}</b></p>
     <div class="plans" style="grid-template-columns:repeat(4,1fr)">${DEP_PRESETS.map(v=>`<button class="plan ${depAmt===v?"on":""}" data-d="${v}"><b style="font-size:20px">$${v}</b></button>`).join("")}</div>
     <div class="amtrow"><input class="field" id="depIn" inputmode="decimal" value="${depAmt}" aria-label="USD"><span class="maxbtn" style="display:grid;place-items:center">USD</span></div>
     <div class="quote">${q?`≈ <b>${q}</b> · CoinGecko`:`${t("inCoin")} ${c.n}`}</div>
@@ -5048,8 +5054,8 @@ function renderDeposit(target){
     ${pend.length?`<p class="hint" style="font-weight:900">${fmt(t("depPending"),{n:pend.length})}</p>`:""}`;
   box.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{depAmt=+b.dataset.d;renderDeposit();});
   $("#depIn").onchange=e=>{const v=parseFloat((e.target.value||"").replace(",","."));if(v>0){depAmt=Math.round(v*100)/100;renderDeposit();}};
-  box.querySelectorAll("[data-cp]").forEach(b=>b.onclick=()=>{ if(!(depAmt>=0.1)){toast(fmt(t("sellMin"),{x:"$0.10"}));return;} cryptoPay({type:"deposit",usd:depAmt}); });
-  box.querySelectorAll("[data-dm]").forEach(b=>b.onclick=()=>{ if(!(depAmt>=0.1)){toast(fmt(t("sellMin"),{x:"$0.10"}));return;} cryptoDialog({type:"deposit",usd:depAmt,method:b.dataset.dm}); });
+  box.querySelectorAll("[data-cp]").forEach(b=>b.onclick=()=>{ if(!(depAmt>=1)){toast(fmt(t("sellMin"),{x:"$1"}));return;} cryptoPay({type:"deposit",usd:depAmt}); });
+  box.querySelectorAll("[data-dm]").forEach(b=>b.onclick=()=>{ if(!(depAmt>=1)){toast(fmt(t("sellMin"),{x:"$1"}));return;} cryptoDialog({type:"deposit",usd:depAmt,method:b.dataset.dm}); });
 }
 /* ---------- Direct crypto payments (on-chain) ---------- */
 // Put your wallet addresses here. While an address is empty, that coin shows "coming soon".
@@ -5098,6 +5104,14 @@ function cryptoPay(o){
 }
 const methodName=m=>m==="crypto"?"Crypto":(METHODS[m]?.name||m);
 function renderDepositPanelToo(){ const t0=depTarget; depTarget=null; renderDeposit(); depTarget=t0; }
+/* every window where the player can "Pay with my balance" also gets "Add balance" right there */
+function addRechargeBtn(mb){
+  if(!mb||mb.querySelector(".rechg")) return; const bal=mb.querySelector('button[id$="Bal"]'); if(!bal) return;
+  const es=S.lang==="es", pt=S.lang==="pt", low=bal.disabled;
+  const b=document.createElement("button"); b.type="button"; b.className="rechg"+(low?" low":"");
+  b.innerHTML=`<span>➕</span><b>${es?"Recargar saldo":pt?"Recarregar saldo":"Add balance"}</b><small>${low?(es?"No te alcanza: recarga desde $1 y compra al instante":pt?"Saldo insuficiente: recarregue a partir de $1":"Not enough: top up from $1 and buy right away"):(es?"Desde $1 · FaucetPay, Cwallet o cripto":pt?"A partir de $1 · FaucetPay, Cwallet ou cripto":"From $1 · FaucetPay, Cwallet or crypto")}</small>`;
+  b.onclick=()=>{ try{ const m=(bal.textContent||"").match(/\$\s?([0-9]+(?:\.[0-9]+)?)/); const need=m?parseFloat(m[1]):0; if(low&&need>0){ const miss=Math.max(1,Math.ceil(need-(S.bal||0)/1e5)); depAmt=DEP_PRESETS.find(v=>v>=miss)||miss; } }catch(e){} openDeposit(); };
+  bal.insertAdjacentElement("afterend",b); }
 function openDeposit(){
   showModal(t("depositBtn"),`<div id="depModal" class="depmodal"></div>`,[[t("close"),"no",closeModal]]);
   renderDeposit($("#depModal"));
@@ -5225,9 +5239,9 @@ async function collectCredits(force){
     for(const x of d.list||[]){ if((x.at||0)>mx) mx=x.at; if(S.claimed.includes(x.id)) continue; applyCredit(x.id,x); n++; }
     S.credD=mx||Date.now()-600000; }catch(e){}
   /* 2) old Firebase credits: at most every 6 h */
-  if(Date.now()-(S.credFbAt||0)>6*3600000){ S.credFbAt=Date.now();
+  if(Date.now()-(S.credFbAt||0)>24*3600000){ S.credFbAt=Date.now();
     try{
-      const lref=DB.doc("credits/"+UID).collection("list"), full=!S.credAt||Date.now()-(S.credFull||0)>86400000;
+      const lref=DB.doc("credits/"+UID).collection("list"), full=!S.credAt;
       const cs=await (full?lref.get():lref.where("at",">=",S.credAt-600000).get());
       { let mx=S.credAt||0; cs.docs.forEach(d=>{ const a=+(d.data().at)||0; if(a>mx) mx=a; }); S.credAt=mx||Date.now()-600000; if(full) S.credFull=Date.now(); }
       for(const d of cs.docs){ if(S.claimed.includes(d.id)) continue; applyCredit(d.id,d.data()); n++; }
