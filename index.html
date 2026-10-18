@@ -3614,12 +3614,13 @@ function parseFrame(code){ code=(code||"").trim(); if(!code) return null; const 
 const frameHTML=f=>`<div class="ownframe"><iframe src="${escapeHtml(f.src)}" width="${f.w}" height="${f.h}" style="width:100%;max-width:${f.w}px;height:${f.h}px" loading="lazy" scrolling="no" frameborder="0" title="ad"></iframe></div>`;
 /* Any banner code (iframe or script) -> isolated frame */
 function codeSize(code){ const w=+((code.match(/width\s*[=:]\s*["']?(\d+)/i)||[])[1]||0)||300, h=+((code.match(/height\s*[=:]\s*["']?(\d+)/i)||[])[1]||0)||250; return {w:Math.min(w,970),h:Math.min(h,600)}; }
-function codeHTML(code){ code=(code||"").trim(); if(!code) return "";
+function codeHTML(code){ code=(code||"").trim(); if(!code) return ""; code=code.replace(/((?:src|href|data-domain)\s*=\s*["'])\/\//gi,"$1https://");
   if(/^<iframe[\s\S]*?(<\/iframe>)?\s*$/i.test(code)&&!/<script/i.test(code)){ const f=parseFrame(code); if(f) return frameHTML(f); }
   if(/^https:\/\/\S+$/i.test(code)){ const f=parseFrame(code); if(f) return frameHTML(f); }
-  const z=codeSize(code), doc=`<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>html,body{margin:0;padding:0;overflow:hidden;background:transparent;display:flex;justify-content:center}</style></head><body>${code}</body></html>`;
+  const z=codeSize(code), doc=`<!doctype html><html><head><meta charset="utf-8"><base href="https://diamantinagame.xyz/" target="_blank"><style>html,body{margin:0;padding:0;overflow:hidden;background:transparent;display:flex;justify-content:center}</style></head><body>${code}</body></html>`;
   return `<div class="ownframe"><iframe srcdoc="${escapeHtml(doc)}" width="${z.w}" height="${z.h}" style="width:100%;max-width:${z.w}px;height:${z.h}px" scrolling="no" frameborder="0" title="ad"></iframe></div>`; }
-function ownBannerHTML(){ const L=liveBanners(); if(!L.length) return ""; const b=L[Math.floor(Math.random()*L.length)];
+function ownBannerHTML(){ const L=liveBanners(); if(!L.length) return ""; const bi=Math.floor(Math.random()*L.length), b=L[bi];
+  if(b.frame&&isDirect(b.frame)) return `<div class="ownframe xdirect" data-xdc="${bi}" style="min-height:250px;width:300px;max-width:100%;margin:0 auto"></div>`;
   if(b.frame){ const h=codeHTML(b.frame); if(h) return h; }
   return b.url?`<a class="ownbanner" href="${escapeHtml(b.url)}" target="_blank" rel="noopener noreferrer"><img src="${b.img}" alt=""></a>`:`<div class="ownbanner"><img src="${b.img}" alt=""></div>`; }
 function shrinkImg(file,maxW=640){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onerror=rej; fr.onload=()=>{ const im=new Image(); im.onerror=rej; im.onload=()=>{
@@ -4421,7 +4422,7 @@ async function liveCount(){
 setInterval(beat,180000); setInterval(liveCount,60000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ beat(); liveCount(); } });
 const DIRECT_TAG="<!--direct-->";
-const isDirect=c=>/^\s*<!--direct-->/.test(c||"")||/ytrgt\(/.test(c||"");   // header-bidding banners need the real page (not a frame) to get bids
+const isDirect=c=>/^\s*<!--direct-->/.test(c||"")||/ytrgt\(/.test(c||"")||/data-domain=["']\/\/|data527\.click\/js\//i.test(c||"");   /* Advertica (data527) reads the page address: it must run on the real page */   // header-bidding banners need the real page (not a frame) to get bids
 let xbSig="";
 function runDirect(el,code){ el.innerHTML=String(code||"").replace(DIRECT_TAG,"");
   el.querySelectorAll("script").forEach(old=>{ const s=document.createElement("script"); [...old.attributes].forEach(a=>s.setAttribute(a.name,a.value)); s.text=old.textContent; old.replaceWith(s); }); }
@@ -4843,6 +4844,7 @@ function adModal(title,key,extra,onClaim,ctx){
     <div class="adtimer" id="adTm"><span class="adring" style="--p:0"><b>${AD_SECS}</b></span><span id="adMsg">${hasBanner?t("adNeedBoth"):t("adTapFirst")}</span></div>${extra}`,
     [[t("close"),"no",()=>{ clearInterval(adTick); closeModal(); }],[t("claim"),"go",()=>{ if(!btn||btn.disabled) return; clearInterval(adTick); captchaGate(ctx,onClaim,btn); }]]);
   const btn=$("#mFoot .btn.go"); btn.disabled=true;
+  { const xd=document.querySelector("#topBan [data-xdc]"); if(xd){ try{ runDirect(xd,(liveBanners()[+xd.dataset.xdc]||{}).frame); }catch(e){} } }
   let left=AD_SECS, started=false, gotB=!hasBanner, gotA=false;
   const RS=(AD_RESTORE&&AD_RESTORE.key===key)?AD_RESTORE:null; AD_RESTORE=null;
   const savePend=()=>{ try{ localStorage.setItem(AD_PK,JSON.stringify({key,ctx:ctx||null,gotA,gotB,startAt:started||left<=0?startAt:0,at:Date.now(),day:bogota().key})); }catch(e){} };
