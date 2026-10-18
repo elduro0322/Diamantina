@@ -4204,7 +4204,7 @@ async function fbImport2(){   /* owner, once: copy old withdrawals / purchases /
     const C=[]; const cu=await real(DB.collection("credits")); for(const u of cu.docs){ const ls=await real(DB.doc("credits/"+u.id).collection("list")); ls.docs.forEach(d=>{ const x=d.data(); if(x.type==="task"||x.note==="weekly prize") C.push({uid:u.id,id:d.id,at:+x.at||0,d:x}); }); }
     const tot=Math.max(P.length,O.length,V.length,Q.length,C.length,X.length);
     for(let i=0;i<tot;i+=8){ await d1Post("imp2",{pays:P.slice(i,i+8),ords:O.slice(i,i+8),vips:V.slice(i,i+8),vreq:Q.slice(i,i+8),creds:C.slice(i,i+8),lbx:X.slice(i,i+8)}); imp2Say((es?"⏳ Guardando en Cloudflare… ":"⏳ Saving… ")+Math.min(100,Math.round((i+8)/tot*100))+"%"); }
-    await d1Post("imp2",{done:true}); toast(es?"✅ Datos viejos copiados a Cloudflare":"✅ Old data copied to Cloudflare","pay");
+    await d1Post("imp2",{done:true,v3:true}); toast(es?"✅ Datos viejos copiados a Cloudflare":"✅ Old data copied to Cloudflare","pay");
     imp2Say((es?"✅ Listo: ":"✅ Done: ")+`${P.length} ${es?"retiros":"withdrawals"}, ${O.length} ${es?"compras":"purchases"}, ${C.length} ${es?"tareas/premios":"tasks/prizes"}, ${X.length} ${es?"jugadores (saldo y staking)":"players"}`);
     setTimeout(()=>{ try{ if(adminTab==="pays") loadAdmin(); }catch(e){} },1500);
   }catch(e){ IMP2_RUN=false; const m=String((e&&(e.code||e.message))||e);
@@ -4216,8 +4216,8 @@ async function loadAdmin(){
   /* withdrawals, purchases and VIP payments come from Cloudflare D1. Firebase is read only for the old ones,
      until they are copied to D1 (done automatically once, when Firebase can be read) */
   let ADM=null; try{ ADM=await d1Post("adm",{}); }catch(e){ ADM=null; }
-  const legacy=!ADM||!ADM.imp2; if(ADM&&!ADM.imp2) fbImport2();
-  const impBox=()=>{ const old=document.getElementById("imp2Box"); if(old) old.remove(); if(!(ADM&&!ADM.imp2)) return; const es=S.lang==="es"; const host=document.getElementById("adminPanel")||list; host.insertAdjacentHTML("afterbegin",`<div class="req" id="imp2Box" style="display:block;border:2px solid #38BDF8;background:rgba(56,189,248,.1);margin-bottom:12px">📥 <b>${es?"Copiar datos viejos de Firebase a Cloudflare":"Copy old Firebase data to Cloudflare"}</b><br><span style="font-size:13px">${es?"Retiros, compras, VIP, tareas hechas, saldos y staking de los jugadores. Se hace una sola vez.":"Withdrawals, purchases, VIP, tasks, balances and stakes. Only once."}</span><br><span id="imp2Msg" style="display:block;margin:6px 0;font-weight:800">${escapeHtml(IMP2_MSG||"")}</span><button class="mini" id="imp2Go">${es?"Copiar ahora":"Copy now"}</button></div>`);
+  const legacy=!ADM||!ADM.imp2; if(ADM&&!ADM.imp3) fbImport2();
+  const impBox=()=>{ const old=document.getElementById("imp2Box"); if(old) old.remove(); if(!(ADM&&!ADM.imp3)) return; const es=S.lang==="es"; const host=document.getElementById("adminPanel")||list; host.insertAdjacentHTML("afterbegin",`<div class="req" id="imp2Box" style="display:block;border:2px solid #38BDF8;background:rgba(56,189,248,.1);margin-bottom:12px">📥 <b>${es?"Copiar datos viejos de Firebase a Cloudflare":"Copy old Firebase data to Cloudflare"}</b><br><span style="font-size:13px">${es?"Retiros, compras, VIP, tareas hechas, saldos y staking de los jugadores. Se hace una sola vez.":"Withdrawals, purchases, VIP, tasks, balances and stakes. Only once."}</span><br><span id="imp2Msg" style="display:block;margin:6px 0;font-weight:800">${escapeHtml(IMP2_MSG||"")}</span><button class="mini" id="imp2Go">${es?"Copiar ahora":"Copy now"}</button></div>`);
     const b=document.getElementById("imp2Go"); if(b) b.onclick=()=>{ IMP2_RUN=false; fbImport2(); }; };
   const NM=(ADM&&ADM.names)||{}, who=u=>`<b>${escapeHtml(NM[u]||"")}</b> · ID ${codeOf(u)}`;
   try{ const sn=await nftSnap(); if(sn&&sn.imp&&sn.fee){ feeSum+=+sn.fee.sum||0; feeN+=+sn.fee.n||0; } }catch(e){}

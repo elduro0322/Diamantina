@@ -456,7 +456,7 @@ async function d1(request, env) {
       await namesFor(db, [...(p.results || []), ...(o.results || []), ...(v.results || []), ...(tl.results || [])].map(x => x.uid), snap);
       return json({ ok: true, pays: (p.results || []).map(x => ({ ...J(x.d), uid: x.uid, id: x.date, date: x.date, status: "pending", src: "d1" })),
         ords: (o.results || []).map(x => ({ ...J(x.d), uid: x.uid, id: x.id, status: "pending", src: "d1" })),
-        vreq: (v.results || []).map(x => ({ ...J(x.d), uid: x.uid, status: "pending", src: "d1" })), names: snap.names, tasks: (tk.results || [])[0] || {}, tlist: (tl.results || []).map(x => ({ ...J(x.d), uid: x.uid, at: x.at })), imp2: !!(await metaGet(db, "imp2")) });
+        vreq: (v.results || []).map(x => ({ ...J(x.d), uid: x.uid, status: "pending", src: "d1" })), names: snap.names, tasks: (tk.results || [])[0] || {}, tlist: (tl.results || []).map(x => ({ ...J(x.d), uid: x.uid, at: x.at })), imp3: !!(await metaGet(db, "imp3")), imp2: !!(await metaGet(db, "imp2")) });
     }
     if (a === "assignrefs") {                              // owner: "buy referrals" order -> give N recent players with no referrer
       const buyer = str(body.buyer, 64), n = int(body.n, 500), my = await db.prepare("SELECT by FROM refs WHERE uid = ?").bind(buyer).first();
@@ -516,6 +516,7 @@ async function d1(request, env) {
         .bind(str(x.uid, 64), int(x.bal, 1e12), int(x.staked, 1e12), int(x.dmt, 1e12), str(x.dev, 40), JSON.stringify(Array.isArray(x.stk) ? x.stk.slice(0, 20) : []).slice(0, 4000), int(x.at, 9e15), Math.max(0, Math.min(1e6, +x.fx || 0)), int(x.fxn, 1e9), int(x.fm, 1e12), int(x.fmn, 1e9)));
       for (const x of (body.creds || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(str(x.uid, 64), str(x.id, 90), int(x.at, 9e15), JSON.stringify(x.d || {}).slice(0, 3000)));
       if (body.done) q.push(metaSet(db, "imp2", { at: now }));
+      if (body.done && body.v3) q.push(metaSet(db, "imp3", { at: now }));   // second copy: + player balances / stakes / tasks
       if (q.length) await db.batch(q);
       return json({ ok: true, n: q.length });
     }
