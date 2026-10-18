@@ -4187,8 +4187,11 @@ const aCol=(c,ttl)=>aGet(c,DB.collection(c),ttl);
 const aSub=(p,u,sub)=>aGet(p+"/"+u.id+"/"+sub+"@"+((u.data()||{}).updatedAt||""),DB.doc(p+"/"+u.id).collection(sub),3*86400000);
 const aDrop=pre=>{ for(const k in AC) if(k.startsWith(pre)) delete AC[k]; acSave(); };
 let FB_FULL=false, IMP2_RUN=false;
-async function fbImport2(){   /* owner, once: copy old withdrawals / purchases / VIP from Firebase to D1. Only if Firebase answers for real */
-  if(IMP2_RUN||!(DB&&OWNER)) return; IMP2_RUN=true;
+let IMP2_MSG="";
+const imp2Say=m=>{ IMP2_MSG=m; const el=document.getElementById("imp2Msg"); if(el) el.textContent=m; };
+async function fbImport2(){   /* owner, once: copy old withdrawals / purchases / VIP / tasks / stakes from Firebase to D1. Only if Firebase answers for real */
+  if(IMP2_RUN||!(DB&&OWNER)) return; IMP2_RUN=true; const es=S.lang==="es";
+  imp2Say(es?"⏳ Copiando datos viejos de Firebase… no cierres el juego":"⏳ Copying old Firebase data…");
   try{
     const real=q=>q.get().then(r=>{ if(r.metadata&&r.metadata.fromCache) throw new Error("cache"); return r; });
     const P=[], O=[], V=[], Q=[];
@@ -4196,10 +4199,16 @@ async function fbImport2(){   /* owner, once: copy old withdrawals / purchases /
     const ou=await real(DB.collection("orders")); for(const u of ou.docs){ const ls=await real(DB.doc("orders/"+u.id).collection("list")); ls.docs.forEach(d=>{ const x=d.data(); O.push({uid:u.id,id:d.id,status:x.status||"pending",at:+x.at||Date.now(),d:{...x,id:d.id}}); }); }
     const vv=await real(DB.collection("vip")); vv.docs.forEach(d=>{ const x=d.data(); V.push({uid:d.id,until:x.until||0,tier:x.tier||1,at:x.at||0}); });
     const up=await real(DB.collection("upgrades")); up.docs.forEach(d=>{ const x=d.data(); if(x&&x.method) Q.push({uid:d.id,status:x.status||"pending",at:x.at||0,d:x}); });
+    imp2Say(es?"⏳ Copiando… retiros, compras y VIP leídos. Ahora tareas y staking…":"⏳ Copying… now tasks and stakes…");
+    const X=[]; const lb=await real(DB.collection("lbads")); lb.docs.forEach(d=>{ const x=d.data(); X.push({uid:d.id,bal:x.bal||0,staked:x.staked||0,dmt:x.dmt||0,dev:x.dev||"",stk:Array.isArray(x.stk)?x.stk:[],at:x.seen||x.at||0,fx:x.fx||0,fxn:x.fxn||0,fm:x.fm||0,fmn:x.fmn||0}); });
     const C=[]; const cu=await real(DB.collection("credits")); for(const u of cu.docs){ const ls=await real(DB.doc("credits/"+u.id).collection("list")); ls.docs.forEach(d=>{ const x=d.data(); if(x.type==="task"||x.note==="weekly prize") C.push({uid:u.id,id:d.id,at:+x.at||0,d:x}); }); }
-    for(let i=0;i<Math.max(P.length,O.length,V.length,Q.length,C.length);i+=10) await d1Post("imp2",{pays:P.slice(i,i+10),ords:O.slice(i,i+10),vips:V.slice(i,i+10),vreq:Q.slice(i,i+10),creds:C.slice(i,i+10)});
-    await d1Post("imp2",{done:true}); toast(S.lang==="es"?"✅ Retiros y compras copiados a Cloudflare":"✅ Withdrawals and purchases copied to Cloudflare","pay");
-  }catch(e){ IMP2_RUN=false; }
+    const tot=Math.max(P.length,O.length,V.length,Q.length,C.length,X.length);
+    for(let i=0;i<tot;i+=8){ await d1Post("imp2",{pays:P.slice(i,i+8),ords:O.slice(i,i+8),vips:V.slice(i,i+8),vreq:Q.slice(i,i+8),creds:C.slice(i,i+8),lbx:X.slice(i,i+8)}); imp2Say((es?"⏳ Guardando en Cloudflare… ":"⏳ Saving… ")+Math.min(100,Math.round((i+8)/tot*100))+"%"); }
+    await d1Post("imp2",{done:true}); toast(es?"✅ Datos viejos copiados a Cloudflare":"✅ Old data copied to Cloudflare","pay");
+    imp2Say((es?"✅ Listo: ":"✅ Done: ")+`${P.length} ${es?"retiros":"withdrawals"}, ${O.length} ${es?"compras":"purchases"}, ${C.length} ${es?"tareas/premios":"tasks/prizes"}, ${X.length} ${es?"jugadores (saldo y staking)":"players"}`);
+    setTimeout(()=>{ try{ if(adminTab==="pays") loadAdmin(); }catch(e){} },1500);
+  }catch(e){ IMP2_RUN=false; const m=String((e&&(e.code||e.message))||e);
+    imp2Say(/cache|quota|exhausted|unavailable/i.test(m)?(es?"⚠️ Firebase todavía no deja leer (está lleno o sin conexión). Vuelve a tocar el botón en un rato.":"⚠️ Firebase can't be read yet. Try again later."):(es?"⚠️ No se pudo copiar: ":"⚠️ Copy failed: ")+m); }
 }
 const fbNote=()=>FB_FULL?`<div class="req" style="display:block;border:2px solid #F59E0B;background:rgba(245,158,11,.12)">⚠️ <b>${S.lang==="es"?"Firebase llegó a su límite gratis de hoy.":"Firebase reached today's free limit."}</b><br><span style="font-size:13px">${S.lang==="es"?"Algunos datos (retiros, compras pendientes) no se pueden leer hasta que se reinicie a las 2:00 a. m. (hora Colombia). Los jugadores siguen jugando normal.":"Some data (withdrawals, pending purchases) can't be read until it resets at 2:00 AM Colombia time."}</span></div>`:"";
 async function loadAdmin(){
@@ -4208,6 +4217,8 @@ async function loadAdmin(){
      until they are copied to D1 (done automatically once, when Firebase can be read) */
   let ADM=null; try{ ADM=await d1Post("adm",{}); }catch(e){ ADM=null; }
   const legacy=!ADM||!ADM.imp2; if(ADM&&!ADM.imp2) fbImport2();
+  const impBox=()=>{ if(!(ADM&&!ADM.imp2)) return; const es=S.lang==="es"; list.insertAdjacentHTML("afterbegin",`<div class="req" style="display:block;border:2px solid #38BDF8;background:rgba(56,189,248,.1)">📥 <b>${es?"Copiar datos viejos de Firebase a Cloudflare":"Copy old Firebase data to Cloudflare"}</b><br><span style="font-size:13px">${es?"Retiros, compras, VIP, tareas hechas, saldos y staking de los jugadores. Se hace una sola vez.":"Withdrawals, purchases, VIP, tasks, balances and stakes. Only once."}</span><br><span id="imp2Msg" style="display:block;margin:6px 0;font-weight:800">${escapeHtml(IMP2_MSG||"")}</span><button class="mini" id="imp2Go">${es?"Copiar ahora":"Copy now"}</button></div>`);
+    const b=document.getElementById("imp2Go"); if(b) b.onclick=()=>{ IMP2_RUN=false; fbImport2(); }; };
   const NM=(ADM&&ADM.names)||{}, who=u=>`<b>${escapeHtml(NM[u]||"")}</b> · ID ${codeOf(u)}`;
   try{ const sn=await nftSnap(); if(sn&&sn.imp&&sn.fee){ feeSum+=+sn.fee.sum||0; feeN+=+sn.fee.n||0; } }catch(e){}
   let exSum=0, exN=0;
@@ -4289,6 +4300,7 @@ async function loadAdmin(){
     try{ if(r.src==="fb") await DB.doc(`payouts/${r.uid}`).collection("requests").doc(r.id).update({status:"paid",paidAt:new Date().toISOString()}); else await d1Post("paystat",{uid:r.uid,date:r.date||r.id,st:"paid"});
       aDrop("payouts/"+r.uid+"/"); await publishProof(r); loadAdmin(); }catch(e){ b.disabled=false; toast(t("mkErr")); }});
   if(FB_FULL) list.insertAdjacentHTML("afterbegin",fbNote());
+  impBox();
 }
 const startDB=(async()=>{
   try{

@@ -512,6 +512,8 @@ async function d1(request, env) {
       for (const x of (body.ords || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO ords (uid, id, st, at, d) VALUES (?, ?, ?, ?, ?)").bind(str(x.uid, 64), str(x.id, 60), str(x.status, 12) || "pending", int(x.at, 9e15), JSON.stringify(x.d || {}).slice(0, 6000)));
       for (const x of (body.vips || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO vips (uid, until, tier, at) VALUES (?, ?, ?, ?)").bind(str(x.uid, 64), int(x.until, 9e15), int(x.tier, 4) || 1, int(x.at, 9e15)));
       for (const x of (body.vreq || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO vreq (uid, st, at, d) VALUES (?, ?, ?, ?)").bind(str(x.uid, 64), str(x.status, 12) || "pending", int(x.at, 9e15), JSON.stringify(x.d || {}).slice(0, 3000)));
+      for (const x of (body.lbx || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO lbx (uid, bal, staked, dmt, dev, stk, at, fx, fxn, fm, fmn) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(str(x.uid, 64), int(x.bal, 1e12), int(x.staked, 1e12), int(x.dmt, 1e12), str(x.dev, 40), JSON.stringify(Array.isArray(x.stk) ? x.stk.slice(0, 20) : []).slice(0, 4000), int(x.at, 9e15), Math.max(0, Math.min(1e6, +x.fx || 0)), int(x.fxn, 1e9), int(x.fm, 1e12), int(x.fmn, 1e9)));
       for (const x of (body.creds || []).slice(0, 40)) q.push(db.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(str(x.uid, 64), str(x.id, 90), int(x.at, 9e15), JSON.stringify(x.d || {}).slice(0, 3000)));
       if (body.done) q.push(metaSet(db, "imp2", { at: now }));
       if (q.length) await db.batch(q);
