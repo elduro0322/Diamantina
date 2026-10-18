@@ -4422,7 +4422,7 @@ async function liveCount(){
 setInterval(beat,180000); setInterval(liveCount,60000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ beat(); liveCount(); } });
 const DIRECT_TAG="<!--direct-->";
-const isDirect=c=>/^\s*<!--direct-->/.test(c||"")||/ytrgt\(/.test(c||"")||/data-domain=["']\/\/|data527\.click\/js\//i.test(c||"");   /* Advertica (data527) reads the page address: it must run on the real page */   // header-bidding banners need the real page (not a frame) to get bids
+const isDirect=c=>/^\s*<!--direct-->/.test(c||"")||/ytrgt\(/.test(c||"");   // header-bidding banners need the real page (not a frame) to get bids
 let xbSig="";
 function runDirect(el,code){ el.innerHTML=String(code||"").replace(DIRECT_TAG,"");
   el.querySelectorAll("script").forEach(old=>{ const s=document.createElement("script"); [...old.attributes].forEach(a=>s.setAttribute(a.name,a.value)); s.text=old.textContent; old.replaceWith(s); }); }
