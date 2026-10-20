@@ -4476,7 +4476,10 @@ const DIRECT_TAG="<!--direct-->";
 const isDirect=c=>!/a-ads\.com|aads\.com|data-aa=/i.test(c||"")&&(/^\s*<!--direct-->/.test(c||"")||/ytrgt\(/.test(c||""));   // header-bidding banners need the real page (not a frame) to get bids
 let xbSig="";
 function runDirect(el,code){ el.innerHTML=String(code||"").replace(DIRECT_TAG,"");
-  el.querySelectorAll("script").forEach(old=>{ const s=document.createElement("script"); [...old.attributes].forEach(a=>s.setAttribute(a.name,a.value)); s.text=old.textContent; old.replaceWith(s); }); }
+  /* scripts run one after another: an inline script waits for the library above it (e.g. Adcash aclib.js -> aclib.runAutoTag) */
+  const list=[...el.querySelectorAll("script")]; const next=i=>{ const old=list[i]; if(!old) return; const s=document.createElement("script"); [...old.attributes].forEach(a=>s.setAttribute(a.name,a.value));
+    if(old.src){ let go=false; const done=()=>{ if(go) return; go=true; next(i+1); }; s.onload=done; s.onerror=done; setTimeout(done,8000); old.replaceWith(s); }
+    else { s.text=old.textContent; old.replaceWith(s); next(i+1); } }; next(0); }
 function renderXBans(){ const box=$("#xBans"); if(!box||!box.dataset.on) return; const sig=JSON.stringify(XB); if(sig===xbSig&&box.childElementCount) return; xbSig=sig;
   box.innerHTML=XB.map((c,i)=>isDirect(c)?`<div class="ownframe xdirect" data-xd="${i}" style="min-height:250px;width:300px;max-width:100%;margin:0 auto"></div>`:codeHTML(c)).join("");
   box.querySelectorAll("[data-xd]").forEach(el=>{ try{ runDirect(el,XB[+el.dataset.xd]); }catch(e){} }); }
