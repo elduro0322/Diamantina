@@ -3167,7 +3167,7 @@ async function d1Push(force){   /* weekly ads + profile + "online"; at most ever
   const prof={nick:myNick().slice(0,20),code:myCode(),hero:curHero(),vip:vipTier(),coin:S.payCoin||""}, sig=JSON.stringify(prof);
   const stUsd=(S.stakes||[]).filter(s=>(s.asset||"USD")==="USD").reduce((a,s)=>a+s.amt+s.rew,0);
   const body={week:w.week,ads:w.ads,coin:prof.coin,vip:prof.vip,day:bogota().key,td:S.doneDate===bogota().key?(S.done||0):0,
-    x:{bal:Math.round(S.bal||0),staked:Math.round(stUsd),dmt:S.dmtPre||0,dev:DEV,stk:(S.stakes||[]).filter(x=>(x.end||0)>Date.now()).slice(0,20).map(x=>({a:x.asset||"USD",amt:x.amt,rew:x.rew||0,end:x.end})),fx:S.feeEx||0,fxn:S.feeExN||0,fm:S.feeMk||0,fmn:S.feeMkN||0}}; if(S.refBy&&S.refBase>0) Object.assign(body,{refBy:S.refBy,refBase:S.refBase,refOwed:S.refOwed||0}); if(sig!==D1P.sig||now-D1P.pat>3600000) Object.assign(body,prof);
+    x:{bal:Math.round(S.bal||0),staked:Math.round(stUsd),dmt:S.dmtPre||0,dev:DEV,stk:(S.stakes||[]).filter(x=>(x.end||0)>Date.now()).slice(0,20).map(x=>({a:x.asset||"USD",amt:x.amt,rew:x.rew||0,end:x.end})),fx:S.feeEx||0,fxn:S.feeExN||0,fm:S.feeMk||0,fmn:S.feeMkN||0,cl:S.claims||0}}; if(S.refBy&&S.refBase>0) Object.assign(body,{refBy:S.refBy,refBase:S.refBase,refOwed:S.refOwed||0}); if(sig!==D1P.sig||now-D1P.pat>3600000) Object.assign(body,prof);
   D1P.at=now; try{ const pr=await d1Post("push",body); if(pr&&pr.vis>0) creditVis(pr.vis); D1P.ads=w.ads; if(body.nick!=null){ D1P.sig=sig; D1P.pat=now; } }catch(e){}
 }
 document.addEventListener("visibilitychange",()=>{ try{ if(document.hidden&&UID&&wkAds().ads!==D1P.ads) d1Push(true); }catch(e){} });
@@ -3411,6 +3411,10 @@ const gearPct=()=>GEAR_BONUS*(S.owned||[]).length;
 const LEVELS=[[0,0],[100,.05],[500,.25],[1000,.5],[1500,1],[2000,1.5],[5000,2.5],[10000,4],[20000,5.5],[50000,7.5],[100000,10]]; // [claims needed, % bonus]
 function lvlInfo(){ const c=S.claims||0; let L=0; LEVELS.forEach(([th],i)=>{ if(c>=th) L=i; }); const nx=LEVELS[L+1]; return {L,pct:LEVELS[L][1],claims:c,next:nx?nx[0]:null,nextPct:nx?nx[1]:null,from:LEVELS[L][0]}; }
 const lvlPct=()=>lvlInfo().pct;
+/* level backup in Cloudflare: if this phone shows fewer faucet claims than the server has, put them back */
+async function lvlRestore(){ try{ if(!(UID&&isReg())) return; const r=await d1Post("mylvl",{}); const n=Math.floor(+(r&&r.cl)||0);
+  if(n>(S.claims||0)){ const before=lvlInfo().L; S.claims=n; save(); renderLevel(); const v=lvlInfo(); if(v.L>before) toast(fmt(t("levelUp"),{n:v.L,p:v.pct}),"trophy"); }
+  else if((S.claims||0)>n) d1Push(true); }catch(e){} }
 function renderLevel(){
   const el=$("#lvlBar"); if(!el) return; const v=lvlInfo();
   const prog=v.next?Math.min(100,(v.claims-v.from)/(v.next-v.from)*100):100;
@@ -4326,7 +4330,7 @@ const startDB=(async()=>{
     if(!window.claude||!window.claude.use){ loadMarket(); return; }
     const [db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")]);
     if(!db||!user){ loadMarket(); return; }
-    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); window.__OWNER=!!OWNER; if(OWNER){ try{ renderVip(); renderText(); }catch(e){} } loadCfg(); loadAds(); setTimeout(beat,4000); setTimeout(inboxCheck,7000); setInterval(()=>{ if(!document.hidden) inboxCheck(); },10*60000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },10*60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
+    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; lvlRestore(); try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); window.__OWNER=!!OWNER; if(OWNER){ try{ renderVip(); renderText(); }catch(e){} } loadCfg(); loadAds(); setTimeout(beat,4000); setTimeout(inboxCheck,7000); setInterval(()=>{ if(!document.hidden) inboxCheck(); },10*60000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },10*60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
     let fullStarted=false;
     const startFull=async()=>{ if(fullStarted||!UID||!isReg()) return; fullStarted=true;
       for(const p of (S.payouts||[]).filter(p=>!p.synced)){
@@ -4441,7 +4445,7 @@ async function cloudLoad(){
   if(!(DB&&UID)||!isReg()) return false;
   try{ if(sessionStorage.getItem("diamantina-synced")){ sessionStorage.removeItem("diamantina-synced"); CLOUD_OK=true; return false; } }catch(e){}
   try{ const d=await withTO(DB.doc(SAVE_PATH()).get({source:"server"}),12000); if(!d.exists){ CLOUD_OK=true; cloudSave(true); return false; }
-    const c=JSON.parse(d.data().s||"{}"); if((c._at||0)>(S._at||0)+5000){ try{ localStorage.setItem(KEY,d.data().s); sessionStorage.setItem("diamantina-synced","1"); }catch(e){} location.reload(); return true; }
+    const c=JSON.parse(d.data().s||"{}"), fresh=(S.joinedAt||0)>(c._at||0)&&(c.claims||0)>(S.claims||0); if(fresh||(c._at||0)>(S._at||0)+5000){ if(fresh){ c.claims=Math.max(c.claims||0,S.claims||0); c._at=Date.now(); } try{ localStorage.setItem(KEY,fresh?JSON.stringify(c):d.data().s); sessionStorage.setItem("diamantina-synced","1"); }catch(e){} location.reload(); return true; }
     CLOUD_OK=true; cloudSave();
   }catch(e){ CLOUD_OK=false; if(!CL_RETRY) CL_RETRY=setTimeout(()=>{ CL_RETRY=null; cloudLoad(); },3*60000); } return false;
 }

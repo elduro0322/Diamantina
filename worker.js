@@ -133,7 +133,8 @@ async function d1Init(db) {
     "CREATE INDEX IF NOT EXISTS vreq_st ON vreq (st)",
     "CREATE TABLE IF NOT EXISTS lbd (uid TEXT, day TEXT, td INTEGER, PRIMARY KEY (uid, day))",
     "CREATE INDEX IF NOT EXISTS lbd_day ON lbd (day)",
-    "CREATE TABLE IF NOT EXISTS lbx (uid TEXT PRIMARY KEY, bal INTEGER, staked INTEGER, dmt INTEGER, dev TEXT, stk TEXT, at INTEGER, fx REAL DEFAULT 0, fxn INTEGER DEFAULT 0, fm INTEGER DEFAULT 0, fmn INTEGER DEFAULT 0)"
+    "CREATE TABLE IF NOT EXISTS lbx (uid TEXT PRIMARY KEY, bal INTEGER, staked INTEGER, dmt INTEGER, dev TEXT, stk TEXT, at INTEGER, fx REAL DEFAULT 0, fxn INTEGER DEFAULT 0, fm INTEGER DEFAULT 0, fmn INTEGER DEFAULT 0)",
+    "CREATE TABLE IF NOT EXISTS lbc (uid TEXT PRIMARY KEY, cl INTEGER DEFAULT 0, at INTEGER)"   // total faucet claims (the level) — only ever goes up
   ].map(q => db.prepare(q)));
   D1_READY = true;
 }
@@ -350,6 +351,7 @@ async function d1(request, env) {
     if (body.x && typeof body.x === "object") q.push(db.prepare("INSERT INTO lbx (uid, bal, staked, dmt, dev, stk, at, fx, fxn, fm, fmn) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET bal = excluded.bal, staked = excluded.staked, dmt = excluded.dmt, dev = excluded.dev, stk = excluded.stk, at = excluded.at, fx = excluded.fx, fxn = excluded.fxn, fm = excluded.fm, fmn = excluded.fmn")
       .bind(me.uid, int(body.x.bal, 1e12), int(body.x.staked, 1e12), int(body.x.dmt, 1e12), str(body.x.dev, 40), JSON.stringify(Array.isArray(body.x.stk) ? body.x.stk.slice(0, 20) : []).slice(0, 4000), now,
         Math.max(0, Math.min(1e6, +body.x.fx || 0)), int(body.x.fxn, 1e9), int(body.x.fm, 1e12), int(body.x.fmn, 1e9)));
+    if (body.x && body.x.cl > 0) q.push(db.prepare("INSERT INTO lbc (uid, cl, at) VALUES (?, ?, ?) ON CONFLICT(uid) DO UPDATE SET cl = MAX(lbc.cl, excluded.cl), at = excluded.at").bind(me.uid, int(body.x.cl, 1e7), now));
     q.push(db.prepare("SELECT COALESCE(SUM(n - paid), 0) AS v FROM visits WHERE uid = ? AND n > paid").bind(me.uid));
     q.push(db.prepare("UPDATE visits SET paid = n WHERE uid = ? AND n > paid").bind(me.uid));
     const res = await db.batch(q), vr = res[res.length - 2];
@@ -431,6 +433,11 @@ async function d1(request, env) {
     const v = body.req || {};
     await db.prepare("INSERT INTO vreq (uid, st, at, d) VALUES (?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET st = excluded.st, at = excluded.at, d = excluded.d").bind(me.uid, str(v.status, 12) || "pending", now, JSON.stringify(v).slice(0, 3000)).run();
     return json({ ok: true });
+  }
+  if (a === "mylvl") {                                    // the player's level backup: highest claim count ever saved, or the sum of his weekly ads
+    const [c, w] = await db.batch([db.prepare("SELECT cl FROM lbc WHERE uid = ?").bind(me.uid), db.prepare("SELECT COALESCE(SUM(ads), 0) AS n FROM lbw WHERE uid = ?").bind(me.uid)]);
+    const cl = ((c.results || [])[0] || {}).cl || 0, sw = ((w.results || [])[0] || {}).n || 0;
+    return json({ ok: true, cl: Math.max(cl, sw) });
   }
   if (a === "myvip") {
     const [v, q] = await db.batch([db.prepare("SELECT until, tier FROM vips WHERE uid = ?").bind(me.uid), db.prepare("SELECT st, d FROM vreq WHERE uid = ?").bind(me.uid)]);
