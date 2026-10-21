@@ -349,7 +349,7 @@ async function d1(request, env) {
     }
     if (body.day) q.push(db.prepare("INSERT INTO lbd (uid, day, td) VALUES (?, ?, ?) ON CONFLICT(uid, day) DO UPDATE SET td = MAX(lbd.td, excluded.td)").bind(me.uid, str(body.day, 10), int(body.td, 1000)));
     if (body.x && typeof body.x === "object") q.push(db.prepare("INSERT INTO lbx (uid, bal, staked, dmt, dev, stk, at, fx, fxn, fm, fmn) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET bal = excluded.bal, staked = excluded.staked, dmt = excluded.dmt, dev = excluded.dev, stk = excluded.stk, at = excluded.at, fx = excluded.fx, fxn = excluded.fxn, fm = excluded.fm, fmn = excluded.fmn")
-      .bind(me.uid, int(body.x.bal, 1e12), int(body.x.staked, 1e12), int(body.x.dmt, 1e12), str(body.x.dev, 40), JSON.stringify(Array.isArray(body.x.stk) ? body.x.stk.slice(0, 20) : []).slice(0, 4000), now,
+      .bind(me.uid, int(body.x.bal, 1e12), int(body.x.staked, 1e12), Math.max(0, Math.min(1e12, Math.round((+body.x.dmt || 0) * 100) / 100)), str(body.x.dev, 40), JSON.stringify(Array.isArray(body.x.stk) ? body.x.stk.slice(0, 20) : []).slice(0, 4000), now,
         Math.max(0, Math.min(1e6, +body.x.fx || 0)), int(body.x.fxn, 1e9), int(body.x.fm, 1e12), int(body.x.fmn, 1e9)));
     if (body.x && body.x.cl > 0) q.push(db.prepare("INSERT INTO lbc (uid, cl, at) VALUES (?, ?, ?) ON CONFLICT(uid) DO UPDATE SET cl = MAX(lbc.cl, excluded.cl), at = excluded.at").bind(me.uid, int(body.x.cl, 1e7), now));
     q.push(db.prepare("SELECT COALESCE(SUM(n - paid), 0) AS v FROM visits WHERE uid = ? AND n > paid").bind(me.uid));

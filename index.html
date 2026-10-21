@@ -4544,12 +4544,18 @@ async function assignRefs(buyer,n){
 
 
 /* ===== Welcome gift: a random NFT for every new registered player (once) ===== */
+/* DMT gifts once the 500 NFTs are gone: welcome = 2 DMT, silver chest = 0.50 / 1 / 2 DMT */
+const WELCOME_DMT=2, SILVER_DMT=[[0.5,60],[1,30],[2,10]];   // [amount, chance %]
+function giveDmt(n){ S.dmtPre=Math.round(((S.dmtPre||0)+n)*100)/100; save(); try{ renderPresale(); }catch(e){} }
+function silverDmt(){ let r=Math.random()*100; for(const [v,w] of SILVER_DMT){ if((r-=w)<0) return v; } return SILVER_DMT[0][0]; }
+const nftsGone=()=>(NFT_TAKEN||0)>=500||!!(NFT_SNAP&&NFT_SNAP.taken>=500);
+const dmtWhere=es=>es?"Es la moneda del juego. La ves en Tienda → DMT.":"It's the game's coin. See it in Shop → DMT.";
 let welcomeBusy=false;
 function welcomeGift(){
   if(welcomeBusy||S.welcomeNft||!S.welcomePending) return; if(modal.open){ setTimeout(welcomeGift,1500); return; }
   welcomeBusy=true; const es=S.lang==="es";
   showModal(es?"🎁 ¡Regalo de bienvenida!":"🎁 Welcome gift!",`<div class="wgift"><div class="wgbox" id="wgBox">${chestSVG("treasure")}</div>
-    <p class="amt" style="font-size:19px">${es?"¡Gracias por registrarte!":"Thanks for signing up!"}<small>${es?"Abre tu regalo: tienes un <b>NFT gratis</b> que te da bonus para siempre.":"Open your gift: a <b>free NFT</b> that gives you a bonus forever."}</small></p></div>`,
+    <p class="amt" style="font-size:19px">${es?"¡Gracias por registrarte!":"Thanks for signing up!"}<small>${nftsGone()?(es?`Abre tu regalo: tienes <b>${WELCOME_DMT} DMT gratis</b>, la moneda de Diamantina.`:`Open your gift: <b>${WELCOME_DMT} free DMT</b>, Diamantina's coin.`):(es?"Abre tu regalo: tienes un <b>NFT gratis</b> que te da bonus para siempre.":"Open your gift: a <b>free NFT</b> that gives you a bonus forever.")}</small></p></div>`,
     [[es?"🎁 Abrir regalo":"🎁 Open gift","go",openWelcome]]);
 }
 async function openWelcome(){
@@ -4558,16 +4564,16 @@ async function openWelcome(){
   if(id===undefined) id=await claimNft(true);
   S.welcomePending=false;
   if(id){ S.welcomeNft=id; if(!(S.nft500||[]).includes(id)) S.nft500=[...(S.nft500||[]),id]; if(!MY_NFTS.includes(id)) MY_NFTS.push(id); }
-  else { S.welcomeNft=-1; addBal(50); }
+  else { S.welcomeNft=-1; giveDmt(WELCOME_DMT); }
   save(); try{ cloudSave(true); }catch(e){} try{ renderBag(); renderPay(); }catch(e){}
   welcomeBusy=false;
   setTimeout(()=>{ const n=id?nftBy(id):null;
-    showModal(es?"🎉 ¡Tu NFT de bienvenida!":"🎉 Your welcome NFT!", n?`<div class="wgift"><div class="wgnft">${nftSVG(n)}</div>
+    showModal(n?(es?"🎉 ¡Tu NFT de bienvenida!":"🎉 Your welcome NFT!"):(es?"🎉 ¡Tu regalo de bienvenida!":"🎉 Your welcome gift!"), n?`<div class="wgift"><div class="wgnft">${nftSVG(n)}</div>
       <p class="amt">NFT #${String(id).padStart(3,"0")} · ${nftCharName(n)}<small>${(RAR_NAME[S.lang]||RAR_NAME.en)[n.rar]} · ${t("nftUnique")}</small><small style="color:#7CF0C2;font-weight:900">+${nftOne(id)}% ${es?"de bonus para siempre en cada anuncio":"bonus forever on every ad"}</small></p>
       <p class="hint" style="text-align:center;margin:4px 0 0">${es?"Ya está en tu Mochila. Completa los 20 círculos cada día y gana más cofres y NFT 💎":"It's already in your Bag. Complete the 20 circles every day to win more chests and NFTs 💎"}</p></div>`
-      :`<p class="amt">${es?"Los NFT de bienvenida se agotaron, te regalamos":"Welcome NFTs are sold out, here's"} ${cryptoTxt(50)} 🎁</p>`,
+      :`<div class="wgift"><div class="wgnft">${ic("dmt",96)}</div><p class="amt">+${WELCOME_DMT} DMT 🎁<small>${dmtWhere(es)}</small></p><p class="hint" style="text-align:center;margin:4px 0 0">${es?"En el cofre de plata (casilla 10) ganas más DMT cada día 💎":"Win more DMT in the silver chest (circle 10) every day 💎"}</p></div>`,
       [[es?"Ver mi Mochila":"See my Bag","no",()=>{ closeModal(); goView("bag"); }],[es?"¡A jugar!":"Let's play!","go",()=>{ closeModal(); goView("map"); }]]);
-    if(id) toast(es?"🎁 ¡NFT de bienvenida recibido!":"🎁 Welcome NFT received!","gem"); },700);
+    if(id) toast(es?"🎁 ¡NFT de bienvenida recibido!":"🎁 Welcome NFT received!","gem"); else toast(`🎁 +${WELCOME_DMT} DMT`,"dmt"); },700);
 }
 
 /* ---------- Actions ---------- */
@@ -4801,7 +4807,7 @@ function lootHTML(c){
   if(c.key) return `<div class="loot spin"><div class="mover">${KEY_SVG}</div></div>`;
   const coin=coinBy(S.payCoin);
   if(c.nft){
-    return `<div class="loot spin"><div class="mover card3d"><div class="face"><img src="${heroImg(curHero())}" alt=""></div><div class="face back">${ic("gem",54)}NFT</div></div></div>`;}
+    return `<div class="loot spin"><div class="mover card3d"><div class="face"><img src="${heroImg(curHero())}" alt=""></div><div class="face back">${!c.pool&&nftsGone()?ic("dmt",54)+"DMT":ic("gem",54)+"NFT"}</div></div></div>`;}
   return `<div class="loot ${c.mode}"><div class="mover"><img class="coinimg" src="${coin.img}" alt="${coin.t}"></div></div>`;
 }
 function openChest(n,magic){
@@ -4814,7 +4820,7 @@ function openChest(n,magic){
     if(c.nft){ $("#mFoot").innerHTML=""; try{ nftId=await Promise.race([claimNft(false,c.pool),new Promise(r=>setTimeout(()=>r(undefined),8000))]); }catch(e){ nftId=undefined; }
       if(nftId===undefined) nftId=await claimNft(true,c.pool);
       const fr=document.querySelector("#stage .card3d .face");
-      if(nftId) fr.innerHTML=nftSVG(nftBy(nftId)); else fr.innerHTML=`<img src="${coin.img}" alt="">`; }
+      if(nftId) fr.innerHTML=nftSVG(nftBy(nftId)); else fr.innerHTML=(!c.pool?ic("dmt",64):`<img src="${coin.img}" alt="">`); }
     const st=$("#stage"); st.classList.add("shake");
     setTimeout(()=>{st.classList.remove("shake");st.classList.add("open");},450);
     let info="";
@@ -4825,6 +4831,8 @@ function openChest(n,magic){
     if(c.nft){
       if(nftId){ const nn=nftBy(nftId); if(!MY_NFTS.includes(nftId)) MY_NFTS.push(nftId); if(!(S.nft500||[]).includes(nftId)){ S.nft500=[...(S.nft500||[]),nftId]; save(); } renderBag();
         info=`<p class="amt">NFT #${String(nftId).padStart(3,"0")} · ${nftCharName(nn)}<small>${RAR_NAME[S.lang][nn.rar]} · ${t("nftUnique")}</small>${gotLine}${adLine}</p>`; }
+      else if(!c.pool){ const g=silverDmt(); giveDmt(g); toast(`+${nf(g)} DMT`,"dmt"); const es=S.lang==="es";
+        info=`<p class="amt">🪙 +${nf(g)} DMT<small>${dmtWhere(es)}</small>${gotLine}${adLine}</p>`; }
       else { earn(10*mult()); info=`<p class="amt">${t("nftSoldOut")}${gotLine}${adLine}</p>`; }
     } else if(c.tix){
       const now=Date.now(); S.tix={got:now,until:now+TIX_DAYS*86400000}; S.tixYear=now; save(); renderBag();
