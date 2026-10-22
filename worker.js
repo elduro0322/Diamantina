@@ -537,6 +537,39 @@ async function d1(request, env) {
     const r = await db.prepare("UPDATE msgs SET seen = 1, reply = ?, rat = ? WHERE id = ? AND uid = ? AND seen = 0").bind(str(body.reply, 500).trim() || null, now, int(body.id, 1e12), me.uid).run();
     return json({ ok: true, n: (r.meta && r.meta.changes) || 0 });
   }
+  if (a === "spy") {                                       // owner: everything we know about one player (by code or name)
+    if (!me.owner) return json({ ok: false, error: "owner" }, 403);
+    const q = str(body.q, 64).trim(); if (!q) return json({ ok: false, error: "empty" }, 400);
+    const f = await db.prepare("SELECT uid FROM lb WHERE code = ? OR uid = ? OR nick = ? ORDER BY seen DESC LIMIT 1").bind(q.toUpperCase(), q, q).first();
+    if (!f) return json({ ok: true, none: true });
+    const u = f.uid, d30 = today(now - 30 * 86400000);
+    const x = await db.prepare("SELECT dev FROM lbx WHERE uid = ?").bind(u).first(), dev = (x && x.dev) || "";
+    const [lb, lx, lc, vp, wk, dy, by, rf, sd, py, od, cr, ct, re, rs, vs, nf] = await db.batch([
+      db.prepare("SELECT uid, nick, code, hero, vip, coin, seen, at FROM lb WHERE uid = ?").bind(u),
+      db.prepare("SELECT bal, staked, dmt, dev, stk, at FROM lbx WHERE uid = ?").bind(u),
+      db.prepare("SELECT cl FROM lbc WHERE uid = ?").bind(u),
+      db.prepare("SELECT until, tier FROM vips WHERE uid = ?").bind(u),
+      db.prepare("SELECT week, ads FROM lbw WHERE uid = ? ORDER BY week DESC LIMIT 8").bind(u),
+      db.prepare("SELECT day, td FROM lbd WHERE uid = ? ORDER BY day DESC LIMIT 14").bind(u),
+      db.prepare("SELECT r.by, r.via, r.at, l.nick, l.code FROM refs r LEFT JOIN lb l ON l.uid = r.by WHERE r.uid = ?").bind(u),
+      db.prepare("SELECT r.uid, r.via, r.at, l.nick, l.code, l.seen, x.dev FROM refs r LEFT JOIN lb l ON l.uid = r.uid LEFT JOIN lbx x ON x.uid = r.uid WHERE r.by = ? ORDER BY r.at DESC LIMIT 200").bind(u),
+      db.prepare("SELECT x.uid, l.nick, l.code, l.seen FROM lbx x LEFT JOIN lb l ON l.uid = x.uid WHERE x.dev = ? AND x.dev != '' AND x.dev != 'nodev' AND x.uid != ? LIMIT 20").bind(dev, u),
+      db.prepare("SELECT date, st, d FROM pays WHERE uid = ? ORDER BY at DESC LIMIT 30").bind(u),
+      db.prepare("SELECT id, st, at, d FROM ords WHERE uid = ? ORDER BY at DESC LIMIT 30").bind(u),
+      db.prepare("SELECT id, at, d FROM creds WHERE uid = ? ORDER BY at DESC LIMIT 40").bind(u),
+      db.prepare("SELECT json_extract(d, '$.type') AS t, COUNT(*) AS n, COALESCE(SUM(json_extract(d, '$.units')), 0) AS u FROM creds WHERE uid = ? GROUP BY t").bind(u),
+      db.prepare("SELECT base, total FROM refearn WHERE uid = ?").bind(u),
+      db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(total), 0) AS t FROM refearn WHERE by = ?").bind(u),
+      db.prepare("SELECT COALESCE(SUM(n), 0) AS n FROM visits WHERE uid = ? AND day >= ?").bind(u, d30),
+      db.prepare("SELECT COUNT(*) AS n FROM nfts WHERE owner = ?").bind(u)
+    ]);
+    const R = r => r.results || [], one = r => R(r)[0] || null, J = v => { try { return JSON.parse(v); } catch (e) { return {}; } };
+    const L = one(lx), wsum = R(wk).reduce((s, w) => s + (w.ads || 0), 0);
+    return json({ ok: true, uid: u, lb: one(lb), x: L ? { ...L, stk: J(L.stk) } : null, cl: Math.max((one(lc) || {}).cl || 0, wsum), vip: one(vp),
+      weeks: R(wk), days: R(dy), by: one(by), refs: R(rf), same: R(sd), pays: R(py).map(p => ({ date: p.date, st: p.st, ...J(p.d) })),
+      ords: R(od).map(o => ({ id: o.id, st: o.st, at: o.at, ...J(o.d) })), creds: R(cr).map(c => ({ id: c.id, at: c.at, ...J(c.d) })), ctot: R(ct),
+      refearn: one(re), refsEarn: one(rs), visits: (one(vs) || {}).n || 0, nfts: (one(nf) || {}).n || 0 });
+  }
   if (a === "msgfind" || a === "msgsend" || a === "msglist" || a === "msgdel") {
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
     if (a === "msgfind") {                                 // by ranking name or player code
