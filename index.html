@@ -3766,7 +3766,13 @@ function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X=d.x||{}, D=v=>v?new D
   const refSame=(d.refs||[]).filter(r=>r.dev&&X.dev&&r.dev===X.dev&&X.dev!=="nodev"); if(refSame.length) F.push(es?`${refSame.length} de sus referidos usan su mismo celular`:`${refSame.length} referrals use his device`);
   const ghost=(d.refs||[]).filter(r=>!r.seen).length; if((d.refs||[]).length>=5&&ghost/(d.refs.length)>.6) F.push(es?`${ghost} de ${d.refs.length} referidos nunca jugaron`:`${ghost} of ${d.refs.length} referrals never played`);
   const can=adEst+refU+task+dep+prz+3000; if((X.bal||0)+(X.staked||0)>can*1.5) F.push(es?`Tiene más saldo (${usd((X.bal||0)+(X.staked||0))}) de lo que explican sus anuncios, tareas, recargas y referidos (≈${usd(can)})`:`Balance higher than his activity explains`);
+  const C=d.comp||{weeks:[],forts:[],months:[],prizes:[]}, PZ={}; let pzTot=0;
+  (C.prizes||[]).forEach(p=>{ const m=/^prize_(.+)_(ads|refs|vis)_(\d+)$/.exec(p.id||""); if(!m) return; PZ[m[1]+"|"+m[2]]={pos:+m[3],u:p.units||0}; pzTot+=p.units||0; });
+  const pzTxt=(k,b)=>{ const z=PZ[k+"|"+b]; return z?` · 🏆 ${es?"premio":"prize"} ${usd(z.u)}`:""; };
+  const maxWeek=Math.max(0,...(C.weeks||[]).map(w=>w.ads||0)); if(maxWeek>1150) F.push(es?`Hizo ${nf(maxWeek)} anuncios en una semana: más de lo posible jugando todo (≈1,100)`:`${nf(maxWeek)} ads in one week: more than possible`);
+  const refWins=(C.forts||[]).filter(f=>PZ["f"+f.key+"|refs"]).length; if(refWins&&ghost>=3&&ghost/((d.refs||[]).length||1)>.5) F.push(es?`Ganó premio de referidos pero ${ghost} de sus referidos nunca jugaron`:`Won referral prizes but ${ghost} referrals never played`);
   const row=(k,v)=>`<div style="display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(255,255,255,.08);padding:3px 0"><span style="color:var(--muted)">${k}</span><b style="text-align:right">${v}</b></div>`;
+  const place=(r,of,n)=>n?`#${r} ${es?"de":"of"} ${of}`:"—";
   return `<div style="margin-top:10px">
     <div class="risk ${F.length?"bad":"ok"}">${F.length?F.map(x=>"🚩 "+x).join("<br>"):"✅ "+(es?"Sin alertas: su saldo cuadra con lo que ha hecho":"No alerts")}</div>
     <h3 style="margin:12px 0 4px">👤 ${E(L.nick||"Hero-"+(L.code||""))} · ID ${E(L.code||codeOf(d.uid))}</h3>
@@ -3776,13 +3782,16 @@ function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X=d.x||{}, D=v=>v?new D
     ${row(es?"Ganado por referidos":"Earned from referrals",usd(refU)+` · ${(d.refsEarn||{}).n||0} ${es?"que generan":"earning"}`)}
     ${Object.entries(ct).map(([k,v])=>row(TN[k]||k,`${v.n} · ${usd(v.u)}`)).join("")}
     ${row(es?"Visitas a su link (30 días)":"Link visits (30 days)",nf(d.visits||0))}${row(es?"Ya le pagaste":"Already paid",`$${paid.toFixed(4)} · ${(d.pays||[]).length} ${es?"pedidos":"requests"}`)}
-    <h3 style="margin:12px 0 4px">📅 ${es?"Anuncios por semana":"Ads per week"}</h3>${(d.weeks||[]).map(w=>row(w.week,nf(w.ads))).join("")||`<p class="hint">—</p>`}
+    <h3 style="margin:12px 0 4px">🏆 ${es?"Competencias pasadas":"Past competitions"}</h3>${row(es?"Total ganado en premios":"Total prizes won",usd(pzTot)+` · ${(C.prizes||[]).length}`)}
+    <p class="hint" style="margin:8px 0 2px">📢 ${es?"Semanal · anuncios (semana que empieza el lunes)":"Weekly · ads"}</p>${(C.weeks||[]).map(w=>row(w.week,`${nf(w.ads)} · ${place(w.rank,w.of,w.ads)}${pzTxt(w.week,"ads")}`)).join("")||`<p class="hint">—</p>`}
+    <p class="hint" style="margin:8px 0 2px">🤝 ${es?"Quincenal · referidos":"15 days · referrals"}</p>${(C.forts||[]).map(f=>row(f.key.replace(/-A$/,es?" (1-15)":" (1-15)").replace(/-B$/,es?" (16-fin)":" (16-end)"),`${f.n||0} · ${place(f.rank,f.of,f.n)}${pzTxt("f"+f.key,"refs")}`)).join("")}
+    <p class="hint" style="margin:8px 0 2px">👁️ ${es?"Mensual · visitas a su link":"Monthly · link visits"}</p>${(C.months||[]).map(m=>row(m.mo,`${nf(m.n||0)} · ${place(m.rank,m.of,m.n)}${pzTxt("m"+m.mo,"vis")}`)).join("")}
     <h3 style="margin:12px 0 4px">🗓️ ${es?"Casillas por día (camino principal)":"Circles per day"}</h3>${(d.days||[]).map(x=>row(x.day,x.td)).join("")||`<p class="hint">—</p>`}
     <h3 style="margin:12px 0 4px">🤝 ${es?"Referidos":"Referrals"}</h3>${row(es?"Lo invitó":"Invited by",d.by?E(d.by.nick||"")+" · "+E(d.by.code||codeOf(d.by.by)):"—")}${row(es?"Invitó a":"Invited",(d.refs||[]).length+(ghost?` (${ghost} ${es?"nunca jugaron":"never played"})`:""))}
     ${(d.refs||[]).slice(0,15).map(r=>row(E(r.nick||"Hero-"+(r.code||codeOf(r.uid))),(r.via||"")+" · "+(r.seen?D(r.seen):(es?"nunca jugó":"never played"))+(r.dev&&r.dev===X.dev?" 🚩":""))).join("")}
     ${(d.pays||[]).length?`<h3 style="margin:12px 0 4px">💸 ${es?"Retiros":"Withdrawals"}</h3>${d.pays.slice(0,10).map(p=>row(p.date,`$${p.amountUsd||"?"} · ${p.st}`)).join("")}`:""}
     ${(d.ords||[]).length?`<h3 style="margin:12px 0 4px">🛒 ${es?"Compras":"Purchases"}</h3>${d.ords.slice(0,10).map(o=>row(E(o.type||o.id),`${o.st} · ${new Date(o.at).toLocaleDateString()}`)).join("")}`:""}
-    ${(d.creds||[]).length?`<h3 style="margin:12px 0 4px">➕ ${es?"Últimos créditos":"Latest credits"}</h3>${d.creds.slice(0,12).map(c=>row(E(TN[c.type]||c.type||c.id),`${usd(c.units||0)} · ${new Date(c.at).toLocaleDateString()}`)).join("")}`:""}
+    ${(d.creds||[]).length?`<h3 style="margin:12px 0 4px">➕ ${es?"Últimos créditos":"Latest credits"}</h3>${d.creds.slice(0,12).map(c=>row(E(/^prize_/.test(c.id||"")?TN.prize:(TN[c.type]||c.type||c.id)),`${usd(c.units||0)} · ${new Date(c.at).toLocaleDateString()}`)).join("")}`:""}
   </div>`; }
 async function msgAdmin(){
   const box=$("#msgAdm"); if(!box) return; const es=S.lang==="es";

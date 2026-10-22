@@ -557,7 +557,7 @@ async function d1(request, env) {
       db.prepare("SELECT date, st, d FROM pays WHERE uid = ? ORDER BY at DESC LIMIT 30").bind(u),
       db.prepare("SELECT id, st, at, d FROM ords WHERE uid = ? ORDER BY at DESC LIMIT 30").bind(u),
       db.prepare("SELECT id, at, d FROM creds WHERE uid = ? ORDER BY at DESC LIMIT 40").bind(u),
-      db.prepare("SELECT json_extract(d, '$.type') AS t, COUNT(*) AS n, COALESCE(SUM(json_extract(d, '$.units')), 0) AS u FROM creds WHERE uid = ? GROUP BY t").bind(u),
+      db.prepare("SELECT CASE WHEN id LIKE 'prize_%' THEN 'prize' ELSE json_extract(d, '$.type') END AS t, COUNT(*) AS n, COALESCE(SUM(json_extract(d, '$.units')), 0) AS u FROM creds WHERE uid = ? GROUP BY t").bind(u),
       db.prepare("SELECT base, total FROM refearn WHERE uid = ?").bind(u),
       db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(total), 0) AS t FROM refearn WHERE by = ?").bind(u),
       db.prepare("SELECT COALESCE(SUM(n), 0) AS n FROM visits WHERE uid = ? AND day >= ?").bind(u, d30),
@@ -565,10 +565,23 @@ async function d1(request, env) {
     ]);
     const R = r => r.results || [], one = r => R(r)[0] || null, J = v => { try { return JSON.parse(v); } catch (e) { return {}; } };
     const L = one(lx), wsum = R(wk).reduce((s, w) => s + (w.ads || 0), 0);
+    /* past competitions: his place every week (ads), every 15 days (referrals) and every month (visits) + prizes he got */
+    const bd = new Date(now - BOG), Y = bd.getUTCFullYear(), M = bd.getUTCMonth(), H = bd.getUTCDate() <= 15 ? 0 : 1, fq = [], mq = [];
+    for (let i = 0; i < 6; i++) { const idx = Y * 24 + M * 2 + H - i, y = Math.floor(idx / 24), m = Math.floor((idx % 24) / 2), h = idx % 2;
+      fq.push({ key: `${y}-${String(m + 1).padStart(2, "0")}-${h ? "B" : "A"}`, fs: Date.UTC(y, m, h ? 16 : 1) + BOG, fe: (h ? Date.UTC(y, m + 1, 1) : Date.UTC(y, m, 16)) + BOG }); }
+    for (let i = 0; i < 4; i++) { const d0 = new Date(Date.UTC(Y, M - i, 1)), d1 = new Date(Date.UTC(Y, M - i + 1, 1)); mq.push({ mo: d0.toISOString().slice(0, 7), a: d0.toISOString().slice(0, 10), b: d1.toISOString().slice(0, 10) }); }
+    const cq = await db.batch([
+      db.prepare("SELECT w.week, w.ads, (SELECT COUNT(*) FROM lbw x WHERE x.week = w.week AND x.ads > w.ads) + 1 AS rank, (SELECT COUNT(*) FROM lbw x WHERE x.week = w.week AND x.ads > 0) AS of FROM lbw w WHERE w.uid = ? ORDER BY w.week DESC LIMIT 8").bind(u),
+      ...fq.map(f => db.prepare("WITH c AS (SELECT by, COUNT(*) AS n FROM refs WHERE at >= ? AND at < ? AND via != 'bought' AND by != '' GROUP BY by) SELECT COALESCE((SELECT n FROM c WHERE by = ?), 0) AS n, (SELECT COUNT(*) FROM c WHERE n > COALESCE((SELECT n FROM c WHERE by = ?), 0)) + 1 AS rank, (SELECT COUNT(*) FROM c) AS of").bind(f.fs, f.fe, u, u)),
+      ...mq.map(m => db.prepare("WITH c AS (SELECT uid, SUM(n) AS n FROM visits WHERE day >= ? AND day < ? GROUP BY uid HAVING SUM(n) > 0) SELECT COALESCE((SELECT n FROM c WHERE uid = ?), 0) AS n, (SELECT COUNT(*) FROM c WHERE n > COALESCE((SELECT n FROM c WHERE uid = ?), 0)) + 1 AS rank, (SELECT COUNT(*) FROM c) AS of").bind(m.a, m.b, u, u)),
+      db.prepare("SELECT id, at, d FROM creds WHERE uid = ? AND id LIKE 'prize_%' ORDER BY at DESC LIMIT 60").bind(u)
+    ]);
+    const comp = { weeks: R(cq[0]), forts: fq.map((f, i) => ({ key: f.key, fs: f.fs, fe: f.fe, ...(one(cq[1 + i]) || {}) })), months: mq.map((m, i) => ({ mo: m.mo, ...(one(cq[1 + fq.length + i]) || {}) })),
+      prizes: R(cq[cq.length - 1]).map(c => ({ id: c.id, at: c.at, ...J(c.d) })) };
     return json({ ok: true, uid: u, lb: one(lb), x: L ? { ...L, stk: J(L.stk) } : null, cl: Math.max((one(lc) || {}).cl || 0, wsum), vip: one(vp),
       weeks: R(wk), days: R(dy), by: one(by), refs: R(rf), same: R(sd), pays: R(py).map(p => ({ date: p.date, st: p.st, ...J(p.d) })),
       ords: R(od).map(o => ({ id: o.id, st: o.st, at: o.at, ...J(o.d) })), creds: R(cr).map(c => ({ id: c.id, at: c.at, ...J(c.d) })), ctot: R(ct),
-      refearn: one(re), refsEarn: one(rs), visits: (one(vs) || {}).n || 0, nfts: (one(nf) || {}).n || 0 });
+      refearn: one(re), refsEarn: one(rs), visits: (one(vs) || {}).n || 0, nfts: (one(nf) || {}).n || 0, comp });
   }
   if (a === "msgfind" || a === "msgsend" || a === "msglist" || a === "msgdel") {
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
