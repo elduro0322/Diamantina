@@ -448,7 +448,7 @@ async function d1(request, env) {
     const r = await db.prepare("SELECT id, at, d FROM creds WHERE uid = ? AND at >= ? ORDER BY at LIMIT 200").bind(me.uid, Math.max(0, +body.since || 0)).all();
     return json({ ok: true, list: (r.results || []).map(x => ({ id: x.id, at: x.at, ...J(x.d) })) });
   }
-  if (["adm", "paystat", "ordstat", "vipset", "credit", "prizes", "prizeset", "acct", "imp2", "risk", "assignrefs"].includes(a)) {
+  if (["adm", "paystat", "ordstat", "vipset", "credit", "adjust", "prizes", "prizeset", "acct", "imp2", "risk", "assignrefs"].includes(a)) {
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
     const cred = (uid, id, d) => db.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(str(uid, 64), str(id, 90), now, JSON.stringify({ ...d, at: now }).slice(0, 3000));
     if (a === "adm") {                                     // everything waiting for the owner
@@ -496,6 +496,14 @@ async function d1(request, env) {
       await db.batch(q); return json({ ok: true });
     }
     if (a === "credit") { await cred(body.uid, body.id, body.d || {}).run(); return json({ ok: true }); }
+    if (a === "adjust") {                                  // owner: add (+) or remove (-) balance from one player
+      const uid = str(body.uid, 64), u = Math.max(-1e9, Math.min(1e9, Math.round(+body.units || 0)));
+      if (!uid || !u) return json({ ok: false, error: "bad" }, 400);
+      const ok = await db.prepare("SELECT 1 AS x FROM lb WHERE uid = ?").bind(uid).first(); if (!ok) return json({ ok: false, error: "no_player" }, 404);
+      const id = "adj-" + now.toString(36) + Math.random().toString(36).slice(2, 6);
+      await cred(uid, id, { type: "adj", units: u, note: str(body.note, 120) }).run();
+      return json({ ok: true, id });
+    }
     if (a === "prizes") {                                  // which weekly / 15-day / monthly prizes were already credited
       const keys = (Array.isArray(body.keys) ? body.keys : []).slice(0, 6).map(k => "prize:" + str(k, 20));
       const r = keys.length ? await db.prepare("SELECT k, v FROM meta WHERE k IN (" + keys.map(() => "?").join(",") + ")").bind(...keys).all() : { results: [] };

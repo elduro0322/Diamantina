@@ -3752,12 +3752,21 @@ function spyAdmin(){ const box=$("#spyAdm"); if(!box||box.dataset.on) return; bo
   box.innerHTML=`<div style="border:2px solid #38BDF8;border-radius:16px;padding:12px;margin-bottom:14px"><h2 style="margin-top:0">🔎 ${es?"Investigar jugador":"Investigate player"}</h2>
     <div style="display:flex;gap:6px"><input class="field" id="spyQ" placeholder="${es?"ID (ej. OLRUU1) o nombre exacto":"ID (e.g. OLRUU1) or exact name"}" style="flex:1" autocomplete="off" spellcheck="false"><button class="mini" id="spyGo">${es?"Investigar":"Check"}</button></div><div id="spyRes"></div></div>`;
   const go=async()=>{ const q=$("#spyQ").value.trim().replace(/^ID\s*/i,""); if(!q) return; const out=$("#spyRes"); out.innerHTML=`<p class="hint">${t("mkLoading")}</p>`;
-    try{ const d=await d1Post("spy",{q}); out.innerHTML=d.none?`<p class="hint">${es?"No encontré a nadie con ese ID o nombre.":"No player found."}</p>`:spyHTML(d); }
+    try{ const d=await d1Post("spy",{q}); out.innerHTML=d.none?`<p class="hint">${es?"No encontré a nadie con ese ID o nombre.":"No player found."}</p>`:spyHTML(d); if(!d.none) adjWire(d,go); }
     catch(e){ out.innerHTML=`<p class="hint">⚠️ ${escapeHtml(String(e&&e.message||e))}</p>`; } };
   $("#spyGo").onclick=go; $("#spyQ").onkeydown=e=>{ if(e.key==="Enter") go(); }; }
+function adjWire(d,reload){ const es=S.lang==="es", L=d.lb||{}, who=(L.nick||"Hero-"+(L.code||""))+" · "+(L.code||codeOf(d.uid));
+  const run=async sign=>{ const v=parseFloat(($("#adjUsd").value||"").replace(",",".")), msg=$("#adjMsg");
+    if(!(v>0)||v>100){ msg.textContent=es?"Escribe un monto válido en dólares (ej. 0.05)":"Enter a valid USD amount"; return; }
+    const units=Math.round(v*1e5)*sign; if(!units){ msg.textContent=es?"El monto es muy pequeño":"Amount too small"; return; }
+    if(!confirm((sign>0?(es?"¿PONER ":"ADD "):(es?"¿QUITAR ":"REMOVE "))+"$"+v+(es?" a ":" to ")+who+"?")) return;
+    const b1=$("#adjAdd"), b2=$("#adjSub"); b1.disabled=b2.disabled=true;
+    try{ await d1Post("adjust",{uid:d.uid,units,note:$("#adjNote").value.trim()}); toast((sign>0?"➕ ":"➖ ")+"$"+v+" · "+who,"pay"); setTimeout(reload,600); }
+    catch(e){ msg.textContent="⚠️ "+String(e&&e.message||e); b1.disabled=b2.disabled=false; } };
+  $("#adjAdd").onclick=()=>run(1); $("#adjSub").onclick=()=>run(-1); }
 function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X=d.x||{}, D=v=>v?new Date(v).toLocaleString():"—", E=escapeHtml;
   const ct={}; (d.ctot||[]).forEach(c=>ct[c.t||"?"]={n:c.n,u:c.u||0});
-  const TN={task:es?"Tareas pagadas":"Paid tasks",deposit:es?"Recargas":"Deposits",prize:es?"Premios":"Prizes",refund:es?"Devoluciones":"Refunds",reject:es?"Compras rechazadas":"Rejected buys"};
+  const TN={adj:es?"Ajustes del dueño":"Owner adjustments",task:es?"Tareas pagadas":"Paid tasks",deposit:es?"Recargas":"Deposits",prize:es?"Premios":"Prizes",refund:es?"Devoluciones":"Refunds",reject:es?"Compras rechazadas":"Rejected buys"};
   const paid=(d.pays||[]).filter(p=>p.st==="paid"||p.status==="paid").reduce((a,p)=>a+(parseFloat(p.amountUsd)||0),0);
   const adEst=Math.round((d.cl||0)*14), refU=Math.round(((d.refsEarn||{}).t)||0), task=(ct.task||{}).u||0, dep=(ct.deposit||{}).u||0, prz=(ct.prize||{}).u||0;
   const st=(X.stk||[]), stAmt=st.reduce((a,x)=>a+(x.amt||0),0);
@@ -3765,7 +3774,7 @@ function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X=d.x||{}, D=v=>v?new D
   if((d.same||[]).length) F.push((es?`Mismo celular que ${d.same.length} cuenta(s): `:`Same device as ${d.same.length} account(s): `)+d.same.map(x=>E(x.code||codeOf(x.uid))).join(", "));
   const refSame=(d.refs||[]).filter(r=>r.dev&&X.dev&&r.dev===X.dev&&X.dev!=="nodev"); if(refSame.length) F.push(es?`${refSame.length} de sus referidos usan su mismo celular`:`${refSame.length} referrals use his device`);
   const ghost=(d.refs||[]).filter(r=>!r.seen).length; if((d.refs||[]).length>=5&&ghost/(d.refs.length)>.6) F.push(es?`${ghost} de ${d.refs.length} referidos nunca jugaron`:`${ghost} of ${d.refs.length} referrals never played`);
-  const can=adEst+refU+task+dep+prz+3000; if((X.bal||0)+(X.staked||0)>can*1.5) F.push(es?`Tiene más saldo (${usd((X.bal||0)+(X.staked||0))}) de lo que explican sus anuncios, tareas, recargas y referidos (≈${usd(can)})`:`Balance higher than his activity explains`);
+  const can=adEst+refU+task+dep+prz+Math.max(0,(ct.adj||{}).u||0)+3000; if((X.bal||0)+(X.staked||0)>can*1.5) F.push(es?`Tiene más saldo (${usd((X.bal||0)+(X.staked||0))}) de lo que explican sus anuncios, tareas, recargas y referidos (≈${usd(can)})`:`Balance higher than his activity explains`);
   const C=d.comp||{weeks:[],forts:[],months:[],prizes:[]}, PZ={}; let pzTot=0;
   (C.prizes||[]).forEach(p=>{ const m=/^prize_(.+)_(ads|refs|vis)_(\d+)$/.exec(p.id||""); if(!m) return; PZ[m[1]+"|"+m[2]]={pos:+m[3],u:p.units||0}; pzTot+=p.units||0; });
   const pzTxt=(k,b)=>{ const z=PZ[k+"|"+b]; return z?` · 🏆 ${es?"premio":"prize"} ${usd(z.u)}`:""; };
@@ -3776,11 +3785,16 @@ function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X=d.x||{}, D=v=>v?new D
   return `<div style="margin-top:10px">
     <div class="risk ${F.length?"bad":"ok"}">${F.length?F.map(x=>"🚩 "+x).join("<br>"):"✅ "+(es?"Sin alertas: su saldo cuadra con lo que ha hecho":"No alerts")}</div>
     <h3 style="margin:12px 0 4px">👤 ${E(L.nick||"Hero-"+(L.code||""))} · ID ${E(L.code||codeOf(d.uid))}</h3>
+    <div style="border:1px dashed rgba(255,255,255,.3);border-radius:12px;padding:10px;margin:6px 0 10px"><b>⚖️ ${es?"Poner o quitar saldo":"Add or remove balance"}</b>
+      <div style="display:flex;gap:6px;margin-top:6px"><input class="field" id="adjUsd" type="number" step="0.0001" min="0" inputmode="decimal" placeholder="${es?"Monto en dólares (ej. 0.05)":"Amount in USD (e.g. 0.05)"}" style="flex:1"></div>
+      <input class="field" id="adjNote" maxlength="120" placeholder="${es?"Motivo (el jugador lo ve)":"Reason (player sees it)"}" style="width:100%;box-sizing:border-box;margin-top:6px">
+      <div style="display:flex;gap:6px;margin-top:6px"><button class="mini" id="adjAdd" data-uid="${E(d.uid)}" style="flex:1;background:#16A34A !important;background-image:none !important;color:#fff !important">➕ ${es?"Poner":"Add"}</button><button class="mini" id="adjSub" data-uid="${E(d.uid)}" style="flex:1;background:#DC2626 !important;background-image:none !important;color:#fff !important">➖ ${es?"Quitar":"Remove"}</button></div>
+      <p class="hint" id="adjMsg" style="margin:6px 0 0">${es?"Se le aplica cuando abra el juego (si ya está jugando, en unos minutos).":"Applied when the player opens the game."}</p></div>
     ${row(es?"Última vez en el juego":"Last seen",D(L.seen))}${row("VIP",d.vip&&d.vip.until>Date.now()?"VIP "+(d.vip.tier||1)+(es?" hasta ":" until ")+new Date(d.vip.until).toLocaleDateString():(es?"No":"No"))}
     ${row(es?"Saldo ahora":"Balance now",usd(X.bal||0))}${row(es?"En staking":"Staked",usd(X.staked||0)+(st.length?` (${st.length})`:""))}${row("DMT",nf(X.dmt||0))}${row("NFT",d.nfts||0)}
     ${row(es?"Anuncios totales (nivel)":"Total ads (level)",nf(d.cl||0))}${row(es?"Ganado aprox. por anuncios y cofres":"Approx. earned from ads",usd(adEst))}
     ${row(es?"Ganado por referidos":"Earned from referrals",usd(refU)+` · ${(d.refsEarn||{}).n||0} ${es?"que generan":"earning"}`)}
-    ${Object.entries(ct).map(([k,v])=>row(TN[k]||k,`${v.n} · ${usd(v.u)}`)).join("")}
+    ${Object.entries(ct).map(([k,v])=>row(TN[k]||k,`${v.n} · ${v.u<0?"-":""}${usd(Math.abs(v.u))}`)).join("")}
     ${row(es?"Visitas a su link (30 días)":"Link visits (30 days)",nf(d.visits||0))}${row(es?"Ya le pagaste":"Already paid",`$${paid.toFixed(4)} · ${(d.pays||[]).length} ${es?"pedidos":"requests"}`)}
     <h3 style="margin:12px 0 4px">🏆 ${es?"Competencias pasadas":"Past competitions"}</h3>${row(es?"Total ganado en premios":"Total prizes won",usd(pzTot)+` · ${(C.prizes||[]).length}`)}
     <p class="hint" style="margin:8px 0 2px">📢 ${es?"Semanal · anuncios (semana que empieza el lunes)":"Weekly · ads"}</p>${(C.weeks||[]).map(w=>row(w.week,`${nf(w.ads)} · ${place(w.rank,w.of,w.ads)}${pzTxt(w.week,"ads")}`)).join("")||`<p class="hint">—</p>`}
@@ -3791,7 +3805,7 @@ function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X=d.x||{}, D=v=>v?new D
     ${(d.refs||[]).slice(0,15).map(r=>row(E(r.nick||"Hero-"+(r.code||codeOf(r.uid))),(r.via||"")+" · "+(r.seen?D(r.seen):(es?"nunca jugó":"never played"))+(r.dev&&r.dev===X.dev?" 🚩":""))).join("")}
     ${(d.pays||[]).length?`<h3 style="margin:12px 0 4px">💸 ${es?"Retiros":"Withdrawals"}</h3>${d.pays.slice(0,10).map(p=>row(p.date,`$${p.amountUsd||"?"} · ${p.st}`)).join("")}`:""}
     ${(d.ords||[]).length?`<h3 style="margin:12px 0 4px">🛒 ${es?"Compras":"Purchases"}</h3>${d.ords.slice(0,10).map(o=>row(E(o.type||o.id),`${o.st} · ${new Date(o.at).toLocaleDateString()}`)).join("")}`:""}
-    ${(d.creds||[]).length?`<h3 style="margin:12px 0 4px">➕ ${es?"Últimos créditos":"Latest credits"}</h3>${d.creds.slice(0,12).map(c=>row(E(/^prize_/.test(c.id||"")?TN.prize:(TN[c.type]||c.type||c.id)),`${usd(c.units||0)} · ${new Date(c.at).toLocaleDateString()}`)).join("")}`:""}
+    ${(d.creds||[]).length?`<h3 style="margin:12px 0 4px">➕ ${es?"Últimos créditos":"Latest credits"}</h3>${d.creds.slice(0,12).map(c=>row(E(/^prize_/.test(c.id||"")?TN.prize:(TN[c.type]||c.type||c.id)),`${(c.units||0)<0?"-":""}${usd(Math.abs(c.units||0))}${c.note?" · "+E(c.note):""} · ${new Date(c.at).toLocaleDateString()}`)).join("")}`:""}
   </div>`; }
 async function msgAdmin(){
   const box=$("#msgAdm"); if(!box) return; const es=S.lang==="es";
@@ -5283,6 +5297,11 @@ function applyCredit(id,x){
       showModal(es?"Moneda no disponible":"Coin not available",`<div class="promo" style="padding-top:6px">${ci?`<img src="${ci.img}" alt="" style="width:64px;height:64px;border-radius:50%;opacity:.55;filter:grayscale(1)">`:""}<p style="font-weight:900;font-size:17px">🚫 ${es?`No hay ${rc||"esa moneda"} disponible ahora.`:`${rc||"That coin"} is not available right now.`}</p><p>${es?`Tu retiro de <b>${usd(x.units||0)}</b> fue <b>devuelto a tu saldo</b>. <b>Selecciona otra moneda</b> y pide tu retiro de nuevo.`:`Your withdrawal of <b>${usd(x.units||0)}</b> was <b>returned to your balance</b>. <b>Choose another coin</b> and request it again.`}</p></div>`,
         [[t("close"),"no",closeModal],[es?"Elegir otra moneda":"Choose another coin","go",()=>{ closeModal(); goView("pay"); setTimeout(()=>{ const g=$("#coinGrid"); if(g) g.scrollIntoView({block:"center",behavior:"smooth"}); },300); }]]); } }
   else if(x.type==="refs"){ toast((S.lang==="es"?"👥 Recibiste ":"👥 You got ")+(x.got!=null?x.got:x.item)+(S.lang==="es"?" referidos":" referrals"),"heroes"); setTimeout(()=>{ try{ collectRef(true); }catch(e){} },500); }
+  else if(x.type==="adj"){ const es=S.lang==="es", u=Math.round(+x.units||0);
+    if(u>0){ incAdd(u); S.bal=(S.bal||0)+u; showModal(es?"💰 Saldo agregado":"💰 Balance added",`<p class="amt">+${cryptoTxt(u)}</p>${x.note?`<p class="hint" style="text-align:center">${escapeHtml(x.note)}</p>`:""}`,[[t("close"),"go",closeModal]]); }
+    else if(u<0){ const take=Math.min(S.bal||0,-u); S.bal=Math.max(0,(S.bal||0)-take); S.inc=Math.max(0,(S.inc||0)-take); S.adjOut=(S.adjOut||0)+take;
+      showModal(es?"⚠️ Ajuste de saldo":"⚠️ Balance adjustment",`<p class="amt">-${cryptoTxt(take)}</p><p class="hint" style="text-align:center">${x.note?escapeHtml(x.note):(es?"Se corrigió tu saldo.":"Your balance was corrected.")}</p>`,[[t("close"),"go",closeModal]]); }
+    renderPay(); }
   else if(x.type==="task"){ incAdd(x.units); S.bal=(S.bal||0)+(x.units||0); toast((S.lang==="es"?"✅ Tarea completada: +":"✅ Task completed: +")+cryptoTxt(x.units||0),"pay"); }
   else if(x.type==="key"&&x.item){ giveKey(x.item); toast(fmt(t("keyGot"),{w:t(BW[x.item].name)}),BW[x.item].icon); }
   else if(x.type==="hero"&&premBy(x.item)){ S.prem=S.prem||{}; S.prem[x.item]=true; S.ph=x.item; renderHeroes(); renderMap(); toast(fmt(t("premGot"),{x:premName(x.item),p:premBy(x.item).pct}),"heroes"); }
