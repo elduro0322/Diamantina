@@ -140,7 +140,10 @@ async function d1Init(db) {
     "CREATE TABLE IF NOT EXISTS wal (uid TEXT PRIMARY KEY, bal REAL DEFAULT 0, hold TEXT DEFAULT '{}', inc REAL DEFAULT 0, out REAL DEFAULT 0, spent REAL DEFAULT 0, day TEXT, dm TEXT DEFAULT '{}', n INTEGER DEFAULT 0, last INTEGER DEFAULT 0, mig REAL DEFAULT 0, at INTEGER)",
     "CREATE TABLE IF NOT EXISTS wled (uid TEXT, id TEXT, u REAL, at INTEGER, PRIMARY KEY (uid, id))",
     "CREATE TABLE IF NOT EXISTS wstk (uid TEXT, id TEXT, asset TEXT, amt REAL, rew REAL, p INTEGER, start INTEGER, endt INTEGER, PRIMARY KEY (uid, id))",
-    "CREATE TABLE IF NOT EXISTS wmig (uid TEXT PRIMARY KEY, bal REAL, stk TEXT)"
+    "CREATE TABLE IF NOT EXISTS wmig (uid TEXT PRIMARY KEY, bal REAL, stk TEXT)",
+    "CREATE TABLE IF NOT EXISTS ban (uid TEXT PRIMARY KEY, why TEXT, bal REAL, hold TEXT, at INTEGER)",      // blocked players (money kept aside, given back if unblocked)
+    "CREATE TABLE IF NOT EXISTS newacc (uid TEXT PRIMARY KEY, iph TEXT, at INTEGER)",                      // new accounts by connection (max 3 a day)
+    "CREATE INDEX IF NOT EXISTS newacc_iph ON newacc (iph, at)"
   ].map(q => db.prepare(q)));
   D1_READY = true;
 }
@@ -161,20 +164,20 @@ async function visBoard(db, mo) {
   const key = "vis:" + mo, old = await metaGet(db, key), cur = mo === today(Date.now()).slice(0, 7);
   if (old && (Date.now() - old.at < 15 * 60000 || (!cur && old.v.final))) return old.v.list;
   const [y, m] = mo.split("-").map(Number), next = m === 12 ? (y + 1) + "-01" : y + "-" + String(m + 1).padStart(2, "0");
-  const v = await db.prepare("SELECT uid, SUM(n) AS n FROM visits WHERE day >= ? AND day < ? GROUP BY uid ORDER BY n DESC LIMIT 150").bind(mo + "-01", next + "-01").all();
+  const v = await db.prepare("SELECT uid, SUM(n) AS n FROM visits WHERE day >= ? AND day < ? AND uid NOT IN (SELECT uid FROM ban) GROUP BY uid ORDER BY n DESC LIMIT 150").bind(mo + "-01", next + "-01").all();
   const list = (v.results || []).filter(x => x.n > 0).map(x => ({ uid: x.uid, n: x.n }));
   await metaSet(db, key, { list, final: !cur && Date.now() > Date.parse(next + "-01") + BOG + 3600000 }).run();
   return list;
 }
-const LIM0 = { ads: 600, pay: 0.10 };                     // anti-cheat: max weekly ads on the board, max USD per withdrawal
+const LIM0 = { ads: 600, pay: 5 };                     // anti-cheat: max weekly ads on the board, max USD per withdrawal
 const getLim = async db => { const m = await metaGet(db, "lim"); return { ...LIM0, ...((m && m.v) || {}) }; };
 async function buildComp(db, week, fs, fe, mo) {
   const lim = await getLim(db);
   const snap = { ads: [], refs: [], vis: [], names: {}, heroes: {}, vips: {} };
   if (mo) snap.vis = await visBoard(db, mo);
-  const a = await db.prepare("SELECT w.uid, w.ads, l.nick, l.code, l.hero, l.vip FROM lbw w LEFT JOIN lb l ON l.uid = w.uid WHERE w.week = ? AND w.ads > 0 AND w.ads <= ? ORDER BY w.ads DESC LIMIT 150").bind(week, lim.ads).all();
+  const a = await db.prepare("SELECT w.uid, w.ads, l.nick, l.code, l.hero, l.vip FROM lbw w LEFT JOIN lb l ON l.uid = w.uid WHERE w.week = ? AND w.ads > 0 AND w.ads <= ? AND w.uid NOT IN (SELECT uid FROM ban) ORDER BY w.ads DESC LIMIT 150").bind(week, lim.ads).all();
   for (const x of a.results || []) { snap.ads.push({ uid: x.uid, n: x.ads }); snap.names[x.uid] = x.nick || ("Hero-" + (x.code || "")); if (x.hero) snap.heroes[x.uid] = x.hero; if (x.vip) snap.vips[x.uid] = x.vip; }
-  const r = await db.prepare("SELECT by AS uid, COUNT(*) AS n FROM refs WHERE at >= ? AND at < ? AND via != 'bought' AND by != '' GROUP BY by ORDER BY n DESC LIMIT 150").bind(fs, fe).all();
+  const r = await db.prepare("SELECT by AS uid, COUNT(*) AS n FROM refs WHERE at >= ? AND at < ? AND via != 'bought' AND by != '' AND by NOT IN (SELECT uid FROM ban) GROUP BY by ORDER BY n DESC LIMIT 150").bind(fs, fe).all();
   snap.refs = (r.results || []).map(x => ({ uid: x.uid, n: x.n }));
   await namesFor(db, [...snap.refs, ...snap.vis].map(x => x.uid), snap);
   return snap;
@@ -216,7 +219,9 @@ const wDay = t => new Date(t).toISOString().slice(0, 10);   // game day resets a
 const r5 = v => Math.round(v * 10000) / 10000;
 async function vipTierOf(db, uid, now) { const v = await db.prepare("SELECT until, tier FROM vips WHERE uid = ?").bind(uid).first(); return v && v.until > now ? Math.min(4, Math.max(1, v.tier || 1)) : 0; }
 /* the wallet row (made on first use from the frozen copy of what the phone had, with the $2 rule) */
-async function walGet(db, uid, now, mig) {
+const MAX_ACC_IP = 3;                                        // new accounts per internet connection per day
+const isBanned = async (db, uid) => !!(await db.prepare("SELECT 1 AS x FROM ban WHERE uid = ?").bind(uid).first());
+async function walGet(db, uid, now, mig, iph) {
   let w = await db.prepare("SELECT * FROM wal WHERE uid = ?").bind(uid).first();
   if (w) return w;
   if (!(await metaGet(db, "walt0"))) {                       // first wallet ever: freeze what every phone had reported
@@ -236,6 +241,11 @@ async function walGet(db, uid, now, mig) {
     }
   }
   q.push(db.prepare("INSERT OR IGNORE INTO wal (uid, bal, hold, day, dm, at, mig) VALUES (?, ?, ?, ?, '{}', ?, ?)").bind(uid, bal, JSON.stringify(hold), wDay(now), now, bal));
+  if (!m && iph) {                                           // brand-new account: max 3 a day from the same connection
+    const c = await db.prepare("SELECT COUNT(*) AS n FROM newacc WHERE iph = ? AND at > ? AND uid != ?").bind(iph, now - 86400000, uid).first();
+    q.push(db.prepare("INSERT OR IGNORE INTO newacc (uid, iph, at) VALUES (?, ?, ?)").bind(uid, iph, now));
+    if (c && c.n >= MAX_ACC_IP) q.push(db.prepare("INSERT OR IGNORE INTO ban (uid, why, bal, hold, at) VALUES (?, 'ip', 0, '{}', ?)").bind(uid, now));
+  }
   stk.forEach((x, i) => q.push(db.prepare("INSERT OR IGNORE INTO wstk (uid, id, asset, amt, rew, p, start, endt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(uid, "m" + i, x.a || "USD", +x.amt, Math.max(0, Math.min(+x.amt * .06, +x.rew || 0)), Math.min(3, int(x.p, 3)), now, +x.end)));
   await db.batch(q);
   return await db.prepare("SELECT * FROM wal WHERE uid = ?").bind(uid).first();
@@ -248,12 +258,14 @@ function walApply(db, uid, id, u, now) {
 async function walCredit(db, uid, id, u, now) { if (!uid || !u) return; await walGet(db, uid, now); await db.batch(walApply(db, uid, id, u, now)); }
 const MONEY_T = { deposit: 1, task: 1, refund: 1, adj: 1, prize: 1 };
 async function walView(db, uid, now) {
-  const [w, s] = await db.batch([db.prepare("SELECT bal, hold, inc, out, spent, day, n FROM wal WHERE uid = ?").bind(uid), db.prepare("SELECT id, asset, amt, rew, p, start, endt FROM wstk WHERE uid = ? ORDER BY start").bind(uid)]);
+  const [w, s, b] = await db.batch([db.prepare("SELECT bal, hold, inc, out, spent, day, n FROM wal WHERE uid = ?").bind(uid), db.prepare("SELECT id, asset, amt, rew, p, start, endt FROM wstk WHERE uid = ? ORDER BY start").bind(uid), db.prepare("SELECT why FROM ban WHERE uid = ?").bind(uid)]);
+  const bn = (b.results || [])[0] || null;
   const x = (w.results || [])[0] || { bal: 0, hold: "{}" };
-  return { bal: r5(x.bal || 0), hold: (() => { try { return JSON.parse(x.hold || "{}"); } catch (e) { return {}; } })(), stakes: (s.results || []).map(k => ({ id: k.id, asset: k.asset, amt: k.amt, rew: k.rew, p: k.p, start: k.start, end: k.endt })), today: x.day === wDay(now) ? x.n : 0, at: now };
+  return { bal: r5(x.bal || 0), hold: (() => { try { return JSON.parse(x.hold || "{}"); } catch (e) { return {}; } })(), stakes: (s.results || []).map(k => ({ id: k.id, asset: k.asset, amt: k.amt, rew: k.rew, p: k.p, start: k.start, end: k.endt })), today: x.day === wDay(now) ? x.n : 0, at: now, ban: bn ? bn.why || "owner" : null };
 }
 /* finished staking goes back automatically */
 async function walStakeDue(db, uid, now) {
+  if (await isBanned(db, uid)) return [];
   const r = await db.prepare("SELECT id, asset, amt, rew FROM wstk WHERE uid = ? AND endt <= ?").bind(uid, now).all(), L = r.results || [];
   if (!L.length) return [];
   const w = await db.prepare("SELECT hold FROM wal WHERE uid = ?").bind(uid).first(), hold = JSON.parse((w && w.hold) || "{}");
@@ -263,6 +275,7 @@ async function walStakeDue(db, uid, now) {
   return L;
 }
 async function walEarn(db, uid, w, items, now) {             // the ads the player watched since the last call
+  if (await isBanned(db, uid)) return { add: 0, took: 0, banned: true };
   const day = wDay(now); let dm = {}, n = 0;
   if (w.day === day) { try { dm = JSON.parse(w.dm || "{}"); } catch (e) {} n = w.n || 0; }
   const m = VIP_M[await vipTierOf(db, uid, now)], since = Math.max(0, now - (w.last || 0));
@@ -279,7 +292,7 @@ async function walEarn(db, uid, w, items, now) {             // the ads the play
   const q = [db.prepare("UPDATE wal SET bal = bal + ?, inc = inc + ?, day = ?, dm = ?, n = ?, last = ?, at = ? WHERE uid = ?").bind(add, add, day, JSON.stringify(dm), n, now, now, uid)];
   if (add > 0) {                                             // whoever invited him gets his % right away (10-30% by VIP level)
     const by = await db.prepare("SELECT by FROM refs WHERE uid = ?").bind(uid).first();
-    if (by && by.by && by.by !== uid) {
+    if (by && by.by && by.by !== uid && !(await isBanned(db, by.by))) {
       await walGet(db, by.by, now);
       const com = r5(add * REF_T[await vipTierOf(db, by.by, now)] / 100);
       q.push(db.prepare("UPDATE wal SET bal = bal + ?, inc = inc + ? WHERE uid = ?").bind(com, com, by.by),
@@ -290,6 +303,7 @@ async function walEarn(db, uid, w, items, now) {             // the ads the play
   return { add: r5(add), took };
 }
 async function walOp(db, uid, op, now) {                     // spend / stake / unstake / swap / change coin
+  if (await isBanned(db, uid)) return { error: "banned" };
   const w = await db.prepare("SELECT bal, hold FROM wal WHERE uid = ?").bind(uid).first(); if (!w) return { error: "nowal" };
   const hold = JSON.parse(w.hold || "{}"), src = a => a === "USD" ? w.bal : (hold[a] || 0);
   if (op.k === "spend") {
@@ -508,7 +522,8 @@ async function d1(request, env) {
   }
   if (a === "wal") {                                       // the wallet: ads watched (q) + one action (op) -> real balance
     if (me.anon) return json({ ok: false, error: "register" }, 403);
-    const w = await walGet(db, me.uid, now, body.mig), due = await walStakeDue(db, me.uid, now);
+    const ip = request.headers.get("cf-connecting-ip") || "", iph = ip ? await sha(ip + "|acc|" + (env.ADSLAB_SECRET || "dia")) : "";
+    const w = await walGet(db, me.uid, now, body.mig, iph), due = await walStakeDue(db, me.uid, now);
     const e = Array.isArray(body.q) && body.q.length ? await walEarn(db, me.uid, w, body.q, now) : { add: 0, took: 0 };
     const o = body.op && typeof body.op === "object" ? await walOp(db, me.uid, body.op, now) : null;
     return json({ ok: true, add: e.add, took: e.took, due: due.length, op: o, w: await walView(db, me.uid, now) });
@@ -577,6 +592,7 @@ async function d1(request, env) {
     const old = await db.prepare("SELECT st FROM pays WHERE uid = ? AND date = ?").bind(me.uid, date).first();
     if (old && old.st !== "refunded") return json({ ok: true, n: 0, dup: true });
     await walGet(db, me.uid, now); await walStakeDue(db, me.uid, now);
+    if (await isBanned(db, me.uid)) return json({ ok: false, error: "banned" }, 403);
     const w = await db.prepare("SELECT bal, hold FROM wal WHERE uid = ?").bind(me.uid).first(), hold = JSON.parse(w.hold || "{}");
     const have = (w.bal || 0) + (hold[coin] || 0), units = Math.floor(Math.min(have, lim.pay * 1e5));   // the server balance, max the limit per withdrawal
     if (units < 1) return json({ ok: false, error: "nobal" }, 400);
@@ -622,7 +638,7 @@ async function d1(request, env) {
     const r = await db.prepare("SELECT id, at, d FROM creds WHERE uid = ? AND at >= ? ORDER BY at LIMIT 200").bind(me.uid, Math.max(0, +body.since || 0)).all();
     return json({ ok: true, list: (r.results || []).map(x => ({ id: x.id, at: x.at, ...J(x.d) })) });
   }
-  if (["adm", "paystat", "ordstat", "vipset", "credit", "adjust", "seclim", "purge", "prizes", "prizeset", "acct", "imp2", "risk", "assignrefs"].includes(a)) {
+  if (["adm", "paystat", "ordstat", "vipset", "credit", "adjust", "seclim", "purge", "setpaid", "ban", "prizes", "prizeset", "acct", "imp2", "risk", "assignrefs"].includes(a)) {
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
     const cred = (uid, id, d) => db.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(str(uid, 64), str(id, 90), now, JSON.stringify({ ...d, at: now }).slice(0, 3000));
     if (a === "adm") {                                     // everything waiting for the owner
@@ -651,7 +667,7 @@ async function d1(request, env) {
       return json({ ok: true, lb: l.results || [], dev: x.results || [], refs: r.results || [] });
     }
     if (a === "paystat") {                                 // owner: paid / refunded
-      const st = body.st === "refunded" ? "refunded" : "paid", uid = str(body.uid, 64), date = str(body.date, 10);
+      const st = body.st === "refunded" ? "refunded" : body.st === "rejected" ? "rejected" : "paid", uid = str(body.uid, 64), date = str(body.date, 10);   // rejected = deleted, money not returned
       const q = [db.prepare("UPDATE pays SET st = ?, d = json_set(d, '$.status', ?) WHERE uid = ? AND date = ?").bind(st, st, uid, date)];
       let ru = 0;
       if (st === "refunded") { const pr = await db.prepare("SELECT st, d FROM pays WHERE uid = ? AND date = ?").bind(uid, date).first(); const pd = pr ? J(pr.d) : {};
@@ -681,6 +697,31 @@ async function d1(request, env) {
     if (a === "credit") { const d = body.d || {}; await cred(body.uid, body.id, d).run();
       if (MONEY_T[d.type] && +d.units > 0) await walCredit(db, str(body.uid, 64), "c-" + str(body.id, 90), Math.min(1e8, +d.units), now);   // deposits etc. go into the server wallet
       return json({ ok: true }); }
+    if (a === "ban") {                                     // owner: block (money kept aside) or unblock (money back)
+      let L = [str(body.uid, 64)].filter(Boolean);
+      if (body.on && body.same) { const d = await db.prepare("SELECT dev FROM lbx WHERE uid = ?").bind(L[0]).first();
+        if (d && d.dev && d.dev !== "nodev") L = [...new Set([...L, ...((await db.prepare("SELECT uid FROM lbx WHERE dev = ? LIMIT 30").bind(d.dev).all()).results || []).map(x => x.uid)])]; }
+      L = L.filter(u => u !== me.uid);                         // never the owner
+      const q = [];
+      for (const u of L) {
+        if (body.on) { await walGet(db, u, now);
+          q.push(db.prepare("INSERT INTO ban (uid, why, bal, hold, at) SELECT uid, ?, bal, hold, ? FROM wal WHERE uid = ? ON CONFLICT(uid) DO UPDATE SET why = excluded.why").bind(str(body.why, 60) || "owner", now, u),
+                 db.prepare("UPDATE wal SET bal = 0, hold = '{}' WHERE uid = ? AND EXISTS (SELECT 1 FROM ban WHERE uid = ?)").bind(u, u),
+                 db.prepare("UPDATE pays SET st = 'rejected', d = json_set(d, '$.status', 'rejected') WHERE uid = ? AND st = 'pending'").bind(u));
+        } else {
+          q.push(db.prepare("UPDATE wal SET bal = bal + COALESCE((SELECT bal FROM ban WHERE uid = ?), 0), hold = COALESCE((SELECT hold FROM ban WHERE uid = ? AND hold != '{}'), hold) WHERE uid = ?").bind(u, u, u),
+                 db.prepare("DELETE FROM ban WHERE uid = ?").bind(u));
+        }
+      }
+      q.push(db.prepare("DELETE FROM meta WHERE k LIKE 'comp:%' OR k LIKE 'vis:%'"));
+      await db.batch(q); return json({ ok: true, n: L.length, list: L });
+    }
+    if (a === "setpaid") {                                 // owner: fix the "total paid" the players see
+      const st = (await metaGet(db, "stats")) || { v: {} }, s0 = { ...st.v };
+      if (body.set) { const v = +body.paidUsd; if (!(v >= 0 && v < 1e7)) return json({ ok: false, error: "bad" }, 400); s0.paidUsd = Math.round(v * 100) / 100; if (body.paidN != null) s0.paidN = int(body.paidN, 1e9);
+        await db.batch([metaSet(db, "stats", s0), db.prepare("DELETE FROM meta WHERE k = 'proofs'")]); }
+      return json({ ok: true, paidUsd: +s0.paidUsd || 0, paidN: +s0.paidN || 0 });
+    }
     if (a === "seclim") {                                  // owner: read / change the anti-cheat limits
       const cur = await getLim(db);
       if (body.set) { const v = { ads: Math.max(50, int(body.ads, 100000) || cur.ads), pay: Math.max(0.001, Math.min(1000, +body.pay || cur.pay)) }; await metaSet(db, "lim", v).run(); await db.prepare("DELETE FROM meta WHERE k LIKE 'comp:%'").run(); return json({ ok: true, lim: v }); }
@@ -798,12 +839,13 @@ async function d1(request, env) {
     ]);
     const [wa, ws] = await db.batch([db.prepare("SELECT bal, hold, inc, out, spent, mig, n, day FROM wal WHERE uid = ?").bind(u), db.prepare("SELECT asset, amt, rew, endt FROM wstk WHERE uid = ?").bind(u)]);
     const wal = one(wa) ? { ...one(wa), hold: J(one(wa).hold), stakes: R(ws) } : null;
+    const bn = await db.prepare("SELECT why, bal, at FROM ban WHERE uid = ?").bind(u).first();
     const comp = { weeks: R(cq[0]), forts: fq.map((f, i) => ({ key: f.key, fs: f.fs, fe: f.fe, ...(one(cq[1 + i]) || {}) })), months: mq.map((m, i) => ({ mo: m.mo, ...(one(cq[1 + fq.length + i]) || {}) })),
       prizes: R(cq[cq.length - 1]).map(c => ({ id: c.id, at: c.at, ...J(c.d) })) };
     return json({ ok: true, uid: u, lb: one(lb), x: L ? { ...L, stk: J(L.stk) } : null, cl: Math.max((one(lc) || {}).cl || 0, wsum), vip: one(vp),
       weeks: R(wk), days: R(dy), by: one(by), refs: R(rf), same: R(sd), pays: R(py).map(p => ({ date: p.date, st: p.st, ...J(p.d) })),
       ords: R(od).map(o => ({ id: o.id, st: o.st, at: o.at, ...J(o.d) })), creds: R(cr).map(c => ({ id: c.id, at: c.at, ...J(c.d) })), ctot: R(ct),
-      refearn: one(re), refsEarn: one(rs), visits: (one(vs) || {}).n || 0, nfts: (one(nf) || {}).n || 0, comp, wal });
+      refearn: one(re), refsEarn: one(rs), visits: (one(vs) || {}).n || 0, nfts: (one(nf) || {}).n || 0, comp, wal, ban: bn || null });
   }
   if (a === "msgfind" || a === "msgsend" || a === "msglist" || a === "msgdel") {
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);

@@ -3167,7 +3167,12 @@ function wMig(){ const h={}; Object.entries(S.hold||{}).forEach(([c,v])=>{ const
   return {hold:h,cstk}; }
 function wCoins(){ const H={}; Object.entries(W_HOLD).forEach(([c,u])=>{ const p=LIVE[c]; if(p&&u>0) H[c]=u/1e5/p; else if(u>0) H[c]=(S.hold||{})[c]||0; }); S.hold=H;
   (S.stakes||[]).forEach(x=>{ if(x.srv&&x.asset!=="USD"){ const p=LIVE[x.asset]; x.amt=p?x.amtU/1e5/p:0; x.rew=p?x.rewU/1e5/p:0; } }); }
-function wApply(w){ if(!w) return; const pend=(S.wq||[]).reduce((a,x)=>a+(+x.u||0),0);
+let BAN_SHOWN=false;
+function banNotice(why){ if(BAN_SHOWN) return; BAN_SHOWN=true; const es=S.lang==="es";
+  const txt=why==="ip"?(es?"Desde tu conexión a internet ya se crearon 3 cuentas hoy. Por seguridad esta cuenta nueva quedó bloqueada: no gana ni puede retirar.":"3 accounts were already created from your internet connection today. For security this new account is blocked.")
+    :(es?"Tu cuenta fue bloqueada por actividad sospechosa. No gana ni puede retirar.":"Your account was blocked for suspicious activity.");
+  setTimeout(()=>showModal(es?"🚫 Cuenta bloqueada":"🚫 Account blocked",`<p>${txt}</p><p class="hint">${es?"Si crees que es un error, escríbenos por Telegram con tu ID ":"If you think this is a mistake, contact us on Telegram with your ID "}<b>${myCode()}</b>.</p>`,[[t("close"),"go",closeModal]]),1500); }
+function wApply(w){ if(!w) return; if(w.ban){ S.wq=[]; banNotice(w.ban); } const pend=(S.wq||[]).reduce((a,x)=>a+(+x.u||0),0);
   S.bal=r4((w.bal||0)+pend); Object.keys(W_HOLD).forEach(k=>delete W_HOLD[k]); Object.assign(W_HOLD,w.hold||{});
   const dmt=(S.stakes||[]).filter(x=>x.asset==="DMT"&&!x.srv);
   S.stakes=[...(w.stakes||[]).map(x=>x.asset==="USD"?{...x,srv:1}:{...x,srv:1,amtU:x.amt,rewU:x.rew}),...dmt]; wCoins(); S.walAt=Date.now(); save(); try{ renderPay(); }catch(e){} }
@@ -3787,18 +3792,28 @@ function secAdmin(){ const box=$("#secAdm"); if(!box||box.dataset.on) return; bo
   box.innerHTML=`<div style="border:2px solid #EF4444;border-radius:16px;padding:12px;margin-bottom:14px"><h2 style="margin-top:0">🛡️ ${es?"Seguridad contra trampas":"Anti-cheat"}</h2>
     <label style="display:block;margin:6px 0"><span class="hint">${es?"Máximo de anuncios por semana en la competencia (el que pase, no sale en el ranking ni gana premio)":"Max weekly ads on the board"}</span><input class="field" id="secAds" type="number" min="50" inputmode="numeric" style="width:100%;box-sizing:border-box"></label>
     <label style="display:block;margin:6px 0"><span class="hint">${es?"Máximo por retiro en dólares (si piden más, se rechaza solo)":"Max USD per withdrawal (more = auto-rejected)"}</span><input class="field" id="secPay" type="number" step="0.01" min="0.001" inputmode="decimal" style="width:100%;box-sizing:border-box"></label>
-    <button class="mini" id="secSave" style="width:100%;margin-top:4px">💾 ${es?"Guardar límites":"Save limits"}</button>
+    <button class="mini" id="secSave" style="width:100%;margin-top:4px">💾 ${es?"Guardar límites":"Save limits"}</button><p class="hint" id="secSaveMsg" style="margin:6px 0 0;font-weight:800"></p>
+    <div style="border-top:1px solid rgba(255,255,255,.15);margin-top:10px;padding-top:8px"><b>💵 ${es?"Total pagado que ven los jugadores":"Total paid shown to players"}</b>
+      <div style="display:flex;gap:6px;margin-top:6px"><input class="field" id="paidUsd" type="text" inputmode="decimal" placeholder="104" style="flex:1"><button class="mini" id="paidSave">💾 ${es?"Guardar":"Save"}</button></div><p class="hint" id="paidMsg" style="margin:6px 0 0"></p></div>
     <div id="secInfo" class="hint" style="margin:10px 0 6px">${t("mkLoading")}</div>
     <button class="claimbtn" id="secPurge" style="background:#DC2626 !important;background-image:none !important;color:#fff !important">🚨 ${es?"Limpiar ahora":"Clean up now"}</button><p class="msg" id="secMsg"></p></div>`;
-  const info=async()=>{ try{ const c=await d1Post("purge",{dry:true}); $("#secAds").value=c.lim.ads; $("#secPay").value=c.lim.pay;
+  const info=async(force)=>{ try{ const c=await d1Post("purge",{dry:true}); if(force||!$("#secAds").dataset.ed) $("#secAds").value=c.lim.ads; if(force||!$("#secPay").dataset.ed) $("#secPay").value=c.lim.pay;
       $("#secInfo").innerHTML=es?`Al tocar <b>Limpiar ahora</b>:<br>• Se quitan <b>${c.vips}</b> VIP (solo quedas tú) y se anulan <b>${c.vreq}</b> pedidos de VIP<br>• Se rechazan <b>${c.pays}</b> retiros pendientes de más de $${c.lim.pay} (suman $${(+c.payUsd).toFixed(2)})<br>• Salen del ranking <b>${c.ads}</b> jugadores con más de ${c.lim.ads} anuncios (esta semana y la pasada)`
         :`Clean up: remove ${c.vips} VIPs, reject ${c.pays} withdrawals over $${c.lim.pay}, hide ${c.ads} players over ${c.lim.ads} ads.`; return c; }
     catch(e){ $("#secInfo").textContent="⚠️ "+String(e&&e.message||e); } };
-  $("#secSave").onclick=async()=>{ try{ await d1Post("seclim",{set:true,ads:+$("#secAds").value,pay:+$("#secPay").value}); $("#secMsg").textContent=es?"✅ Límites guardados":"✅ Saved"; info(); }catch(e){ $("#secMsg").textContent="⚠️ "+String(e&&e.message||e); } };
+  ["#secAds","#secPay"].forEach(q=>$(q).oninput=()=>{ $(q).dataset.ed="1"; });
+  $("#secSave").onclick=async()=>{ const pay=parseFloat(String($("#secPay").value).replace(",",".")), ads=parseInt($("#secAds").value,10), m=$("#secSaveMsg");
+    if(!(pay>0)||!(ads>=50)){ m.textContent=es?"⚠️ Escribe números válidos (anuncios 50 o más, retiro mayor que 0)":"⚠️ Enter valid numbers"; return; }
+    const b=$("#secSave"); b.disabled=true; m.textContent=es?"Guardando…":"Saving…";
+    try{ const r=await d1Post("seclim",{set:true,ads,pay}); delete $("#secAds").dataset.ed; delete $("#secPay").dataset.ed; m.textContent=(es?"✅ Guardado: máximo $":"✅ Saved: max $")+r.lim.pay+(es?" por retiro y ":" per withdrawal and ")+r.lim.ads+(es?" anuncios por semana":" ads per week"); toast(m.textContent,"pay"); info(true); }
+    catch(e){ m.textContent="⚠️ "+String(e&&e.message||e); } b.disabled=false; };
   $("#secPurge").onclick=async()=>{ const c=await info(); if(!c) return;
     if(!confirm(es?`¿Seguro? Se quitan ${c.vips} VIP, se rechazan ${c.pays} retiros y salen ${c.ads} del ranking. Esto no se puede deshacer.`:"Sure? This can't be undone.")) return;
     const b=$("#secPurge"); b.disabled=true; try{ const r=await d1Post("purge",{}); $("#secMsg").textContent=es?`✅ Listo: ${r.vips} VIP quitados, ${r.pays} retiros rechazados, ${r.ads} fuera del ranking.`:"✅ Done"; toast(es?"🛡️ Limpieza hecha":"🛡️ Cleaned","pay"); info(); try{ loadAdmin(); }catch(e){} }
     catch(e){ $("#secMsg").textContent="⚠️ "+String(e&&e.message||e); } b.disabled=false; };
+  (async()=>{ try{ const r=await d1Post("setpaid",{}); $("#paidUsd").value=r.paidUsd; $("#paidMsg").textContent=(es?"Ahora dice: $":"Now shows: $")+r.paidUsd+(es?" en ":" in ")+r.paidN+(es?" pagos":" payouts"); }catch(e){} })();
+  $("#paidSave").onclick=async()=>{ const v=parseFloat(String($("#paidUsd").value).replace(",",".").replace(/[^0-9.]/g,"")), m=$("#paidMsg"); if(!(v>=0)){ m.textContent=es?"⚠️ Escribe un número, ej. 104":"⚠️ Enter a number"; return; }
+    try{ const r=await d1Post("setpaid",{set:true,paidUsd:v}); m.textContent=(es?"✅ Guardado. Ahora dice: $":"✅ Saved: $")+r.paidUsd; toast(m.textContent,"pay"); try{ loadProofs(); }catch(e){} }catch(e){ m.textContent="⚠️ "+String(e&&e.message||e); } };
   info(); }
 /* ---------- Owner: investigate one player (by ID or ranking name) ---------- */
 function spyAdmin(){ const box=$("#spyAdm"); if(!box||box.dataset.on) return; box.dataset.on="1"; const es=S.lang==="es";
@@ -3816,7 +3831,12 @@ function adjWire(d,reload){ const es=S.lang==="es", L=d.lb||{}, who=(L.nick||"He
     const b1=$("#adjAdd"), b2=$("#adjSub"); b1.disabled=b2.disabled=true;
     try{ await d1Post("adjust",{uid:d.uid,units,note:$("#adjNote").value.trim()}); toast((sign>0?"➕ ":"➖ ")+"$"+v+" · "+who,"pay"); setTimeout(reload,600); }
     catch(e){ msg.textContent="⚠️ "+String(e&&e.message||e); b1.disabled=b2.disabled=false; } };
-  $("#adjAdd").onclick=()=>run(1); $("#adjSub").onclick=()=>run(-1); }
+  $("#adjAdd").onclick=()=>run(1); $("#adjSub").onclick=()=>run(-1);
+  const ban=async on=>{ const same=on&&$("#banSame")&&$("#banSame").checked, m=$("#banMsg");
+    if(!confirm(on?(es?`¿BLOQUEAR a ${who}${same?" y sus cuentas del mismo celular":""}?`:`BLOCK ${who}?`):(es?`¿Desbloquear a ${who}?`:`Unblock ${who}?`))) return;
+    try{ const r=await d1Post("ban",{uid:d.uid,on,same,why:"owner"}); toast(on?(es?`🚫 ${r.n} cuenta(s) bloqueada(s)`:`🚫 ${r.n} blocked`):(es?"✅ Desbloqueado":"✅ Unblocked"),"pay"); setTimeout(reload,500); }
+    catch(e){ m.textContent="⚠️ "+String(e&&e.message||e); } };
+  const bOn=$("#banOn"), bOff=$("#banOff"); if(bOn) bOn.onclick=()=>ban(true); if(bOff) bOff.onclick=()=>ban(false); }
 function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X0=d.x||{}, WL=d.wal, X=WL?{...X0,bal:WL.bal,staked:(WL.stakes||[]).filter(x=>x.asset==="USD").reduce((a,x)=>a+x.amt,0)}:X0, D=v=>v?new Date(v).toLocaleString():"—", E=escapeHtml;
   const ct={}; (d.ctot||[]).forEach(c=>ct[c.t||"?"]={n:c.n,u:c.u||0});
   const TN={adj:es?"Ajustes del dueño":"Owner adjustments",task:es?"Tareas pagadas":"Paid tasks",deposit:es?"Recargas":"Deposits",prize:es?"Premios":"Prizes",refund:es?"Devoluciones":"Refunds",reject:es?"Compras rechazadas":"Rejected buys"};
@@ -3836,8 +3856,15 @@ function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X0=d.x||{}, WL=d.wal, X
   const row=(k,v)=>`<div style="display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(255,255,255,.08);padding:3px 0"><span style="color:var(--muted)">${k}</span><b style="text-align:right">${v}</b></div>`;
   const place=(r,of,n)=>n?`#${r} ${es?"de":"of"} ${of}`:"—";
   return `<div style="margin-top:10px">
-    <div class="risk ${F.length?"bad":"ok"}">${F.length?F.map(x=>"🚩 "+x).join("<br>"):"✅ "+(es?"Sin alertas: su saldo cuadra con lo que ha hecho":"No alerts")}</div>
+    ${d.ban?`<div class="risk bad">🚫 ${es?"Esta cuenta está BLOQUEADA":"This account is BLOCKED"}</div>`:""}<div class="risk ${F.length?"bad":"ok"}">${F.length?F.map(x=>"🚩 "+x).join("<br>"):"✅ "+(es?"Sin alertas: su saldo cuadra con lo que ha hecho":"No alerts")}</div>
     <h3 style="margin:12px 0 4px">👤 ${E(L.nick||"Hero-"+(L.code||""))} · ID ${E(L.code||codeOf(d.uid))}</h3>
+    <div style="border:1px solid ${d.ban?"#EF4444":"rgba(255,255,255,.3)"};border-radius:12px;padding:10px;margin:6px 0 10px;${d.ban?"background:rgba(239,68,68,.12)":""}">
+      ${d.ban?`<b style="color:#F87171">🚫 ${es?"BLOQUEADO":"BLOCKED"}</b> · ${d.ban.why==="ip"?(es?"más de 3 cuentas en su conexión":"over 3 accounts on his connection"):d.ban.why==="owner"?(es?"lo bloqueaste tú":"blocked by you"):E(d.ban.why||"")} · ${new Date(d.ban.at).toLocaleString()}<br><span class="hint">${es?"Saldo guardado aparte":"Balance kept aside"}: ${usd(d.ban.bal||0)}</span>
+        <button class="mini" id="banOff" style="width:100%;margin-top:6px;background:#16A34A !important;background-image:none !important;color:#fff !important">✅ ${es?"Desbloquear (le devuelve su saldo)":"Unblock (balance back)"}</button>`
+      :`<b>🚫 ${es?"Bloquear jugador":"Block player"}</b><p class="hint" style="margin:4px 0">${es?"No gana, no retira, no compra y sale del ranking. Su saldo se guarda aparte por si lo desbloqueas.":"Can't earn, withdraw or buy; hidden from ranking."}</p>
+        ${(d.same||[]).length?`<label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="banSame" checked> ${es?`Bloquear también sus ${d.same.length} cuenta(s) del mismo celular`:`Also block his ${d.same.length} same-device account(s)`}</label>`:""}
+        <button class="mini" id="banOn" style="width:100%;margin-top:6px;background:#DC2626 !important;background-image:none !important;color:#fff !important">🚫 ${es?"Bloquear":"Block"}</button>`}
+      <p class="hint" id="banMsg" style="margin:6px 0 0"></p></div>
     <div style="border:1px dashed rgba(255,255,255,.3);border-radius:12px;padding:10px;margin:6px 0 10px"><b>⚖️ ${es?"Poner o quitar saldo":"Add or remove balance"}</b>
       <div style="display:flex;gap:6px;margin-top:6px"><input class="field" id="adjUsd" type="number" step="0.0001" min="0" inputmode="decimal" placeholder="${es?"Monto en dólares (ej. 0.05)":"Amount in USD (e.g. 0.05)"}" style="flex:1"></div>
       <input class="field" id="adjNote" maxlength="120" placeholder="${es?"Motivo (el jugador lo ve)":"Reason (player sees it)"}" style="width:100%;box-sizing:border-box;margin-top:6px">
@@ -4268,7 +4295,7 @@ async function submitPayout(){
   $("#reqBtn").disabled=true;
   let r=null; const es=S.lang==="es";
   try{ await wFlush(); r=await d1Post("payreq",{req}); }catch(e){ $("#reqBtn").disabled=false;
-    $("#reqMsg").textContent=/nobal/.test(e.message)?(es?"Tu saldo en el servidor no alcanza.":"Your server balance is not enough."):(es?"Sin conexión con el servidor. Intenta de nuevo.":"No connection to the server. Try again."); try{ await wCall(); }catch(e2){} return; }
+    $("#reqMsg").textContent=/banned/.test(e.message)?(es?"🚫 Tu cuenta está bloqueada.":"🚫 Your account is blocked."):/nobal/.test(e.message)?(es?"Tu saldo en el servidor no alcanza.":"Your server balance is not enough."):(es?"Sin conexión con el servidor. Intenta de nuevo.":"No connection to the server. Try again."); try{ await wCall(); }catch(e2){} return; }
   if(r.dup){ $("#reqMsg").textContent=t("requested"); return; }
   const got={...req,amountUsd:r.amountUsd,units:r.units,amountCoin:LIVE[S.payCoin]?+(r.units/1e5/LIVE[S.payCoin]).toFixed(8):req.amountCoin,synced:true};   /* what the server really took */
   S.payouts=S.payouts.filter(p=>!(p.date===key&&p.status==="refunded")); S.payouts.push(got); S.out=(S.out||0)+(r.units||0); if(r.w) wApply(r.w); save(); renderPay();
@@ -4372,11 +4399,12 @@ async function loadAdmin(){
       rs.docs.forEach(r=>{const d=r.data(); if(d.status!=="paid"&&d.status!=="refunded"&&!rows.some(x=>x.uid===u.id&&x.date===r.id)) rows.push({uid:u.id,id:r.id,...d,src:"fb"});});
     }
   }catch(e){ FB_FULL=true; }
+  try{ const h=new Set(JSON.parse(localStorage.getItem("dc-hidepay")||"[]")); for(let i=rows.length-1;i>=0;i--) if(h.has(rows[i].uid+"|"+(rows[i].date||rows[i].id))) rows.splice(i,1); }catch(e){}
   let RISK=null; if(rows.length){
     try{ const k=await d1Post("risk",{}); RISK={lb:{},rf:(k.refs||[]).map(x=>({id:x.uid,by:x.by}))}; (k.lb||[]).forEach(x=>RISK.lb[x.uid]={code:x.code}); (k.dev||[]).forEach(x=>{ RISK.lb[x.uid]=RISK.lb[x.uid]||{}; RISK.lb[x.uid].dev=x.dev; }); }
     catch(e){ if(legacy){ try{ const [lb,rf]=await Promise.all([aCol("lbads"),aCol("refs")]); RISK={lb:{},rf:rf.docs.map(d=>({id:d.id,...d.data()}))}; lb.docs.forEach(d=>RISK.lb[d.id]=d.data()); }catch(e2){ RISK=null; } } } }
   list.innerHTML=rows.length?rows.map((r,i)=>{const pc=coinBy(r.coin);
-    return `<div class="req"><img src="${pc.img}" alt=""><div class="grow">${NM[r.uid]?who(r.uid)+"<br>":""}${escapeHtml(r.date)} · ${pc.t} · ${METHODS[r.method]?.name||""} · $${escapeHtml(r.amountUsd)}${r.amountCoin?` ≈ ${nf(r.amountCoin,8)} ${pc.t}`:""}<br><span style="color:var(--muted)">${escapeHtml(r.account)}</span>${riskHTML(r,RISK)}</div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini" data-i="${i}">${t("markPaid")}</button><button class="mini wdref" data-r="${i}" style="background:#5a2a3a">${S.lang==="es"?"Devolver saldo":"Refund"}</button></div></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("noPending")}</p>`;
+    return `<div class="req"><img src="${pc.img}" alt=""><div class="grow">${NM[r.uid]?who(r.uid)+"<br>":""}${escapeHtml(r.date)} · ${pc.t} · ${METHODS[r.method]?.name||""} · $${escapeHtml(r.amountUsd)}${r.amountCoin?` ≈ ${nf(r.amountCoin,8)} ${pc.t}`:""}<br><span style="color:var(--muted)">${escapeHtml(r.account)}</span>${riskHTML(r,RISK)}</div><div style="display:flex;flex-direction:column;gap:6px"><button class="mini" data-i="${i}">${t("markPaid")}</button><button class="mini wdref" data-r="${i}" style="background:#5a2a3a">${S.lang==="es"?"Devolver saldo":"Refund"}</button><button class="mini wddel" data-x="${i}" style="background:#7F1D1D !important;background-image:none !important;color:#fff !important">🗑️ ${S.lang==="es"?"Borrar":"Delete"}</button></div></div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("noPending")}</p>`;
   if(ADM){ const es=S.lang==="es", T=ADM.tasks||{}, TL=ADM.tlist||[];
     list.insertAdjacentHTML("afterbegin",`<div class="req" style="display:block">📋 <b>${es?"Tareas pagadas (AdsLab)":"Paid tasks (AdsLab)"}</b><br>
       <span style="color:var(--muted)">${es?"Total":"Total"}: <b>${nf(T.n||0)}</b> · ${es?"últimas 24 h":"last 24 h"}: <b>${nf(T.today||0)}</b> · ${es?"pagado a jugadores":"paid to players"}: <b>${usd(T.u||0)}</b> · ${es?"te pagó AdsLab":"AdsLab paid you"}: <b>$${nf(T.r||0,4)}</b></span>
@@ -4424,6 +4452,12 @@ async function loadAdmin(){
   }catch(e){}
   await adminPrizes(list);
   await adminAds(list);
+  list.querySelectorAll(".wddel").forEach(b=>b.onclick=async()=>{ const r=rows[+b.dataset.x], es=S.lang==="es";
+    if(!confirm((es?"¿BORRAR este retiro de $":"DELETE this withdrawal of $")+r.amountUsd+" "+(r.coin||"")+(es?"? No se paga y el saldo NO se le devuelve.":"? Not paid and NOT refunded."))) return; b.disabled=true;
+    try{ if(r.src==="fb"){ try{ await DB.doc(`payouts/${r.uid}`).collection("requests").doc(r.id).update({status:"rejected"}); }catch(e){} }
+      else await d1Post("paystat",{uid:r.uid,date:r.date||r.id,st:"rejected"});
+      try{ const h=JSON.parse(localStorage.getItem("dc-hidepay")||"[]"); h.push(r.uid+"|"+(r.date||r.id)); localStorage.setItem("dc-hidepay",JSON.stringify(h.slice(-300))); }catch(e){}   /* hidden on this phone even if Firebase is full */
+      toast(es?"🗑️ Retiro borrado":"🗑️ Deleted","pay"); b.closest(".req").remove(); aDrop("payouts"); }catch(e){ b.disabled=false; toast(t("mkErr")); } });
   list.querySelectorAll(".wdref").forEach(b=>b.onclick=async()=>{ const r=rows[+b.dataset.r]; if(!confirm((S.lang==="es"?"¿Devolver $":"Refund $")+r.amountUsd+(S.lang==="es"?" al saldo de este jugador?":" to this player's balance?"))) return; b.disabled=true;
     try{ const units=Math.max(1,Math.round(parseFloat(r.amountUsd||"0")*1e5));
       if(r.src==="fb"){ await giveCredit(r.uid,"refund-"+r.id+"-"+Date.now().toString(36),{type:"refund",item:r.id,units,coin:r.coin||""});
