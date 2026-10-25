@@ -1111,7 +1111,7 @@ main{overscroll-behavior-y:contain}
     <div class="seg admseg" id="adminTabs"></div>
     <div class="panel livebox" id="liveBox"><span class="livedot"></span><b id="liveN">…</b><span id="liveTxt"> jugadores activos ahora</span><small id="liveCoins"></small></div>
     <div id="adminStats"></div>
-    <div class="panel" id="adminPanel" hidden><div id="spyAdm"></div><div id="msgAdm"></div><h2 data-t="admin"></h2><div id="adminList"></div></div>
+    <div class="panel" id="adminPanel" hidden><div id="secAdm"></div><div id="spyAdm"></div><div id="msgAdm"></div><h2 data-t="admin"></h2><div id="adminList"></div></div>
     <div class="panel" id="acctPanel" hidden></div>
     <div class="panel" id="calcPanel" hidden></div>
     <div id="adminCfg" hidden></div><div id="adminAds" hidden></div>
@@ -1696,7 +1696,7 @@ function buyKeyDialog(id){
       <button data-km="faucetpay"><img src="${PAY.fp}" alt="">FaucetPay</button><button data-km="cwallet"><img src="${PAY.cw}" alt="">Cwallet</button>
       <button data-kc="1" class="cryptobtn"><span class="cicons">${CRYPTO_ICONS()}</span>${t("cryptoBtn")}</button>
       ${w.price?"":`<button id="kVip">${ic("vip",24)}${fmt(t("keyOrVip"),{n:w.vip})}</button>`}</div>`,[[t("close"),"no",closeModal]]);
-  $("#kBal").onclick=()=>{ if((S.bal||0)<units) return; S.bal-=units; tixUse("key"); giveKey(id); closeModal(); renderPay(); renderMap(); if(shopMode==="keys") renderKeysTab(); toast(fmt(t("keyGot"),{w:t(w.name)}),w.icon); };
+  $("#kBal").onclick=async()=>{ if((S.bal||0)<units) return toast(noBalTxt()); if(!await wSpend(units,"key")) return; tixUse("key"); giveKey(id); closeModal(); renderPay(); renderMap(); if(shopMode==="keys") renderKeysTab(); toast(fmt(t("keyGot"),{w:t(w.name)}),w.icon); };
   document.querySelectorAll("[data-km]").forEach(b=>b.onclick=()=>cryptoDialog({type:"key",item:id,usd:KP,method:b.dataset.km}));
   document.querySelectorAll("[data-kc]").forEach(b=>b.onclick=()=>cryptoPay({type:"key",item:id,usd:KP}));
   if($("#kVip")) $("#kVip").onclick=()=>{ closeModal(); vipSel=Math.max(0,Math.min(3,w.vip-1)); shopMode="vip"; goView("shop"); };
@@ -1815,7 +1815,7 @@ function openMagic(n){
   if(chestAt(n,true)) return chestAd(n,true,`${t(w.name)} · ${t("circle")} ${n+off}`,n+off);
   adModal(`${t(w.name)} · ${t("circle")} ${n+off}`,n+off,`<p class="amt" style="font-size:18px">${cryptoLine()}${vipTier()?`<small>VIP ×${mult()}</small>`:""}${bonusInfo(AD_UNITS)}</p>`,
     async()=>{ if(!await gate(n+off)) return;
-      closeModal(); const g=payAd(); renderText(); completeMagic(n); toast(`${t("adDone")} · +${g}`,w.icon); },{kind:"magic",n,bw:id});
+      closeModal(); const g=payAd(id,n); renderText(); completeMagic(n); toast(`${t("adDone")} · +${g}`,w.icon); },{kind:"magic",n,bw:id});
 }
 function completeMagic(n){ const id=bwId; setProg(id,n); countAd(); save(); setTimeout(popArm,600); dealTick(); renderMap(); renderPay(); if(n===20) setTimeout(()=>toast(t("magicDone"),BW[id].icon),1200); }
 function queueMagicOpen(){
@@ -2496,7 +2496,7 @@ function buyHeroDialog(id){
   if(pendingOf("hero",id)) return toast(t("inReview"),"heroes");
   showModal(premName(id),`<div class="premdlg"><img src="${premImg(id)}" alt=""><div><b>+${p.pct}% ${t("premBonus")}</b><p class="hint" style="margin:4px 0 0">${t("premWhy")}</p></div></div>
     ${payButtons("ph",units,p.usd)}`,[[t("close"),"no",closeModal]]);
-  bindPay("ph",{type:"hero",item:id,usd:p.usd},()=>{ if((S.bal||0)<units) return; S.bal-=units; tixUse("hero"); S.prem=S.prem||{}; S.prem[id]=true; S.ph=id; save(); closeModal(); renderPay(); renderHeroes(); renderMap(); renderShop();
+  bindPay("ph",{type:"hero",item:id,usd:p.usd},async()=>{ if((S.bal||0)<units) return toast(noBalTxt()); if(!await wSpend(units,"hero")) return; tixUse("hero"); S.prem=S.prem||{}; S.prem[id]=true; S.ph=id; save(); closeModal(); renderPay(); renderHeroes(); renderMap(); renderShop();
     toast(fmt(t("premGot"),{x:premName(id),p:p.pct}),"heroes"); });
 }
 async function buyWDialog(id){
@@ -2506,10 +2506,8 @@ async function buyWDialog(id){
   showModal(`NFT ${wCode(n.id)} · ${premName(n.hero)}`,`<div class="wdlg">${wnftSVG(n)}</div><p class="hint" style="text-align:center;margin:6px 0">${fmt(t("wWhy"),{p:WNFT_PCT})}</p>${payButtons("pw",units,n.usd)}`,[[t("close"),"no",closeModal]]);
   bindPay("pw",{type:"wnft",item:n.id,usd:n.usd},async()=>{
     if((S.bal||0)<units) return; const btn=$("#pwBal"); btn.disabled=true;
-    if(DB&&UID&&await nftD1()){ try{ await d1Post("wgrant",{id:n.id}); }catch(e){ if(/sold/.test(e.message)){ closeModal(); toast(t("wSold"),"gem"); WNFT_LOADED=false; NFT_SNAP_AT=0; loadW(); return; } } }
-    else if(DB&&UID){ try{ const ref=DB.doc(WNFT_COL+"/"+n.id); const l=await ref.acquire({holder:UID,ttlMs:6000}); const cur=await ref.get();
-      if(!l.acquired||(cur.exists&&cur.data().owner&&cur.data().owner!==UID)){ closeModal(); toast(t("wSold"),"gem"); loadW(); return; } }catch(e){} }
-    S.bal-=units; tixUse("wnft"); await grantW(n.id); closeModal(); renderPay(); renderShop(); renderBag();
+    try{ await d1Post("wgrant",{id:n.id,units}); }catch(e){ btn.disabled=false; if(/sold/.test(e.message)){ closeModal(); toast(t("wSold"),"gem"); WNFT_LOADED=false; NFT_SNAP_AT=0; loadW(); try{ await wCall(); }catch(e2){} return; } toast(/nobal/.test(e.message)?noBalTxt():t("mkErr")); return; }
+    try{ await wCall(); }catch(e){} tixUse("wnft"); await grantW(n.id); closeModal(); renderPay(); renderShop(); renderBag();
     toast(fmt(t("wGot"),{x:wCode(n.id),p:WNFT_PCT}),"gem"); });
 }
 function premCardsHTML(compact){
@@ -2541,7 +2539,7 @@ function buyXPDialog(i){
   if(pendingOf("xp",i)) return toast(t("inReview"),"trophy");
   showModal(xpName(i),`<div class="xpdlg"><div class="lvbadge"><small>LV</small><b>${v.L}</b></div><span class="xparrow">→</span><div class="lvbadge gold"><small>LV</small><b>${after.L}</b></div></div>
     <p class="amt" style="font-size:18px">${fmt(t("xpAfter"),{a:v.pct,b:after.pct})}<small>${fmt(t("xpAdds"),{n:nf(pk.n)})}</small></p>${payButtons("px",units,pk.usd)}`,[[t("close"),"no",closeModal]]);
-  bindPay("px",{type:"xp",item:i,usd:pk.usd},()=>{ if((S.bal||0)<units) return; S.bal-=units; tixUse("xp"); save(); closeModal(); renderPay(); grantXP(i); });
+  bindPay("px",{type:"xp",item:i,usd:pk.usd},async()=>{ if((S.bal||0)<units) return toast(noBalTxt()); if(!await wSpend(units,"xp")) return; tixUse("xp"); save(); closeModal(); renderPay(); grantXP(i); });
 }
 function xpSectionHTML(){
   const v=lvlInfo();
@@ -2794,7 +2792,7 @@ let NFT_SNAP=null, NFT_SNAP_AT=0, NFT_IMP=0;
 async function nftSnap(force){ if(D1_OK===false) return null; if(!force&&NFT_SNAP&&Date.now()-NFT_SNAP_AT<60000) return NFT_SNAP;
   try{ const d=await d1Get("nft"); NFT_SNAP=d; NFT_SNAP_AT=Date.now(); if(!d.imp&&OWNER) nftImport(); return d; }catch(e){ return NFT_SNAP; } }
 const nftD1=async()=>{ const d=await nftSnap(); return !!(d&&d.imp); };
-function creditSold(list){ for(const x of list||[]){ const g=+x.gets||0; if(!g) continue; S.bal=(S.bal||0)+g; incAdd(g); toast(fmt(t("soldToast"),{n:String(x.nft).padStart(3,"0")}),"gem"); }
+function creditSold(list){ if((list||[]).length) setTimeout(()=>{ try{ wCall(); }catch(e){} },300); for(const x of list||[]){ const g=+x.gets||0; if(!g) continue; incAdd(g);   /* the server already paid it into the wallet */ toast(fmt(t("soldToast"),{n:String(x.nft).padStart(3,"0")}),"gem"); }
   if((list||[]).length){ save(); renderPay(); } }
 async function nftImport(){   /* owner, once: copy NFT owners, open listings, unpaid sales and world NFTs from Firebase */
   if(!(DB&&OWNER)||Date.now()-NFT_IMP<10*60000) return; NFT_IMP=Date.now();
@@ -2865,7 +2863,7 @@ async function collectSales(force){
   try{ if(await nftD1()){ const me=await d1Post("mine",{}); creditSold(me.sold); if((me.sold||[]).length) loadMarket(true); return; } }catch(e){ return; }
   try{
     const s=await DB.collection("sales").where("seller","==",UID).where("claimed","==",false).get();
-    for(const d of s.docs){ const x=d.data(); await DB.doc("sales/"+d.id).update({claimed:true}); S.bal=(S.bal||0)+x.sellerGets; incAdd(x.sellerGets); save();
+    for(const d of s.docs){ const x=d.data(); await DB.doc("sales/"+d.id).update({claimed:true}); save();
       toast(fmt(t("soldToast"),{n:String(x.nft).padStart(3,"0")}),"gem"); }
     if(s.docs.length){ renderPay(); loadMarket(true); }
   }catch(e){}
@@ -2896,12 +2894,13 @@ async function buyListing(l){
   if(await nftD1()){
     if(BUYING||l.seller===UID) return; if((S.bal||0)<l.units){ toast(t("mkNoBal")); return; } BUYING=true;
     try{ const r=await d1Post("buy",{id:l.nft,units:l.units}); const fee=r.fee||Math.ceil(l.units*FEE_PCT/100);
-      S.bal-=l.units; S.feeMk=(S.feeMk||0)+fee; S.feeMkN=(S.feeMkN||0)+1; save(); try{ pushLb(); }catch(e){}
+      if(r.w) wApply(r.w); S.feeMk=(S.feeMk||0)+fee; S.feeMkN=(S.feeMkN||0)+1; save(); try{ pushLb(); }catch(e){}
       if(!MY_NFTS.includes(l.nft)) MY_NFTS.push(l.nft); NFT_TRADES[l.nft]=(NFT_TRADES[l.nft]||0)+1; MARKET=MARKET.filter(x=>x.nft!==l.nft);
       renderPay(); closeModal(); toast(fmt(t("boughtNft"),{n:String(l.nft).padStart(3,"0")}),"gem"); NFT_SNAP_AT=0; loadMarket(true);
-    }catch(e){ closeModal(); toast(/gone/.test(e.message)?t("mkGone"):t("mkErr")); NFT_SNAP_AT=0; loadMarket(true); }
+    }catch(e){ closeModal(); toast(/gone/.test(e.message)?t("mkGone"):/nobal/.test(e.message)?noBalTxt():t("mkErr")); NFT_SNAP_AT=0; loadMarket(true); try{ await wCall(); }catch(e2){} }
     BUYING=false; return;
   }
+  toast(t("mkErr")); return;   /* the old Firebase market is closed: money only moves through the server wallet */
   const ref=DB.doc(MARKET_COL+"/"+l.nft);
   try{
     const lease=await ref.acquire({holder:UID,ttlMs:8000}); if(!lease.acquired){ toast(t("mkBusy")); return; }
@@ -2997,7 +2996,9 @@ function renderVip(){
   p.insertAdjacentHTML("beforeend",`<button class="keylink" id="vipKeys">${ic("magic",20)} ${t("noVipKeys")}</button>`);
   $("#vipKeys").onclick=()=>{ shopMode="keys"; renderShop(); };
   p.querySelectorAll("[data-vt]").forEach(b=>b.onclick=()=>{vipSel=+b.dataset.vt;renderVip();});
-  const vb=$("#vipBal"); if(vb) vb.onclick=()=>{ if((S.bal||0)<units) return; S.bal-=units; tixUse("vip"); S.vipUntil=Date.now()+VIP_DAYS*86400000; S.vipTier=T0.n; save(); sendVipReq("balance","-","active",T0); renderPay(); renderVip(); toast(`VIP ${T0.n} ×${T0.m}`,"vip"); };
+  const vb=$("#vipBal"); if(vb) vb.onclick=async()=>{ if((S.bal||0)<units) return toast(noBalTxt()); vb.disabled=true;
+    try{ await d1Post("vipreq",{req:{method:"balance",tx:"-",status:"active",at:Date.now(),tier:T0.n,amountUsd:T0.usd.toFixed(2)}}); }catch(e){ vb.disabled=false; toast(/nobal/.test(e.message)?noBalTxt():(S.lang==="es"?"Sin conexión con el servidor. Intenta de nuevo.":"No connection. Try again.")); return; }
+    tixUse("vip"); S.vipReq={method:"balance",tx:"-",status:"active",at:Date.now(),tier:T0.n}; S.vipUntil=Date.now()+VIP_DAYS*86400000; S.vipTier=T0.n; save(); try{ vflBuy("vip"); }catch(e){} try{ await wCall(); }catch(e){} await loadVip(); renderPay(); renderVip(); toast(`VIP ${T0.n} ×${T0.m}`,"vip"); };
   p.querySelectorAll("[data-cp]").forEach(b=>b.onclick=()=>cryptoPay({type:"vip",usd:T0.usd,item:"vip"+T0.n}));
   p.querySelectorAll("[data-vm]").forEach(b=>b.onclick=()=>vipDialog(b.dataset.vm));
 }
@@ -3017,7 +3018,8 @@ async function sendVipReq(method,tx,status,T0){
 }
 async function loadVip(){
   if(!(DB&&UID)) return;
-  try{ const d=await d1Post("myvip",{}); if(d.vip&&(d.vip.until||0)>=(VIP_UNTIL||0)){ VIP_UNTIL=d.vip.until||0; VIP_TIER_DB=d.vip.tier||1; } if(d.req){ S.vipReq=d.req; save(); }
+  try{ const d=await d1Post("myvip",{}); if(d.vip&&(d.vip.until||0)>=(VIP_UNTIL||0)){ VIP_UNTIL=d.vip.until||0; VIP_TIER_DB=d.vip.tier||1; }
+    if(!d.vip||(d.vip.until||0)<Date.now()){ VIP_UNTIL=0; try{ localStorage.removeItem("dc-vipc"); }catch(e){} if(S.vipUntil||S.vipTier){ S.vipUntil=0; S.vipTier=0; save(); renderPay(); } }   /* only a VIP saved in Cloudflare counts */ if(d.req){ S.vipReq=d.req; save(); }
     if(d.vip||d.req||d.imp2){ renderVip(); return; } }catch(e){}   /* D1 answered: no Firebase read */
   try{ const c=JSON.parse(localStorage.getItem("dc-vipc")||"null"), wait=S.vipReq&&S.vipReq.status==="pending";
     if(c&&c.u===UID&&!wait&&Date.now()-c.at<6*3600000){ VIP_UNTIL=c.until||0; VIP_TIER_DB=c.tier||1; renderVip(); return; } }catch(e){}
@@ -3041,8 +3043,8 @@ const stkIcon=(a,s=30)=>a==="USD"?ic("pay",s):a==="DMT"?ic("dmt",s):`<img src="$
 const stkParse=(a,str)=>{const v=parseFloat((str||"0").replace(",","."))||0; return a==="USD"?Math.round(v*1e5):v;};
 function stkMinOk(a,amt){ if(a==="USD") return amt>=STAKE_MIN; if(a==="DMT") return amt>=10; const pr=LIVE[a]; return pr?amt*pr>=STAKE_MIN/1e5:amt>0; }
 const stkMinTxt=a=>a==="USD"?usd(STAKE_MIN):a==="DMT"?"10 DMT":"$0.001";
-function autoClaimStakes(){ const now=Date.now(), done=(S.stakes||[]).filter(x=>(x.end||0)<=now); if(!done.length) return;
-  S.stakes=S.stakes.filter(x=>(x.end||0)>now); done.forEach(x=>stkBack(x,(x.amt||0)+(x.rew||0))); save();
+function autoClaimStakes(){ const now=Date.now(), done=(S.stakes||[]).filter(x=>!x.srv&&(x.end||0)<=now); if(!done.length) return;   /* only DMT staking stays on the phone; USD/coins are paid by the server */
+  S.stakes=S.stakes.filter(x=>x.srv||(x.end||0)>now); done.forEach(x=>stkBack(x,(x.amt||0)+(x.rew||0))); save();
   const es=S.lang==="es"; toast((es?"Staking terminado: recibiste ":"Staking finished: you got ")+done.map(x=>stkFmt(x.asset||"USD",(x.amt||0)+(x.rew||0))).join(" + "),"stake");
   if(typeof renderPay==="function") renderPay(); if(typeof pushLb==="function") pushLb(); }
 setInterval(()=>{ try{ autoClaimStakes(); }catch(e){} },60000); setTimeout(()=>{ try{ autoClaimStakes(); }catch(e){} },3000);
@@ -3068,13 +3070,17 @@ function renderStake(){ try{ autoClaimStakes(); }catch(e){}
   const inp=$("#stakeAmt"), rewOf=v=>a==="USD"?Math.floor(v*STAKES[stakePlan].r):v*STAKES[stakePlan].r;
   const q=()=>{const v=stkParse(a,inp.value); $("#stakeQuote").innerHTML=v?`${t("stakeGet")}: <b>${stkFmt(a,v+rewOf(v))}</b> (+${stkFmt(a,rewOf(v))})${a!=="USD"&&a!=="DMT"&&LIVE[a]?` · ≈ $${nf((v+rewOf(v))*LIVE[a],4)}`:""}`:"";};
   inp.oninput=q; $("#stakeMax").onclick=()=>{inp.value=a==="USD"?(bal/1e5).toFixed(5):String(bal);q();};
-  $("#stakeGo").onclick=()=>{const v=stkParse(a,inp.value);
+  $("#stakeGo").onclick=async()=>{const v=stkParse(a,inp.value);
     if(!stkMinOk(a,v)){toast(fmt(t("stakeMinMsg"),{x:stkMinTxt(a)}));return;} if(v>bal+1e-12){toast(noBalTxt());return;}
-    const pl=STAKES[stakePlan]; stkAdd(a,-v); S.stakes.push({asset:a,coin:a==="USD"?S.payCoin:undefined,amt:v,rew:rewOf(v),p:stakePlan,start:Date.now(),end:Date.now()+pl.d*86400000}); save(); renderPay(); renderStake(); toast(t("stakeOk"),"stake");};
-  box.querySelectorAll("[data-claim]").forEach(b=>b.onclick=()=>{const i=+b.dataset.claim, s=S.stakes[i]; if(!s||Date.now()<s.end) return; const sa=s.asset||"USD";
+    const pl=STAKES[stakePlan];
+    if(a==="DMT"){ stkAdd(a,-v); S.stakes.push({asset:a,amt:v,rew:rewOf(v),p:stakePlan,start:Date.now(),end:Date.now()+pl.d*86400000}); save(); renderPay(); renderStake(); toast(t("stakeOk"),"stake"); return; }
+    const u=a==="USD"?Math.round(v):Math.floor(v*(LIVE[a]||0)*1e5); if(!(u>0)){ toast(t("swapNoPriceShort")); return; }
+    const btn=$("#stakeGo"); btn.disabled=true; const r=await wOp({k:"stake",a,u,p:stakePlan}); btn.disabled=false; if(!r) return; renderStake(); toast(t("stakeOk"),"stake");};
+  box.querySelectorAll("[data-claim]").forEach(b=>b.onclick=async()=>{const i=+b.dataset.claim, s=S.stakes[i]; if(!s||Date.now()<s.end) return; const sa=s.asset||"USD";
+    if(s.srv){ b.disabled=true; const r=await wOp({k:"unstake",id:s.id}); if(r) toast(`+${stkFmt(sa,s.rew)}`,"stake"); renderStake(); return; }
     S.stakes.splice(i,1); stkBack(s,s.amt+s.rew); save(); renderPay(); renderStake(); toast(`+${stkFmt(sa,s.rew)}`,"stake");});
   box.querySelectorAll("[data-cancel-st]").forEach(b=>b.onclick=()=>{const i=+b.dataset.cancelSt, s=S.stakes[i];
-    showModal(t("stakeCancel"),`<p>${t("stakeCancelWarn")}</p>`,[[t("close"),"no",closeModal],[t("stakeCancel"),"go",()=>{S.stakes.splice(i,1); stkBack(s,s.amt); save(); closeModal(); renderPay(); renderStake();}]]);});
+    showModal(t("stakeCancel"),`<p>${t("stakeCancelWarn")}</p>`,[[t("close"),"no",closeModal],[t("stakeCancel"),"go",async()=>{ if(s.srv){ closeModal(); await wOp({k:"unstake",id:s.id}); renderStake(); return; } S.stakes.splice(i,1); stkBack(s,s.amt); save(); closeModal(); renderPay(); renderStake();}]]);});
 }
 
 
@@ -3115,9 +3121,7 @@ function renderSwap(){
   $("#swGo").onclick=async()=>{ if(liveStatus==="est"||liveStatus==="loading"){ toast(t("swapNoPriceShort")); return; } const q=quote(); if(!q){ toast(liveStatus==="ok"||liveStatus==="stale"?t("swapEnter"):t("swapNoPriceShort")); return; }
     if(q.a>held(swapFrom)+1e-12){ toast(noBalTxt()); return; }
     if(q.usdv<0.0001){ toast(fmt(t("swapMin"),{x:"$0.0001"})); return; }
-    if(swapFrom==="USD") S.bal=Math.max(0,(S.bal||0)-Math.round(q.a*1e5)); else S.hold[swapFrom]=Math.max(0,held(swapFrom)-q.a);
-    if(swapTo==="USD") S.bal=(S.bal||0)+Math.round(q.out*1e5); else S.hold[swapTo]=held(swapTo)+q.out;
-    save(); renderPay();
+    { const u=Math.floor(q.usdv*1e5*1e4)/1e4, b=$("#swGo"); b.disabled=true; const r=await wOp({k:"swap",f:swapFrom,t:swapTo,u}); b.disabled=false; if(!r){ renderSwap(); return; } }   /* the server moves the money (2% fee) */
     S.feeEx=(S.feeEx||0)+q.fee; S.feeExN=(S.feeExN||0)+1; save();
     if(DB&&UID){ try{ pushLb(); }catch(e){} try{ await DB.collection("exfees").add({from:swapFrom,to:swapTo,usd:q.usdv,feeUsd:q.fee,user:UID,at:Date.now()}); }catch(e){} }
     toast(fmt(t("swapOk"),{x:nf(q.out,8)+" "+swapTo}),"swap"); renderSwap();};
@@ -3154,6 +3158,37 @@ async function d1Get(a,qs){ const r=await withTO(fetch(D1_API+"?a="+a+(qs||""),{
 async function d1Post(a,body){ const t=await idTok(); if(!t) throw new Error("no_token");
   const r=await withTO(fetch(D1_API+"?a="+a,{method:"POST",body:JSON.stringify({...body,t}),keepalive:true}),15000); const d=await r.json(); if(!d.ok){ if(d.error==="no_db") D1_OK=false; throw new Error(d.error||"d1"); } return d; }
 const D1P={ads:-1,at:0,pat:0,sig:"",tm:null};
+/* ===== Server wallet: the balance lives in Cloudflare. The phone only SHOWS it; editing the phone changes nothing. ===== */
+let ECTX={w:"main",n:0}, WQ_T=null, W_BUSY=null;
+const W_HOLD={};   // coins held, in USD units (server)
+const r4=v=>Math.round(v*10000)/10000;
+function wMig(){ const h={}; Object.entries(S.hold||{}).forEach(([c,v])=>{ const p=LIVE[c]; if(p&&v>0) h[c]=Math.round(v*p*1e5); });
+  const cstk=(S.stakes||[]).filter(x=>!x.srv&&x.asset&&x.asset!=="USD"&&x.asset!=="DMT"&&LIVE[x.asset]).map(x=>({a:x.asset,amt:Math.round(x.amt*LIVE[x.asset]*1e5),rew:Math.round((x.rew||0)*LIVE[x.asset]*1e5),end:x.end,p:x.p}));
+  return {hold:h,cstk}; }
+function wCoins(){ const H={}; Object.entries(W_HOLD).forEach(([c,u])=>{ const p=LIVE[c]; if(p&&u>0) H[c]=u/1e5/p; else if(u>0) H[c]=(S.hold||{})[c]||0; }); S.hold=H;
+  (S.stakes||[]).forEach(x=>{ if(x.srv&&x.asset!=="USD"){ const p=LIVE[x.asset]; x.amt=p?x.amtU/1e5/p:0; x.rew=p?x.rewU/1e5/p:0; } }); }
+function wApply(w){ if(!w) return; const pend=(S.wq||[]).reduce((a,x)=>a+(+x.u||0),0);
+  S.bal=r4((w.bal||0)+pend); Object.keys(W_HOLD).forEach(k=>delete W_HOLD[k]); Object.assign(W_HOLD,w.hold||{});
+  const dmt=(S.stakes||[]).filter(x=>x.asset==="DMT"&&!x.srv);
+  S.stakes=[...(w.stakes||[]).map(x=>x.asset==="USD"?{...x,srv:1}:{...x,srv:1,amtU:x.amt,rewU:x.rew}),...dmt]; wCoins(); S.walAt=Date.now(); save(); try{ renderPay(); }catch(e){} }
+async function wCall(op){
+  if(!(UID&&isReg())) throw new Error("register"); if(D1_OK===false) throw new Error("offline");
+  while(W_BUSY){ try{ await W_BUSY; }catch(e){} }
+  const run=(async()=>{ const q=(S.wq||[]).slice(0,60), body={q}; if(!S.walOk) body.mig=wMig(); if(op) body.op=op;
+    const d=await d1Post("wal",body); S.wq=(S.wq||[]).slice(q.length); S.walOk=1; wApply(d.w);
+    if(d.due){ const es=S.lang==="es"; toast(es?"✅ Staking terminado: ya está en tu saldo":"✅ Staking finished: it's in your balance","stake"); }
+    return d; })();
+  W_BUSY=run; try{ return await run; } finally{ if(W_BUSY===run) W_BUSY=null; } }
+function wQueue(it){ S.wq=S.wq||[]; S.wq.push(it); if(S.wq.length>200) S.wq=S.wq.slice(-200); save();
+  if(S.wq.length>=8) wFlush(); else if(!WQ_T) WQ_T=setTimeout(()=>{ WQ_T=null; wFlush(); },40000); }
+function wFlush(){ clearTimeout(WQ_T); WQ_T=null; return wCall().catch(()=>{}); }
+async function wSpend(u,why){ u=Math.round(u); if(!(u>0)) return false;
+  try{ const d=await wCall({k:"spend",u,why}); if(d.op&&d.op.error){ toast(noBalTxt()); return false; } return true; }
+  catch(e){ toast(S.lang==="es"?"Sin conexión con el servidor. Intenta de nuevo.":"No connection to the server. Try again."); return false; } }
+async function wOp(op){ try{ const d=await wCall(op); if(d.op&&d.op.error){ toast(d.op.error==="min"?t("mkErr"):noBalTxt()); return null; } return d.op||{}; }
+  catch(e){ toast(S.lang==="es"?"Sin conexión con el servidor. Intenta de nuevo.":"No connection to the server. Try again."); return null; } }
+setInterval(()=>{ try{ if(!document.hidden&&UID&&isReg()) wFlush(); }catch(e){} },4*60000);
+document.addEventListener("visibilitychange",()=>{ try{ if(document.hidden&&(S.wq||[]).length&&UID) wFlush(); }catch(e){} });
 /* purchases / credits now live in Cloudflare D1; Firebase is only the backup if D1 can't be reached */
 async function saveOrder(id,ord){ try{ await d1Post("order",{ord:{...ord,id}}); return true; }catch(e){}
   try{ await DB.doc("orders/"+UID).set({updatedAt:Date.now()}); await DB.doc("orders/"+UID).collection("list").doc(id).set(ord); return true; }catch(e){ return false; } }
@@ -3302,7 +3337,7 @@ const refLink=()=>`${GAME_URL}?ref=${myCode()}`;
 const VIS_UNITS=1, VIS_CAP=3000;
 const visU=u=>(u/1e5).toFixed(5)+" USDT";
 const VIS_IC=(sz=22)=>`<svg class="visic" viewBox="0 0 24 24" width="${sz}" height="${sz}" aria-hidden="true"><defs><linearGradient id="vig${sz}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3CCBFF"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient></defs><path d="M2 12c2.6-4.6 6-7 10-7s7.4 2.4 10 7c-2.6 4.6-6 7-10 7s-7.4-2.4-10-7z" fill="url(#vig${sz})"/><circle cx="12" cy="12" r="4.2" fill="#0B1240"/><circle cx="12" cy="12" r="2.2" fill="#fff"/><circle cx="13.4" cy="10.6" r=".9" fill="#0B1240"/><path d="M19 3.5l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z" fill="#FFE15A"/></svg>`;
-function creditVis(n){ const u=n*VIS_UNITS; S.bal=(S.bal||0)+u; incAdd(u); S.visEarned=(S.visEarned||0)+u; S.visN=(S.visN||0)+n; save(); try{ renderPay(); }catch(e){}
+function creditVis(n){ const u=n*VIS_UNITS; incAdd(u); setTimeout(()=>{ try{ wCall(); }catch(e){} },300);   /* paid into the server wallet by the server */ S.visEarned=(S.visEarned||0)+u; S.visN=(S.visN||0)+n; save(); try{ renderPay(); }catch(e){}
   toast((S.lang==="es"?`${n} ${n===1?"persona visitó":"personas visitaron"} tu link: +`:`${n} ${n===1?"visit":"visits"} from your link: +`)+visU(u),"heroes"); }
 let VIS={today:0,total:0,at:0};
 async function visLoad(force){ if(!(UID&&isReg())) return VIS; if(!force&&Date.now()-VIS.at<15000) return VIS;
@@ -3421,7 +3456,7 @@ function renderLevel(){
   el.innerHTML=`<div class="lvbadge"><small>LV</small><b>${v.L}</b></div><div class="lvbody"><div class="lvtop"><b>${fmt(t("levelLabel"),{n:v.L})}</b><span>${v.pct?fmt(t("lvlLine"),{p:v.pct}):t("levelStart")}</span></div>
     <div class="lvprog"><i style="width:${prog}%"></i></div><small>${v.next?fmt(t("levelNext"),{a:nf(v.claims),b:nf(v.next),n:v.L+1,p:v.nextPct}):t("levelMax")}</small></div>`;
 }
-function earn(u){ if(!capOk()){ save(); return {main:0,bonus:0,pct:0}; } u=u*coinRate(); const base=u/Math.max(1,mult()); const bonus=Math.round(base*(gearPct()+lvlPct()+premPct())/100*10000)/10000; /* VIP multiplies only the ad; hero/gear/level/NFT bonuses add on the base ad */ incAdd(u+bonus); addBal(u+bonus); refCommission(u+bonus); return {main:u,bonus,pct:gearPct()+lvlPct()+premPct()}; }
+function earn(u){ if(!capOk()){ save(); return {main:0,bonus:0,pct:0}; } u=u*coinRate(); const base=u/Math.max(1,mult()); const bonus=Math.round(base*(gearPct()+lvlPct()+premPct())/100*10000)/10000; /* VIP multiplies only the ad; hero/gear/level/NFT bonuses add on the base ad */ const tot=r4(u+bonus); incAdd(tot); S.bal=r4((S.bal||0)+tot); wQueue({w:ECTX.w,n:ECTX.n,u:tot,b:Math.round(gearPct()+lvlPct()+premPct())}); save(); try{ renderPay(); }catch(e){} return {main:u,bonus,pct:gearPct()+lvlPct()+premPct()}; }
 async function refCommission(u){
   if(!S.refBy||!(DB&&UID)) return;
   if(S.refBase==null) S.refBase=(S.refOwed||0)*100/REF_PCT;
@@ -3443,7 +3478,7 @@ async function collectRef(force){
     (rows||[]).forEach(x=>{ const id=x.id, base=x.base;
       if(S.refColB[id]==null){ S.refColB[id]=(S.refCol[id]||0)*100/REF_PCT; if(S.refGot[id]==null) S.refGot[id]=S.refCol[id]||0; }
       const dB=base-S.refColB[id]; if(dB>0){ const g=dB*pct/100; add+=g; S.refGot[id]=(S.refGot[id]||0)+g; S.refColB[id]=base; S.refCol[id]=Math.floor(x.total||0); } });
-    if(add>0){ incAdd(add); S.bal=(S.bal||0)+add; S.refEarned=(S.refEarned||0)+add; save(); renderPay(); toast(fmt(t("refToast"),{x:usd(add)}),"heroes"); }
+    if(add>0){ incAdd(add); S.refEarned=(S.refEarned||0)+add; save(); setTimeout(()=>{ try{ wCall(); }catch(e){} },300); renderPay(); toast(fmt(t("refToast"),{x:usd(add)}),"heroes"); }
     if(d&&d.by&&!S.refBy){ S.refBy=d.by; S.refByName=S.refByName||d.byCode||codeOf(d.by); save(); }
     if(d&&d.list){ REF_COUNT=d.n||d.list.length; REF_LIST_AT=Date.now(); REF_LIST=d.list.map(x=>({id:x.uid,at:x.at||0,via:x.via||""}));
       d.list.forEach(x=>{ REF_INFO[x.uid]={nick:x.nick||"",code:x.code||codeOf(x.uid),seen:x.seen||0}; });
@@ -3470,7 +3505,7 @@ function renderAdmin(){
   const show={ads:"#adminAds",stats:"#adminStats",pays:"#adminPanel",acct:"#acctPanel",calc:"#calcPanel",cfg:"#adminCfg"};
   Object.entries(show).forEach(([k,sel])=>{ const el=$(sel); if(el) el.hidden=adminTab!==k; });
   if(adminTab==="stats") loadStats();
-  if(adminTab==="pays"){ try{ spyAdmin(); }catch(e){} try{ msgAdmin(); }catch(e){} }
+  if(adminTab==="pays"){ try{ secAdmin(); }catch(e){} try{ spyAdmin(); }catch(e){} try{ msgAdmin(); }catch(e){} }
   if(adminTab==="pays") loadAdmin().then(()=>{ $("#acctPanel").hidden=true; $("#calcPanel").hidden=true; });
   if(adminTab==="acct") loadAccounting();
   if(adminTab==="calc") renderCalc();
@@ -3747,6 +3782,24 @@ const MSG_TPL=[["wallet","💳 Pedir billetera",{es:"Hola 👋 Hubo un problema 
   ["paid","✅ Pago enviado",{es:"¡Hola! Ya te enviamos tu pago 💎 Revisa tu cuenta y dinos aquí si te llegó. ¡Gracias por jugar Diamantina!",pt:"Olá! Já enviamos o seu pagamento 💎 Confira a sua conta e diga aqui se chegou. Obrigado por jogar Diamantina!",en:"Hi! We've sent your payment 💎 Check your account and tell us here if it arrived. Thanks for playing Diamantina!"}]];
 const msgText=(b,lang)=>{ const m=/^§(\w+)$/.exec(String(b||"")); const tp=m&&MSG_TPL.find(x=>x[0]===m[1]); return tp?(tp[2][lang]||tp[2].en):String(b||""); };
 let MSG_TO=null, MSG_TP=null;
+/* ---------- Owner: anti-cheat limits + emergency clean-up ---------- */
+function secAdmin(){ const box=$("#secAdm"); if(!box||box.dataset.on) return; box.dataset.on="1"; const es=S.lang==="es";
+  box.innerHTML=`<div style="border:2px solid #EF4444;border-radius:16px;padding:12px;margin-bottom:14px"><h2 style="margin-top:0">🛡️ ${es?"Seguridad contra trampas":"Anti-cheat"}</h2>
+    <label style="display:block;margin:6px 0"><span class="hint">${es?"Máximo de anuncios por semana en la competencia (el que pase, no sale en el ranking ni gana premio)":"Max weekly ads on the board"}</span><input class="field" id="secAds" type="number" min="50" inputmode="numeric" style="width:100%;box-sizing:border-box"></label>
+    <label style="display:block;margin:6px 0"><span class="hint">${es?"Máximo por retiro en dólares (si piden más, se rechaza solo)":"Max USD per withdrawal (more = auto-rejected)"}</span><input class="field" id="secPay" type="number" step="0.01" min="0.001" inputmode="decimal" style="width:100%;box-sizing:border-box"></label>
+    <button class="mini" id="secSave" style="width:100%;margin-top:4px">💾 ${es?"Guardar límites":"Save limits"}</button>
+    <div id="secInfo" class="hint" style="margin:10px 0 6px">${t("mkLoading")}</div>
+    <button class="claimbtn" id="secPurge" style="background:#DC2626 !important;background-image:none !important;color:#fff !important">🚨 ${es?"Limpiar ahora":"Clean up now"}</button><p class="msg" id="secMsg"></p></div>`;
+  const info=async()=>{ try{ const c=await d1Post("purge",{dry:true}); $("#secAds").value=c.lim.ads; $("#secPay").value=c.lim.pay;
+      $("#secInfo").innerHTML=es?`Al tocar <b>Limpiar ahora</b>:<br>• Se quitan <b>${c.vips}</b> VIP (solo quedas tú) y se anulan <b>${c.vreq}</b> pedidos de VIP<br>• Se rechazan <b>${c.pays}</b> retiros pendientes de más de $${c.lim.pay} (suman $${(+c.payUsd).toFixed(2)})<br>• Salen del ranking <b>${c.ads}</b> jugadores con más de ${c.lim.ads} anuncios (esta semana y la pasada)`
+        :`Clean up: remove ${c.vips} VIPs, reject ${c.pays} withdrawals over $${c.lim.pay}, hide ${c.ads} players over ${c.lim.ads} ads.`; return c; }
+    catch(e){ $("#secInfo").textContent="⚠️ "+String(e&&e.message||e); } };
+  $("#secSave").onclick=async()=>{ try{ await d1Post("seclim",{set:true,ads:+$("#secAds").value,pay:+$("#secPay").value}); $("#secMsg").textContent=es?"✅ Límites guardados":"✅ Saved"; info(); }catch(e){ $("#secMsg").textContent="⚠️ "+String(e&&e.message||e); } };
+  $("#secPurge").onclick=async()=>{ const c=await info(); if(!c) return;
+    if(!confirm(es?`¿Seguro? Se quitan ${c.vips} VIP, se rechazan ${c.pays} retiros y salen ${c.ads} del ranking. Esto no se puede deshacer.`:"Sure? This can't be undone.")) return;
+    const b=$("#secPurge"); b.disabled=true; try{ const r=await d1Post("purge",{}); $("#secMsg").textContent=es?`✅ Listo: ${r.vips} VIP quitados, ${r.pays} retiros rechazados, ${r.ads} fuera del ranking.`:"✅ Done"; toast(es?"🛡️ Limpieza hecha":"🛡️ Cleaned","pay"); info(); try{ loadAdmin(); }catch(e){} }
+    catch(e){ $("#secMsg").textContent="⚠️ "+String(e&&e.message||e); } b.disabled=false; };
+  info(); }
 /* ---------- Owner: investigate one player (by ID or ranking name) ---------- */
 function spyAdmin(){ const box=$("#spyAdm"); if(!box||box.dataset.on) return; box.dataset.on="1"; const es=S.lang==="es";
   box.innerHTML=`<div style="border:2px solid #38BDF8;border-radius:16px;padding:12px;margin-bottom:14px"><h2 style="margin-top:0">🔎 ${es?"Investigar jugador":"Investigate player"}</h2>
@@ -3764,7 +3817,7 @@ function adjWire(d,reload){ const es=S.lang==="es", L=d.lb||{}, who=(L.nick||"He
     try{ await d1Post("adjust",{uid:d.uid,units,note:$("#adjNote").value.trim()}); toast((sign>0?"➕ ":"➖ ")+"$"+v+" · "+who,"pay"); setTimeout(reload,600); }
     catch(e){ msg.textContent="⚠️ "+String(e&&e.message||e); b1.disabled=b2.disabled=false; } };
   $("#adjAdd").onclick=()=>run(1); $("#adjSub").onclick=()=>run(-1); }
-function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X=d.x||{}, D=v=>v?new Date(v).toLocaleString():"—", E=escapeHtml;
+function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X0=d.x||{}, WL=d.wal, X=WL?{...X0,bal:WL.bal,staked:(WL.stakes||[]).filter(x=>x.asset==="USD").reduce((a,x)=>a+x.amt,0)}:X0, D=v=>v?new Date(v).toLocaleString():"—", E=escapeHtml;
   const ct={}; (d.ctot||[]).forEach(c=>ct[c.t||"?"]={n:c.n,u:c.u||0});
   const TN={adj:es?"Ajustes del dueño":"Owner adjustments",task:es?"Tareas pagadas":"Paid tasks",deposit:es?"Recargas":"Deposits",prize:es?"Premios":"Prizes",refund:es?"Devoluciones":"Refunds",reject:es?"Compras rechazadas":"Rejected buys"};
   const paid=(d.pays||[]).filter(p=>p.st==="paid"||p.status==="paid").reduce((a,p)=>a+(parseFloat(p.amountUsd)||0),0);
@@ -3791,7 +3844,7 @@ function spyHTML(d){ const es=S.lang==="es", L=d.lb||{}, X=d.x||{}, D=v=>v?new D
       <div style="display:flex;gap:6px;margin-top:6px"><button class="mini" id="adjAdd" data-uid="${E(d.uid)}" style="flex:1;background:#16A34A !important;background-image:none !important;color:#fff !important">➕ ${es?"Poner":"Add"}</button><button class="mini" id="adjSub" data-uid="${E(d.uid)}" style="flex:1;background:#DC2626 !important;background-image:none !important;color:#fff !important">➖ ${es?"Quitar":"Remove"}</button></div>
       <p class="hint" id="adjMsg" style="margin:6px 0 0">${es?"Se le aplica cuando abra el juego (si ya está jugando, en unos minutos).":"Applied when the player opens the game."}</p></div>
     ${row(es?"Última vez en el juego":"Last seen",D(L.seen))}${row("VIP",d.vip&&d.vip.until>Date.now()?"VIP "+(d.vip.tier||1)+(es?" hasta ":" until ")+new Date(d.vip.until).toLocaleDateString():(es?"No":"No"))}
-    ${row(es?"Saldo ahora":"Balance now",usd(X.bal||0))}${row(es?"En staking":"Staked",usd(X.staked||0)+(st.length?` (${st.length})`:""))}${row("DMT",nf(X.dmt||0))}${row("NFT",d.nfts||0)}
+    ${row(es?"Saldo ahora (servidor)":"Balance now (server)",usd(X.bal||0)+(WL&&Object.keys(WL.hold||{}).length?" + "+Object.entries(WL.hold).map(([c,u])=>usd(u)+" "+c).join(", "):""))}${WL?row(es?"Ganado total / retirado / gastado":"Earned / withdrawn / spent",`${usd(WL.inc||0)} / ${usd(WL.out||0)} / ${usd(WL.spent||0)}`)+row(es?"Saldo con que empezó (del celular)":"Starting balance (from phone)",usd(WL.mig||0)):""}${row(es?"En staking":"Staked",usd(X.staked||0)+(st.length?` (${st.length})`:""))}${row("DMT",nf(X.dmt||0))}${row("NFT",d.nfts||0)}
     ${row(es?"Anuncios totales (nivel)":"Total ads (level)",nf(d.cl||0))}${row(es?"Ganado aprox. por anuncios y cofres":"Approx. earned from ads",usd(adEst))}
     ${row(es?"Ganado por referidos":"Earned from referrals",usd(refU)+` · ${(d.refsEarn||{}).n||0} ${es?"que generan":"earning"}`)}
     ${Object.entries(ct).map(([k,v])=>row(TN[k]||k,`${v.n} · ${v.u<0?"-":""}${usd(Math.abs(v.u))}`)).join("")}
@@ -3960,10 +4013,10 @@ function renderAdsTab(){
     if((d.title||"").trim().length<3||(d.text||"").trim().length<3){ toast(t("adNeedTxt")); return; }
     if(!/^https:\/\/[^\s]+\.[^\s]+/.test((d.url||"").trim())){ toast(t("adNeedUrl")); return; }
     let tx=""; if(adPayM!=="balance"){ tx=($("#adTx").value||"").trim(); if(tx.length<4){ toast(t("txHash")); return; } }
-    else { if((S.bal||0)<units){ toast(t("mkNoBal")); return; } S.bal-=units; save(); renderPay(); }
+    else { if((S.bal||0)<units){ toast(t("mkNoBal")); return; } if(!await wSpend(units,"ad")) return; }
     const ad={owner:UID,title:d.title.trim().slice(0,40),text:d.text.trim().slice(0,90),url:d.url.trim(),img:adImg||"",views,price:price.toFixed(2),units,shown:0,clicks:0,status:"review",pay:adPayM,tx,coinAmt:amt,at:Date.now()};
     try{ const r=await DB.collection("ads").add(ad); MY_ADS.unshift({...ad,id:r.id}); S.adDraft={}; adImg=""; save(); toast(t("adSent"),"ad"); renderAdsTab(); }
-    catch(e){ if(adPayM==="balance"){ S.bal+=units; save(); renderPay(); } toast(t("mkErr")); }
+    catch(e){ toast(adPayM==="balance"?(S.lang==="es"?"No se pudo publicar. Escríbenos por Telegram y te devolvemos el saldo.":"Could not publish. Contact us on Telegram for a refund."):t("mkErr")); }
   };
   const setSt=async(id,st)=>{ try{ await DB.doc("ads/"+id).update({status:st}); const a=MY_ADS.find(x=>x.id===id); if(a) a.status=st; renderAdsTab(); }catch(e){ toast(t("mkErr")); } };
   box.querySelectorAll("[data-pause]").forEach(b=>b.onclick=()=>setSt(b.dataset.pause,"paused"));
@@ -4116,7 +4169,7 @@ async function loadPrices(){
     for(const tk of tks) if(!got[tk]&&j[tk]&&j[tk].USD) got[tk]=j[tk].USD; }catch(e){} }
   if(Object.keys(got).length<tks.length/2){ try{ const j=await getJSON(`https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(JSON.stringify(tks.filter(x=>x!=="USDT").map(x=>x+"USDT")))}`);
     (j||[]).forEach(r=>{ const tk=r.symbol.replace(/USDT$/,""); if(!got[tk]) got[tk]=+r.price; }); if(!got.USDT) got.USDT=1; }catch(e){} }
-  if(Object.keys(got).length){ Object.assign(LIVE,got); liveStatus="ok"; liveAt=Date.now(); try{ localStorage.setItem(PRICE_KEY,JSON.stringify({p:LIVE,at:liveAt})); }catch(e){} }
+  if(Object.keys(got).length){ Object.assign(LIVE,got); try{ wCoins(); }catch(e){} liveStatus="ok"; liveAt=Date.now(); try{ localStorage.setItem(PRICE_KEY,JSON.stringify({p:LIVE,at:liveAt})); }catch(e){} }
   else liveStatus=liveAt?"stale":"est";
   renderPay(); if(typeof renderDeposit==="function") renderDeposit();
 }
@@ -4126,7 +4179,7 @@ const holdOf=tk=>((S.hold||{})[tk]||0);
 function setPayCoin(nt,done){
   const old=S.payCoin, bal=S.bal||0, es=S.lang==="es";
   if(!nt||nt===old){ if(done) done(); return; }
-  const apply=()=>{ if(bal>0){ const pr=LIVE[old]; if(!pr){ toast(t("swapNoPriceShort")); return false; } S.hold=S.hold||{}; S.hold[old]=(S.hold[old]||0)+bal/1e5/pr; S.bal=0; }
+  const apply=async()=>{ if(bal>0){ if(!LIVE[old]){ toast(t("swapNoPriceShort")); return false; } await wFlush(); const r=await wOp({k:"coin",c:old}); if(!r) return false; }   /* the server keeps the old coin's balance */
     S.payCoin=nt; save(); try{ cloudSave(true); }catch(e){} renderPay(); try{ renderSwap(); renderStake(); }catch(e){} if(done) done();
     toast((es?"Ahora cobras en ":"Now earning in ")+nt,"pay"); return true; };
   if(bal<=0||!LIVE[old]) return apply();
@@ -4187,7 +4240,7 @@ function renderPay(){
   $("#mapClaim").innerHTML=`<img src="${c.img}" alt="">${done>=20&&!already?t("requestBtn"):`${usd(S.bal||0)} · ${c.t} · ${done}/20`}`;
   $("#histList").innerHTML=S.payouts.length?S.payouts.slice().reverse().map(p=>{const pc=coinBy(p.coin);
     const eta=new Date(new Date(p.createdAt||Date.now()).getTime()+72*3600000).toLocaleString(LOC(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
-    const st=p.status==="refunded"?`<span class="badge local">${S.lang==="es"?"Devuelto":"Refunded"}</span>`:p.status==="paid"?`<span class="badge paid">${t("paid")}</span>`:(p.synced?`<span class="badge" title="${fmt(t("etaBy"),{d:eta})}">${t("pending")}<br><small style="font-weight:700;opacity:.85">${fmt(t("etaBy"),{d:eta})}</small></span>`:`<span class="badge local">${t("localOnly")}</span>`);
+    const st=p.status==="rejected"?`<span class="badge local" style="background:#7F1D1D;color:#fff">${S.lang==="es"?"Rechazado":"Rejected"}</span>`:p.status==="refunded"?`<span class="badge local">${S.lang==="es"?"Devuelto":"Refunded"}</span>`:p.status==="paid"?`<span class="badge paid">${t("paid")}</span>`:(p.synced?`<span class="badge" title="${fmt(t("etaBy"),{d:eta})}">${t("pending")}<br><small style="font-weight:700;opacity:.85">${fmt(t("etaBy"),{d:eta})}</small></span>`:`<span class="badge local">${t("localOnly")}</span>`);
     return `<div class="req"><img src="${pc.img}" alt=""><div class="grow">${p.date} · ${p.amountUsd?"$"+escapeHtml(p.amountUsd)+" · ":""}${pc.t} · ${METHODS[p.method].name}<br><span style="color:var(--muted)">${escapeHtml(p.account)}</span></div>${st}</div>`;}).join(""):`<p style="margin:0;font-weight:800">${t("noHistory")}</p>`;
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
@@ -4213,14 +4266,14 @@ async function submitPayout(){
   ledgerInit(); const reqU=Math.round(parseFloat(req.amountUsd||"0")*1e5), rb=robotInfo();
   req.chk={v:1,inc:Math.round(S.inc||0),out:Math.round(S.out||0),req:reqU,born:S.born||0,dev:DEV,claims:S.claims||0,fast:S.fastN||0,rn:rb.n,rsd:rb.sd,cap:S.capHits||0};
   $("#reqBtn").disabled=true;
-  let synced=false;
-  if(DB&&UID){
-    try{ await d1Post("payreq",{req}); synced=true; }catch(e){
-      try{ await DB.doc(`payouts/${UID}`).set({updatedAt:req.createdAt,last:key}); await DB.doc(`payouts/${UID}`).collection("requests").doc(key).set(req); synced=true; }catch(e2){ synced=false; } }
-  }
-  S.payouts=S.payouts.filter(p=>!(p.date===key&&p.status==="refunded")); S.payouts.push({...req,synced}); S.out=(S.out||0)+reqU; S.bal=0; if(S.hold) S.hold[S.payCoin]=0; save(); renderPay();
-  $("#reqMsg").textContent=synced?t("requested"):t("offline");
-  toast(synced?t("requested"):t("localOnly"),"pay");
+  let r=null; const es=S.lang==="es";
+  try{ await wFlush(); r=await d1Post("payreq",{req}); }catch(e){ $("#reqBtn").disabled=false;
+    $("#reqMsg").textContent=/nobal/.test(e.message)?(es?"Tu saldo en el servidor no alcanza.":"Your server balance is not enough."):(es?"Sin conexión con el servidor. Intenta de nuevo.":"No connection to the server. Try again."); try{ await wCall(); }catch(e2){} return; }
+  if(r.dup){ $("#reqMsg").textContent=t("requested"); return; }
+  const got={...req,amountUsd:r.amountUsd,units:r.units,amountCoin:LIVE[S.payCoin]?+(r.units/1e5/LIVE[S.payCoin]).toFixed(8):req.amountCoin,synced:true};   /* what the server really took */
+  S.payouts=S.payouts.filter(p=>!(p.date===key&&p.status==="refunded")); S.payouts.push(got); S.out=(S.out||0)+(r.units||0); if(r.w) wApply(r.w); save(); renderPay();
+  $("#reqMsg").textContent=t("requested")+((r.units||0)<reqU-1?(es?` · Máximo $${r.amountUsd} por retiro, el resto queda en tu saldo.`:` · Max $${r.amountUsd} per withdrawal; the rest stays in your balance.`):"");
+  toast(t("requested"),"pay");
 }
 $("#reqBtn").onclick=submitPayout;
 let PAYR_AT=0;
@@ -4390,7 +4443,7 @@ const startDB=(async()=>{
     if(!window.claude||!window.claude.use){ loadMarket(); return; }
     const [db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")]);
     if(!db||!user){ loadMarket(); return; }
-    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; lvlRestore(); try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); window.__OWNER=!!OWNER; if(OWNER){ try{ renderVip(); renderText(); }catch(e){} } loadCfg(); loadAds(); setTimeout(beat,4000); setTimeout(inboxCheck,7000); setInterval(()=>{ if(!document.hidden) inboxCheck(); },10*60000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },10*60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
+    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; lvlRestore(); setTimeout(()=>{ try{ wCall().catch(()=>{}); }catch(e){} },1200);   /* real balance from the server wallet */ try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); window.__OWNER=!!OWNER; if(OWNER){ try{ renderVip(); renderText(); }catch(e){} } loadCfg(); loadAds(); setTimeout(beat,4000); setTimeout(inboxCheck,7000); setInterval(()=>{ if(!document.hidden) inboxCheck(); },10*60000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },10*60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
     let fullStarted=false;
     const startFull=async()=>{ if(fullStarted||!UID||!isReg()) return; fullStarted=true;
       for(const p of (S.payouts||[]).filter(p=>!p.synced)){
@@ -4588,7 +4641,7 @@ async function buyRefsDialog(){
     bindPay("rf",{type:"refs",item:pk.n,usd:pk.usd},async()=>{ if((S.bal||0)<units) return;
       const id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
       const ord={id,type:"refs",item:pk.n,tokens:null,usd:pk.usd.toFixed(2),units,coin:"USD",coinAmt:null,method:"balance",tx:"balance",status:"pending",at:Date.now()};
-      S.bal-=units; S.orders=[...(S.orders||[]),ord]; save(); renderPay();
+      if(!await wSpend(units,"refs")) return; S.orders=[...(S.orders||[]),ord]; save(); renderPay();
       await saveOrder(id,ord);
       closeModal(); toast(es?"Pedido enviado. Recibirás tus referidos pronto.":"Order sent. You'll get your referrals soon.","heroes"); }); };
   draw();
@@ -4884,7 +4937,7 @@ function openChest(n,magic){
     const st=$("#stage"); st.classList.add("shake");
     setTimeout(()=>{st.classList.remove("shake");st.classList.add("open");},450);
     let info="";
-    const er=earn((AD_UNITS+(c.units||0)*oldRate())*mult()); renderText();
+    ECTX={w:magic&&bwId?bwId:"main",n}; const er=earn((AD_UNITS+(c.units||0)*oldRate())*mult()); renderText();
     const pr=LIVE[coin.t], cTxt=u=>pr?`${nf(u/1e5/pr,6)} ${coin.t}`:`${usd(u)} ${t("inCoin")} ${coin.t}`, gotTxt=cTxt(er.main)+(er.bonus>0?` + Bonus ${cTxt(er.bonus)} (+${nf(er.pct,3)}%)`:"");
     const gotLine=`<span class="gotcoin"><img src="${coin.img}" alt="">+${gotTxt}</span>`;
     const adLine=`<small>${ic("ad",18)} ${t("adDone")}${vipTier()?" · VIP ×"+mult():""}</small>${bonusInfo()}`;
@@ -5023,7 +5076,7 @@ function restoreAd(){ let r=null; try{ r=JSON.parse(localStorage.getItem(AD_PK)|
 function cryptoTxt(units){ const c=coinBy(S.payCoin), pr=LIVE[c.t]; return pr?`${nf(units/1e5/pr,6)} ${c.t}`:`${usd(units)} ${t("inCoin")} ${c.t}`; }
 const adUnits=()=>Math.round(AD_UNITS*coinRate()*(mult()+(gearPct()+lvlPct()+premPct())/100));
 const cryptoLine=()=>{ const c=coinBy(S.payCoin); return `<span class="gotcoin"><img src="${c.img}" alt="">+${cryptoTxt(adUnits())}</span>`; };
-function payAd(){ const r=earn(AD_UNITS*mult()); return cryptoTxt(r.main)+(r.bonus>0?` + Bonus ${cryptoTxt(r.bonus)} (+${nf(r.pct,3)}%)`:""); }
+function payAd(w,n){ ECTX={w:w||"main",n:+n||0}; const r=earn(AD_UNITS*mult()); return cryptoTxt(r.main)+(r.bonus>0?` + Bonus ${cryptoTxt(r.bonus)} (+${nf(r.pct,3)}%)`:""); }
 function chestAd(n,magic,title,key){
   const c=chestAt(n,magic);
   adModal(title,key,`<div class="chestpeek">${chestSVG(c.tier)}<span>${t("chestAdHint")}</span></div>`,()=>{ closeModal(); setTimeout(()=>openChest(n,magic),150); },{kind:"chest",n,magic:!!magic,bw:magic?bwId:null});
@@ -5046,8 +5099,8 @@ async function captchaGate(ctx,run,btn){
 }
 function resumeClaim(ctx){
   syncDay();
-  if(ctx.kind==="node"){ if(S.done!==ctx.n-1) return; const g=payAd(); renderText(); complete(ctx.n); toast(`${t("adDone")} · +${g}`,"ad"); return; }
-  if(ctx.kind==="magic"){ if(!BW[ctx.bw]) return; bwId=ctx.bw; magicMode=true; if(bwProg(ctx.bw)!==ctx.n-1){ renderMap(); return; } const g=payAd(); renderText(); completeMagic(ctx.n); renderMap(); toast(`${t("adDone")} · +${g}`,BW[ctx.bw].icon); return; }
+  if(ctx.kind==="node"){ if(S.done!==ctx.n-1) return; const g=payAd("main",ctx.n); renderText(); complete(ctx.n); toast(`${t("adDone")} · +${g}`,"ad"); return; }
+  if(ctx.kind==="magic"){ if(!BW[ctx.bw]) return; bwId=ctx.bw; magicMode=true; if(bwProg(ctx.bw)!==ctx.n-1){ renderMap(); return; } const g=payAd(ctx.bw,ctx.n); renderText(); completeMagic(ctx.n); renderMap(); toast(`${t("adDone")} · +${g}`,BW[ctx.bw].icon); return; }
   if(ctx.kind==="chest"){ if(ctx.magic){ if(!BW[ctx.bw]) return; bwId=ctx.bw; magicMode=true; if(bwProg(ctx.bw)!==ctx.n-1){ renderMap(); return; } } else if(S.done!==ctx.n-1) return; renderMap(); openChest(ctx.n,ctx.magic); }
 }
 async function captchaResume(){
@@ -5075,7 +5128,7 @@ function openNode(n){
   adModal(`${t("circle")} ${n}`,n,`<p class="amt" style="font-size:18px">${cryptoLine()}${vipTier()?"<small>VIP ×"+mult()+"</small>":""}${bonusInfo(AD_UNITS)}</p>`,
     async()=>{
       if(!await gate(n)) return;
-      closeModal(); const g=payAd(); renderText(); complete(n); toast(`${t("adDone")} · +${g}`,"ad");
+      closeModal(); const g=payAd("main",n); renderText(); complete(n); toast(`${t("adDone")} · +${g}`,"ad");
     },{kind:"node",n});
 }
 /* ---------- Crypto payments: buy gear + add balance (FaucetPay / Cwallet) ---------- */
@@ -5092,7 +5145,7 @@ function buyDialog(id){
       <button class="gold" id="pBal" ${(S.bal||0)>=units?"":"disabled"}>${ic("pay",24)}${t("payBal")} (${usd(S.bal||0)})</button>
       <button data-pm="faucetpay"><img src="${PAY.fp}" alt="">FaucetPay</button>
       <button data-pm="cwallet"><img src="${PAY.cw}" alt="">Cwallet</button><button data-cp="1" class="cryptobtn"><span class="cicons">${CRYPTO_ICONS()}</span>${t("cryptoBtn")}</button></div>`,[[t("close"),"no",closeModal]]);
-  $("#pBal").onclick=()=>{ if((S.bal||0)<units) return; S.bal-=units; tixUse("gear"); grantItem(id); save(); closeModal(); renderPay(); };
+  $("#pBal").onclick=async()=>{ if((S.bal||0)<units) return toast(noBalTxt()); if(!await wSpend(units,"gear")) return; tixUse("gear"); grantItem(id); save(); closeModal(); renderPay(); };
   document.querySelectorAll(".paylist [data-cp]").forEach(b=>b.onclick=()=>cryptoPay({type:"gear",item:id,usd:usdAmt}));
   document.querySelectorAll("[data-pm]").forEach(b=>b.onclick=()=>cryptoDialog({type:"gear",item:id,usd:usdAmt,method:b.dataset.pm}));
 }
@@ -5221,7 +5274,7 @@ function renderPresale(){
   const o=()=>({type:"token",usd:preUsd,tokens:Math.round(preUsd/DMT_PRICE)});
   $("#preBal").onclick=async()=>{ if(!ok()) return; const u=Math.round(preUsd*1e5); if((S.bal||0)<u) return;
     const ord={...o(),id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),units:u,usd:preUsd.toFixed(2),method:"balance",status:"approved",at:Date.now()};
-    S.bal-=u; S.dmtPre=(S.dmtPre||0)+ord.tokens; S.orders=[...(S.orders||[]),ord]; save(); renderPay(); renderPresale(); toast(fmt(t("preOk"),{n:nf(ord.tokens)}),"dmt");
+    if(!await wSpend(u,"dmt")) return; S.dmtPre=(S.dmtPre||0)+ord.tokens; S.orders=[...(S.orders||[]),ord]; save(); renderPay(); renderPresale(); toast(fmt(t("preOk"),{n:nf(ord.tokens)}),"dmt");
     if(DB&&UID) await saveOrder(ord.id,ord); };
   box.querySelectorAll("[data-pm]").forEach(b=>b.onclick=()=>{ if(ok()) cryptoDialog({...o(),method:b.dataset.pm}); });
   box.querySelectorAll("[data-cp]").forEach(b=>b.onclick=()=>{ if(ok()) cryptoPay(o()); });
@@ -5289,20 +5342,20 @@ function renderProofs(){
 }
 let CRED_AT=0;
 function applyCredit(id,x){
-  if(x.type==="deposit"){ incAdd(x.units); S.bal=(S.bal||0)+(x.units||0); toast(fmt(t("depOk"),{x:usd(x.units||0)}),"pay"); }
-  else if(x.type==="reject"){ const o=(S.orders||[]).find(o=>o.id===x.item); if(o&&o.method==="balance"&&o.status!=="rejected"&&o.units) S.bal=(S.bal||0)+o.units; if(o) o.status="rejected";
+  if(x.type==="deposit"){ incAdd(x.units); toast(fmt(t("depOk"),{x:usd(x.units||0)}),"pay"); }
+  else if(x.type==="reject"){ const o=(S.orders||[]).find(o=>o.id===x.item); if(o) o.status="rejected";
     showModal(S.lang==="es"?"Compra rechazada":"Purchase rejected",`<p>${S.lang==="es"?"No encontramos tu pago para esta compra, por eso fue <b>rechazada</b>. Si ya pagaste, escríbenos por Telegram con el comprobante (TX).":"We couldn't find your payment for this purchase, so it was <b>rejected</b>. If you already paid, contact us on Telegram with your proof (TX)."}</p>`,[[t("close"),"go",closeModal]]); S.claimed.push(id); return; }
-  else if(x.type==="refund"){ incAdd(x.units); S.bal=(S.bal||0)+(x.units||0); (S.payouts||[]).forEach(p=>{ if(p.date===x.item) p.status="refunded"; });
+  else if(x.type==="refund"){ incAdd(x.units); (S.payouts||[]).forEach(p=>{ if(p.date===x.item) p.status="refunded"; });
     { const es=S.lang==="es", rc=x.coin||((S.payouts||[]).find(p=>p.date===x.item)||{}).coin||"", ci=rc?coinBy(rc):null;
       showModal(es?"Moneda no disponible":"Coin not available",`<div class="promo" style="padding-top:6px">${ci?`<img src="${ci.img}" alt="" style="width:64px;height:64px;border-radius:50%;opacity:.55;filter:grayscale(1)">`:""}<p style="font-weight:900;font-size:17px">🚫 ${es?`No hay ${rc||"esa moneda"} disponible ahora.`:`${rc||"That coin"} is not available right now.`}</p><p>${es?`Tu retiro de <b>${usd(x.units||0)}</b> fue <b>devuelto a tu saldo</b>. <b>Selecciona otra moneda</b> y pide tu retiro de nuevo.`:`Your withdrawal of <b>${usd(x.units||0)}</b> was <b>returned to your balance</b>. <b>Choose another coin</b> and request it again.`}</p></div>`,
         [[t("close"),"no",closeModal],[es?"Elegir otra moneda":"Choose another coin","go",()=>{ closeModal(); goView("pay"); setTimeout(()=>{ const g=$("#coinGrid"); if(g) g.scrollIntoView({block:"center",behavior:"smooth"}); },300); }]]); } }
   else if(x.type==="refs"){ toast((S.lang==="es"?"👥 Recibiste ":"👥 You got ")+(x.got!=null?x.got:x.item)+(S.lang==="es"?" referidos":" referrals"),"heroes"); setTimeout(()=>{ try{ collectRef(true); }catch(e){} },500); }
   else if(x.type==="adj"){ const es=S.lang==="es", u=Math.round(+x.units||0);
-    if(u>0){ incAdd(u); S.bal=(S.bal||0)+u; showModal(es?"💰 Saldo agregado":"💰 Balance added",`<p class="amt">+${cryptoTxt(u)}</p>${x.note?`<p class="hint" style="text-align:center">${escapeHtml(x.note)}</p>`:""}`,[[t("close"),"go",closeModal]]); }
-    else if(u<0){ const take=Math.min(S.bal||0,-u); S.bal=Math.max(0,(S.bal||0)-take); S.inc=Math.max(0,(S.inc||0)-take); S.adjOut=(S.adjOut||0)+take;
+    if(u>0){ incAdd(u); showModal(es?"💰 Saldo agregado":"💰 Balance added",`<p class="amt">+${cryptoTxt(u)}</p>${x.note?`<p class="hint" style="text-align:center">${escapeHtml(x.note)}</p>`:""}`,[[t("close"),"go",closeModal]]); }
+    else if(u<0){ const take=Math.min(S.bal||0,-u); S.inc=Math.max(0,(S.inc||0)-take); S.adjOut=(S.adjOut||0)+take;
       showModal(es?"⚠️ Ajuste de saldo":"⚠️ Balance adjustment",`<p class="amt">-${cryptoTxt(take)}</p><p class="hint" style="text-align:center">${x.note?escapeHtml(x.note):(es?"Se corrigió tu saldo.":"Your balance was corrected.")}</p>`,[[t("close"),"go",closeModal]]); }
     renderPay(); }
-  else if(x.type==="task"){ incAdd(x.units); S.bal=(S.bal||0)+(x.units||0); toast((S.lang==="es"?"✅ Tarea completada: +":"✅ Task completed: +")+cryptoTxt(x.units||0),"pay"); }
+  else if(x.type==="task"){ incAdd(x.units); toast((S.lang==="es"?"✅ Tarea completada: +":"✅ Task completed: +")+cryptoTxt(x.units||0),"pay"); }
   else if(x.type==="key"&&x.item){ giveKey(x.item); toast(fmt(t("keyGot"),{w:t(BW[x.item].name)}),BW[x.item].icon); }
   else if(x.type==="hero"&&premBy(x.item)){ S.prem=S.prem||{}; S.prem[x.item]=true; S.ph=x.item; renderHeroes(); renderMap(); toast(fmt(t("premGot"),{x:premName(x.item),p:premBy(x.item).pct}),"heroes"); }
   else if(x.type==="xp"&&XP_PACKS[+x.item]){ grantXP(+x.item); }
@@ -5326,7 +5379,7 @@ async function collectCredits(force){
       { let mx=S.credAt||0; cs.docs.forEach(d=>{ const a=+(d.data().at)||0; if(a>mx) mx=a; }); S.credAt=mx||Date.now()-600000; if(full) S.credFull=Date.now(); }
       for(const d of cs.docs){ if(S.claimed.includes(d.id)) continue; applyCredit(d.id,d.data()); n++; }
     }catch(e){} }
-  if(n){ save(); renderPay(); renderShop(); renderBag(); renderText(); }
+  if(n){ save(); renderPay(); renderShop(); renderBag(); renderText(); try{ wCall(); }catch(e){} }
 }
 function buy(id){
   if(isCombo(id)){ const pr=comboPrice(id); if(S.coins<pr) return toast(fmt(t("noCoins"),{n:pr-S.coins})); S.coins-=pr; grantItem(id); return; }

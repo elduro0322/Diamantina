@@ -51,6 +51,7 @@ async function tasksPostback(request, env, token) {
   if (env.DB) {                                               // D1 (does not use the Firebase quota)
     await d1Init(env.DB);
     await env.DB.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(uid, "task_" + txid, now, JSON.stringify(rec)).run();
+    if (units > 0) await walCredit(env.DB, uid, "task_" + txid, units, now);   // straight into the server wallet
     return new Response("OK");
   }
   const tok = await fbToken(env);
@@ -134,7 +135,12 @@ async function d1Init(db) {
     "CREATE TABLE IF NOT EXISTS lbd (uid TEXT, day TEXT, td INTEGER, PRIMARY KEY (uid, day))",
     "CREATE INDEX IF NOT EXISTS lbd_day ON lbd (day)",
     "CREATE TABLE IF NOT EXISTS lbx (uid TEXT PRIMARY KEY, bal INTEGER, staked INTEGER, dmt INTEGER, dev TEXT, stk TEXT, at INTEGER, fx REAL DEFAULT 0, fxn INTEGER DEFAULT 0, fm INTEGER DEFAULT 0, fmn INTEGER DEFAULT 0)",
-    "CREATE TABLE IF NOT EXISTS lbc (uid TEXT PRIMARY KEY, cl INTEGER DEFAULT 0, at INTEGER)"   // total faucet claims (the level) — only ever goes up
+    "CREATE TABLE IF NOT EXISTS lbc (uid TEXT PRIMARY KEY, cl INTEGER DEFAULT 0, at INTEGER)",   // total faucet claims (the level) — only ever goes up
+    /* server wallet: the balance lives here; the phone only shows it */
+    "CREATE TABLE IF NOT EXISTS wal (uid TEXT PRIMARY KEY, bal REAL DEFAULT 0, hold TEXT DEFAULT '{}', inc REAL DEFAULT 0, out REAL DEFAULT 0, spent REAL DEFAULT 0, day TEXT, dm TEXT DEFAULT '{}', n INTEGER DEFAULT 0, last INTEGER DEFAULT 0, mig REAL DEFAULT 0, at INTEGER)",
+    "CREATE TABLE IF NOT EXISTS wled (uid TEXT, id TEXT, u REAL, at INTEGER, PRIMARY KEY (uid, id))",
+    "CREATE TABLE IF NOT EXISTS wstk (uid TEXT, id TEXT, asset TEXT, amt REAL, rew REAL, p INTEGER, start INTEGER, endt INTEGER, PRIMARY KEY (uid, id))",
+    "CREATE TABLE IF NOT EXISTS wmig (uid TEXT PRIMARY KEY, bal REAL, stk TEXT)"
   ].map(q => db.prepare(q)));
   D1_READY = true;
 }
@@ -160,10 +166,13 @@ async function visBoard(db, mo) {
   await metaSet(db, key, { list, final: !cur && Date.now() > Date.parse(next + "-01") + BOG + 3600000 }).run();
   return list;
 }
+const LIM0 = { ads: 600, pay: 0.10 };                     // anti-cheat: max weekly ads on the board, max USD per withdrawal
+const getLim = async db => { const m = await metaGet(db, "lim"); return { ...LIM0, ...((m && m.v) || {}) }; };
 async function buildComp(db, week, fs, fe, mo) {
+  const lim = await getLim(db);
   const snap = { ads: [], refs: [], vis: [], names: {}, heroes: {}, vips: {} };
   if (mo) snap.vis = await visBoard(db, mo);
-  const a = await db.prepare("SELECT w.uid, w.ads, l.nick, l.code, l.hero, l.vip FROM lbw w LEFT JOIN lb l ON l.uid = w.uid WHERE w.week = ? AND w.ads > 0 ORDER BY w.ads DESC LIMIT 150").bind(week).all();
+  const a = await db.prepare("SELECT w.uid, w.ads, l.nick, l.code, l.hero, l.vip FROM lbw w LEFT JOIN lb l ON l.uid = w.uid WHERE w.week = ? AND w.ads > 0 AND w.ads <= ? ORDER BY w.ads DESC LIMIT 150").bind(week, lim.ads).all();
   for (const x of a.results || []) { snap.ads.push({ uid: x.uid, n: x.ads }); snap.names[x.uid] = x.nick || ("Hero-" + (x.code || "")); if (x.hero) snap.heroes[x.uid] = x.hero; if (x.vip) snap.vips[x.uid] = x.vip; }
   const r = await db.prepare("SELECT by AS uid, COUNT(*) AS n FROM refs WHERE at >= ? AND at < ? AND via != 'bought' AND by != '' GROUP BY by ORDER BY n DESC LIMIT 150").bind(fs, fe).all();
   snap.refs = (r.results || []).map(x => ({ uid: x.uid, n: x.n }));
@@ -190,6 +199,136 @@ async function nftSnap(db) {
   await metaSet(db, "nft", v).run();
   return { ...v, at: Date.now() };
 }
+/* ===================== SERVER WALLET =====================
+   Every balance change is decided here. The phone sends "I watched the ad at circle N" and the
+   server pays at most what that circle can pay (once per game day), so editing the phone does nothing. */
+const WAL_MAX0 = 200000;                                     // moving to the server wallet: more than $2 saved on the phone = starts at 0
+const WAL_HOLD0 = 20000;                                     // coins held / coin staking brought from the phone: max $0.20
+const VIP_M = [1, 2, 3, 5, 10];
+const MAIN_CH = { 3: 4, 10: 10, 14: 12, 18: 20 };           // extra units of each chest (main path)
+const BW_CH = { 3: 10, 10: 20, 17: 40 };                     // bonus worlds
+const W_OK = ["main", "magic", "cars", "mush", "castle", "xmas", "pirate", "skel", "lava"];
+const STK = [{ d: 1, r: .0003 }, { d: 7, r: .003 }, { d: 30, r: .015 }, { d: 90, r: .06 }];
+const REF_T = [10, 15, 20, 25, 30];
+const VIP_USD = [2, 3.99, 8.99, 19.99];
+const COINS_OK = /^[A-Z0-9]{2,8}$/;
+const wDay = t => new Date(t).toISOString().slice(0, 10);   // game day resets at 00:00 UTC (7 pm Colombia)
+const r5 = v => Math.round(v * 10000) / 10000;
+async function vipTierOf(db, uid, now) { const v = await db.prepare("SELECT until, tier FROM vips WHERE uid = ?").bind(uid).first(); return v && v.until > now ? Math.min(4, Math.max(1, v.tier || 1)) : 0; }
+/* the wallet row (made on first use from the frozen copy of what the phone had, with the $2 rule) */
+async function walGet(db, uid, now, mig) {
+  let w = await db.prepare("SELECT * FROM wal WHERE uid = ?").bind(uid).first();
+  if (w) return w;
+  if (!(await metaGet(db, "walt0"))) {                       // first wallet ever: freeze what every phone had reported
+    await db.batch([db.prepare("INSERT OR IGNORE INTO wmig (uid, bal, stk) SELECT uid, bal, stk FROM lbx"), metaSet(db, "walt0", { at: now })]);
+  }
+  const m = await db.prepare("SELECT bal, stk FROM wmig WHERE uid = ?").bind(uid).first();
+  let bal = 0, hold = {}, q = [], stk = [];
+  if (m) {
+    const L = (() => { try { return JSON.parse(m.stk || "[]"); } catch (e) { return []; } })().filter(x => (x.a || "USD") === "USD" && x.amt > 0 && x.end > now);
+    const tot = (+m.bal || 0) + L.reduce((s, x) => s + (+x.amt || 0), 0);
+    if (tot <= WAL_MAX0) {
+      bal = Math.max(0, +m.bal || 0); stk = L.slice(0, 20);
+      let room = Math.min(WAL_HOLD0, WAL_MAX0 - tot);         // coins the phone says it holds (we can't check them, so small cap)
+      const H = (mig && typeof mig.hold === "object") ? mig.hold : {};
+      for (const [c, v] of Object.entries(H)) { if (!COINS_OK.test(c)) continue; const u = Math.min(room, Math.max(0, +v || 0)); if (u > 0) { hold[c] = r5(u); room -= u; } }
+      for (const x of (Array.isArray(mig && mig.cstk) ? mig.cstk : []).slice(0, 10)) { const u = Math.min(room, Math.max(0, +x.amt || 0)); if (u > 0 && COINS_OK.test(x.a || "") && x.end > now) { stk.push({ a: x.a, amt: u, rew: Math.min(u * .06, Math.max(0, +x.rew || 0)), end: x.end, p: x.p }); room -= u; } }
+    }
+  }
+  q.push(db.prepare("INSERT OR IGNORE INTO wal (uid, bal, hold, day, dm, at, mig) VALUES (?, ?, ?, ?, '{}', ?, ?)").bind(uid, bal, JSON.stringify(hold), wDay(now), now, bal));
+  stk.forEach((x, i) => q.push(db.prepare("INSERT OR IGNORE INTO wstk (uid, id, asset, amt, rew, p, start, endt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(uid, "m" + i, x.a || "USD", +x.amt, Math.max(0, Math.min(+x.amt * .06, +x.rew || 0)), Math.min(3, int(x.p, 3)), now, +x.end)));
+  await db.batch(q);
+  return await db.prepare("SELECT * FROM wal WHERE uid = ?").bind(uid).first();
+}
+/* one-time money in/out (deposit, task, prize, refund, sale, owner adjustment): never applied twice */
+function walApply(db, uid, id, u, now) {
+  return [db.prepare("UPDATE wal SET bal = MAX(0, bal + ?), inc = inc + MAX(0, ?), at = ? WHERE uid = ? AND NOT EXISTS (SELECT 1 FROM wled WHERE uid = ? AND id = ?)").bind(u, u, now, uid, uid, id),
+          db.prepare("INSERT OR IGNORE INTO wled (uid, id, u, at) VALUES (?, ?, ?, ?)").bind(uid, id, u, now)];
+}
+async function walCredit(db, uid, id, u, now) { if (!uid || !u) return; await walGet(db, uid, now); await db.batch(walApply(db, uid, id, u, now)); }
+const MONEY_T = { deposit: 1, task: 1, refund: 1, adj: 1, prize: 1 };
+async function walView(db, uid, now) {
+  const [w, s] = await db.batch([db.prepare("SELECT bal, hold, inc, out, spent, day, n FROM wal WHERE uid = ?").bind(uid), db.prepare("SELECT id, asset, amt, rew, p, start, endt FROM wstk WHERE uid = ? ORDER BY start").bind(uid)]);
+  const x = (w.results || [])[0] || { bal: 0, hold: "{}" };
+  return { bal: r5(x.bal || 0), hold: (() => { try { return JSON.parse(x.hold || "{}"); } catch (e) { return {}; } })(), stakes: (s.results || []).map(k => ({ id: k.id, asset: k.asset, amt: k.amt, rew: k.rew, p: k.p, start: k.start, end: k.endt })), today: x.day === wDay(now) ? x.n : 0, at: now };
+}
+/* finished staking goes back automatically */
+async function walStakeDue(db, uid, now) {
+  const r = await db.prepare("SELECT id, asset, amt, rew FROM wstk WHERE uid = ? AND endt <= ?").bind(uid, now).all(), L = r.results || [];
+  if (!L.length) return [];
+  const w = await db.prepare("SELECT hold FROM wal WHERE uid = ?").bind(uid).first(), hold = JSON.parse((w && w.hold) || "{}");
+  let usd = 0; for (const x of L) { if (x.asset === "USD") usd += x.amt + x.rew; else hold[x.asset] = r5((hold[x.asset] || 0) + x.amt + x.rew); }
+  const inc = L.reduce((s, x) => s + x.rew, 0);
+  await db.batch([db.prepare("UPDATE wal SET bal = bal + ?, hold = ?, inc = inc + ? WHERE uid = ?").bind(usd, JSON.stringify(hold), inc, uid), ...L.map(x => db.prepare("DELETE FROM wstk WHERE uid = ? AND id = ?").bind(uid, x.id))]);
+  return L;
+}
+async function walEarn(db, uid, w, items, now) {             // the ads the player watched since the last call
+  const day = wDay(now); let dm = {}, n = 0;
+  if (w.day === day) { try { dm = JSON.parse(w.dm || "{}"); } catch (e) {} n = w.n || 0; }
+  const m = VIP_M[await vipTierOf(db, uid, now)], since = Math.max(0, now - (w.last || 0));
+  let allow = 4 + Math.floor(since / 4000), add = 0, took = 0;   // at most 1 ad every 4 seconds (server clock)
+  for (const it of (Array.isArray(items) ? items : []).slice(0, 80)) {
+    if (allow <= 0 || n >= 260) break;
+    const wd = W_OK.includes(it.w) ? it.w : null, c = +it.n; if (!wd || !Number.isInteger(c) || c < 1 || c > 25) continue;
+    const k = wd + ":" + c, ch = (wd === "main" ? MAIN_CH : BW_CH)[c] || 0, bon = Math.min(100, Math.max(0, +it.b || 0));
+    const cur = Array.isArray(dm[k]) ? dm[k] : [+dm[k] || 0, dm[k] ? 1 : 0], maxN = wd !== "main" && c === 17 ? 2 : 1;   // each circle pays once a day
+    const cap = (10 + ch) * m * (1 + bon / 100), left = cap - cur[0]; if (left <= 1e-6 || cur[1] >= maxN) continue;
+    const g = r5(Math.min(left, Math.max(0, +it.u || 0))); if (g <= 0) continue;
+    dm[k] = [r5(cur[0] + g), cur[1] + 1]; add += g; n++; allow--; took++;
+  }
+  const q = [db.prepare("UPDATE wal SET bal = bal + ?, inc = inc + ?, day = ?, dm = ?, n = ?, last = ?, at = ? WHERE uid = ?").bind(add, add, day, JSON.stringify(dm), n, now, now, uid)];
+  if (add > 0) {                                             // whoever invited him gets his % right away (10-30% by VIP level)
+    const by = await db.prepare("SELECT by FROM refs WHERE uid = ?").bind(uid).first();
+    if (by && by.by && by.by !== uid) {
+      await walGet(db, by.by, now);
+      const com = r5(add * REF_T[await vipTierOf(db, by.by, now)] / 100);
+      q.push(db.prepare("UPDATE wal SET bal = bal + ?, inc = inc + ? WHERE uid = ?").bind(com, com, by.by),
+             db.prepare("INSERT INTO refearn (uid, by, base, total, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET by = excluded.by, base = refearn.base + excluded.base, total = refearn.total + excluded.total, at = excluded.at").bind(uid, by.by, add, com, now));
+    }
+  }
+  await db.batch(q);
+  return { add: r5(add), took };
+}
+async function walOp(db, uid, op, now) {                     // spend / stake / unstake / swap / change coin
+  const w = await db.prepare("SELECT bal, hold FROM wal WHERE uid = ?").bind(uid).first(); if (!w) return { error: "nowal" };
+  const hold = JSON.parse(w.hold || "{}"), src = a => a === "USD" ? w.bal : (hold[a] || 0);
+  if (op.k === "spend") {
+    const u = Math.max(0, Math.min(1e8, +op.u || 0)); if (!u) return { error: "bad" };
+    const r = await db.prepare("UPDATE wal SET bal = bal - ?, spent = spent + ?, at = ? WHERE uid = ? AND bal >= ?").bind(u, u, now, uid, u - 1e-6).run();
+    return r.meta && r.meta.changes ? {} : { error: "nobal" };
+  }
+  if (op.k === "stake") {
+    const a = op.a === "USD" ? "USD" : (COINS_OK.test(op.a || "") ? op.a : null), p = int(op.p, 3), u = r5(Math.max(0, +op.u || 0));
+    if (!a || !STK[p] || u < 100 || u > src(a) + 1e-6) return { error: u < 100 ? "min" : "nobal" };
+    const rew = a === "USD" ? Math.floor(u * STK[p].r) : r5(u * STK[p].r), id = now.toString(36) + Math.random().toString(36).slice(2, 5);
+    if (a === "USD") w.bal -= u; else hold[a] = r5(hold[a] - u);
+    await db.batch([db.prepare("UPDATE wal SET bal = ?, hold = ?, at = ? WHERE uid = ?").bind(w.bal, JSON.stringify(hold), now, uid),
+      db.prepare("INSERT INTO wstk (uid, id, asset, amt, rew, p, start, endt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(uid, id, a, u, rew, p, now, now + STK[p].d * 86400000)]);
+    return { id };
+  }
+  if (op.k === "unstake") {                                  // early = only the amount comes back
+    const x = await db.prepare("SELECT asset, amt, rew, endt FROM wstk WHERE uid = ? AND id = ?").bind(uid, str(op.id, 20)).first(); if (!x) return { error: "gone" };
+    const back = x.amt + (x.endt <= now ? x.rew : 0);
+    if (x.asset === "USD") w.bal += back; else hold[x.asset] = r5((hold[x.asset] || 0) + back);
+    await db.batch([db.prepare("UPDATE wal SET bal = ?, hold = ?, inc = inc + ?, at = ? WHERE uid = ?").bind(w.bal, JSON.stringify(hold), x.endt <= now ? x.rew : 0, now, uid), db.prepare("DELETE FROM wstk WHERE uid = ? AND id = ?").bind(uid, str(op.id, 20))]);
+    return { back };
+  }
+  if (op.k === "swap") {                                     // 2% fee; amounts in USD units
+    const f = op.f === "USD" ? "USD" : (COINS_OK.test(op.f || "") ? op.f : null), t = op.t === "USD" ? "USD" : (COINS_OK.test(op.t || "") ? op.t : null), u = r5(Math.max(0, +op.u || 0));
+    if (!f || !t || f === t || u < 10 || u > src(f) + 1e-6) return { error: "nobal" };
+    const out = r5(u * 0.98);
+    if (f === "USD") w.bal -= u; else hold[f] = r5(Math.max(0, hold[f] - u));
+    if (t === "USD") w.bal += out; else hold[t] = r5((hold[t] || 0) + out);
+    await db.prepare("UPDATE wal SET bal = ?, hold = ?, at = ? WHERE uid = ?").bind(w.bal, JSON.stringify(hold), now, uid).run();
+    return { out };
+  }
+  if (op.k === "coin") {                                     // new payout coin: what was earned stays in the old coin
+    const c = COINS_OK.test(op.c || "") ? op.c : null; if (!c) return { error: "bad" };
+    if (w.bal > 0) { hold[c] = r5((hold[c] || 0) + w.bal); await db.prepare("UPDATE wal SET bal = 0, hold = ?, at = ? WHERE uid = ?").bind(JSON.stringify(hold), now, uid).run(); }
+    return {};
+  }
+  return { error: "bad" };
+}
 async function nftPost(a, db, me, body, now) {
   const id = int(body.id, NFT_MAX);
   if (a === "mine") {                                      // my NFTs + money from my NFTs that were sold
@@ -198,7 +337,8 @@ async function nftPost(a, db, me, body, now) {
       db.prepare("SELECT id FROM nfts WHERE owner = ?").bind(me.uid)
     ]);
     let sold = [];
-    if (up.meta && up.meta.changes) sold = (await db.prepare("SELECT nft, units, gets FROM sales WHERE seller = ? AND cat = ?").bind(me.uid, now).all()).results || [];
+    if (up.meta && up.meta.changes) sold = (await db.prepare("SELECT nft, units, gets, at FROM sales WHERE seller = ? AND cat = ?").bind(me.uid, now).all()).results || [];
+    if (sold.length && !me.anon) { await walGet(db, me.uid, now); await db.batch(sold.flatMap(x => walApply(db, me.uid, "sale-" + x.nft + "-" + x.at, +x.gets || 0, now))); }   // same id as at sale time: never paid twice
     return { my: (my.results || []).map(x => x.id), sold };
   }
   if (a === "claim") {                                     // chest / welcome gift: a random free NFT from the allowed pool
@@ -235,6 +375,9 @@ async function nftPost(a, db, me, body, now) {
   }
   if (a === "buy") {                                       // all-or-nothing: listing -> sold, sale record, new owner
     const units = int(body.units, 1e7), fee = Math.ceil(units * NFT_FEE / 100);
+    if (!units) return { error: "bad" };
+    await walGet(db, me.uid, now);                           // the buyer pays from the server wallet first
+    const sp = await walOp(db, me.uid, { k: "spend", u: units }, now); if (sp.error) return { error: "nobal" };
     const [r] = await db.batch([
       db.prepare("UPDATE market SET status = 'sold', buyer = ?, soldAt = ? WHERE nft = ? AND status = 'open' AND seller != ? AND units = ? AND seller = (SELECT owner FROM nfts WHERE id = ?)").bind(me.uid, now, id, me.uid, units, id),
       db.prepare("INSERT INTO sales (nft, seller, buyer, units, fee, gets, at, claimed) SELECT nft, seller, buyer, units, ?, ?, soldAt, 0 FROM market WHERE nft = ? AND buyer = ? AND soldAt = ? AND status = 'sold'").bind(fee, units - fee, id, me.uid, now),
@@ -243,15 +386,20 @@ async function nftPost(a, db, me, body, now) {
       db.prepare("INSERT INTO meta (k, v, at) SELECT 'fee', json_object('sum', ?, 'n', 1), ? WHERE EXISTS (SELECT 1 FROM market WHERE nft = ? AND buyer = ? AND soldAt = ?) ON CONFLICT(k) DO UPDATE SET v = json_object('sum', json_extract(meta.v, '$.sum') + ?, 'n', json_extract(meta.v, '$.n') + 1), at = excluded.at").bind(fee, now, id, me.uid, now, fee),
       dropNft(db)
     ]);
-    if (!(r.meta && r.meta.changes)) return { error: "gone" };
-    return { fee, units };
+    if (!(r.meta && r.meta.changes)) { await db.batch(walApply(db, me.uid, "nftback-" + id + "-" + now, units, now)); return { error: "gone" }; }   // not sold: money back
+    const sl = await db.prepare("SELECT seller FROM market WHERE nft = ? AND buyer = ? AND soldAt = ?").bind(id, me.uid, now).first();
+    if (sl && sl.seller) await walCredit(db, sl.seller, "sale-" + id + "-" + now, units - fee, now);     // the seller is paid right away
+    return { fee, units, w: await walView(db, me.uid, now) };
   }
-  if (a === "wgrant") {                                    // world NFT (only 1 owner each)
+  if (a === "wgrant") {                                    // world NFT (only 1 owner each) — paid from the server wallet
     if (!id) return { error: "bad" };
+    const u = int(body.units, 1e8);
+    if (u > 0) { await walGet(db, me.uid, now); const sp = await walOp(db, me.uid, { k: "spend", u }, now); if (sp.error) return { error: "nobal" }; }
     await db.prepare("INSERT OR IGNORE INTO wnft (id, owner, at) VALUES (?, ?, ?)").bind(id, me.uid, now).run();
     const o = await db.prepare("SELECT owner FROM wnft WHERE id = ?").bind(id).first();
     await dropNft(db).run();
-    return o && o.owner === me.uid ? {} : { error: "sold" };
+    if (!(o && o.owner === me.uid)) { if (u > 0) await db.batch(walApply(db, me.uid, "wback-" + id + "-" + now, u, now)); return { error: "sold" }; }
+    return {};
   }
   if (a === "nftimport") {                                 // owner: copy from Firebase (small pieces)
     if (!me.owner) return { error: "owner" };
@@ -354,8 +502,16 @@ async function d1(request, env) {
     if (body.x && body.x.cl > 0) q.push(db.prepare("INSERT INTO lbc (uid, cl, at) VALUES (?, ?, ?) ON CONFLICT(uid) DO UPDATE SET cl = MAX(lbc.cl, excluded.cl), at = excluded.at").bind(me.uid, int(body.x.cl, 1e7), now));
     q.push(db.prepare("SELECT COALESCE(SUM(n - paid), 0) AS v FROM visits WHERE uid = ? AND n > paid").bind(me.uid));
     q.push(db.prepare("UPDATE visits SET paid = n WHERE uid = ? AND n > paid").bind(me.uid));
-    const res = await db.batch(q), vr = res[res.length - 2];
-    return json({ ok: true, vis: ((vr.results || [])[0] || {}).v || 0 });
+    const res = await db.batch(q), vr = res[res.length - 2], vis = ((vr.results || [])[0] || {}).v || 0;
+    if (vis > 0) await walCredit(db, me.uid, "vis-" + now, vis, now);    // paid visits go straight into the wallet
+    return json({ ok: true, vis });
+  }
+  if (a === "wal") {                                       // the wallet: ads watched (q) + one action (op) -> real balance
+    if (me.anon) return json({ ok: false, error: "register" }, 403);
+    const w = await walGet(db, me.uid, now, body.mig), due = await walStakeDue(db, me.uid, now);
+    const e = Array.isArray(body.q) && body.q.length ? await walEarn(db, me.uid, w, body.q, now) : { add: 0, took: 0 };
+    const o = body.op && typeof body.op === "object" ? await walOp(db, me.uid, body.op, now) : null;
+    return json({ ok: true, add: e.add, took: e.took, due: due.length, op: o, w: await walView(db, me.uid, now) });
   }
   if (a === "ref") {                                       // "player X was invited by Y"
     const by = str(body.by, 64).replace(/[^A-Za-z0-9]/g, "");
@@ -416,9 +572,22 @@ async function d1(request, env) {
   if (a === "payreq") {                                    // player asks for a withdrawal (one per game day; again only if it was refunded)
     if (me.anon) return json({ ok: false, error: "register" }, 403);
     const r0 = body.req || {}, date = str(r0.date, 10); if (!date) return json({ ok: false, error: "bad" }, 400);
-    const d = JSON.stringify({ ...r0, status: "pending" }).slice(0, 6000);
-    const r = await db.prepare("INSERT INTO pays (uid, date, st, at, d) VALUES (?, ?, 'pending', ?, ?) ON CONFLICT(uid, date) DO UPDATE SET st = 'pending', at = excluded.at, d = excluded.d WHERE pays.st = 'refunded'").bind(me.uid, date, now, d).run();
-    return json({ ok: true, n: (r.meta && r.meta.changes) || 0 });
+    const lim = await getLim(db), coin = COINS_OK.test(r0.coin || "") ? r0.coin : "";
+    if (!coin) return json({ ok: false, error: "bad" }, 400);
+    const old = await db.prepare("SELECT st FROM pays WHERE uid = ? AND date = ?").bind(me.uid, date).first();
+    if (old && old.st !== "refunded") return json({ ok: true, n: 0, dup: true });
+    await walGet(db, me.uid, now); await walStakeDue(db, me.uid, now);
+    const w = await db.prepare("SELECT bal, hold FROM wal WHERE uid = ?").bind(me.uid).first(), hold = JSON.parse(w.hold || "{}");
+    const have = (w.bal || 0) + (hold[coin] || 0), units = Math.floor(Math.min(have, lim.pay * 1e5));   // the server balance, max the limit per withdrawal
+    if (units < 1) return json({ ok: false, error: "nobal" }, 400);
+    const fromHold = Math.min(hold[coin] || 0, units), fromBal = units - fromHold; hold[coin] = r5((hold[coin] || 0) - fromHold); if (hold[coin] <= 0) delete hold[coin];
+    const pr = +r0.priceUsd > 0 ? +r0.priceUsd : 0, amountUsd = (units / 1e5).toFixed(5);
+    const d = JSON.stringify({ ...r0, amountUsd, units, holdCoin: 0, amountCoin: pr ? +(units / 1e5 / pr).toFixed(8) : null, status: "pending", srv: 1 }).slice(0, 6000);
+    const r = await db.batch([db.prepare("UPDATE wal SET bal = bal - ?, hold = ?, out = out + ?, at = ? WHERE uid = ? AND bal >= ?").bind(fromBal, JSON.stringify(hold), units, now, me.uid, fromBal - 1e-6),
+      db.prepare("INSERT INTO pays (uid, date, st, at, d) SELECT ?, ?, 'pending', ?, ? WHERE changes() > 0 ON CONFLICT(uid, date) DO UPDATE SET st = 'pending', at = excluded.at, d = excluded.d WHERE pays.st = 'refunded'").bind(me.uid, date, now, d)]);
+    if (!(r[0].meta && r[0].meta.changes)) return json({ ok: false, error: "nobal" }, 400);
+    const n = (r[1].meta && r[1].meta.changes) || 0;
+    return json({ ok: true, n, units, amountUsd, w: await walView(db, me.uid, now) });
   }
   if (a === "mypays") {
     const r = await db.prepare("SELECT date, st FROM pays WHERE uid = ? ORDER BY at DESC LIMIT 60").bind(me.uid).all();
@@ -431,7 +600,12 @@ async function d1(request, env) {
   }
   if (a === "vipreq") {
     const v = body.req || {};
-    await db.prepare("INSERT INTO vreq (uid, st, at, d) VALUES (?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET st = excluded.st, at = excluded.at, d = excluded.d").bind(me.uid, str(v.status, 12) || "pending", now, JSON.stringify(v).slice(0, 3000)).run();
+    let bal = v.method === "balance" && v.status === "active";
+    if (bal) { const tier = Math.max(1, int(v.tier, 4)); await walGet(db, me.uid, now); const sp = await walOp(db, me.uid, { k: "spend", u: Math.round(VIP_USD[tier - 1] * 1e5) }, now); if (sp.error) return json({ ok: false, error: "nobal" }, 400); }
+    const st = bal ? "active" : "pending";   // players can't mark their own crypto payment as approved
+    const q = [db.prepare("INSERT INTO vreq (uid, st, at, d) VALUES (?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET st = excluded.st, at = excluded.at, d = excluded.d").bind(me.uid, st, now, JSON.stringify({ ...v, status: st }).slice(0, 3000))];
+    if (bal) q.push(db.prepare("INSERT INTO vips (uid, until, tier, at) VALUES (?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET until = excluded.until, tier = excluded.tier, at = excluded.at").bind(me.uid, now + 365 * 86400000, Math.max(1, int(v.tier, 4)), now));
+    await db.batch(q);
     return json({ ok: true });
   }
   if (a === "mylvl") {                                    // the player's level backup: highest claim count ever saved, or the sum of his weekly ads
@@ -448,7 +622,7 @@ async function d1(request, env) {
     const r = await db.prepare("SELECT id, at, d FROM creds WHERE uid = ? AND at >= ? ORDER BY at LIMIT 200").bind(me.uid, Math.max(0, +body.since || 0)).all();
     return json({ ok: true, list: (r.results || []).map(x => ({ id: x.id, at: x.at, ...J(x.d) })) });
   }
-  if (["adm", "paystat", "ordstat", "vipset", "credit", "adjust", "prizes", "prizeset", "acct", "imp2", "risk", "assignrefs"].includes(a)) {
+  if (["adm", "paystat", "ordstat", "vipset", "credit", "adjust", "seclim", "purge", "prizes", "prizeset", "acct", "imp2", "risk", "assignrefs"].includes(a)) {
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
     const cred = (uid, id, d) => db.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(str(uid, 64), str(id, 90), now, JSON.stringify({ ...d, at: now }).slice(0, 3000));
     if (a === "adm") {                                     // everything waiting for the owner
@@ -479,29 +653,64 @@ async function d1(request, env) {
     if (a === "paystat") {                                 // owner: paid / refunded
       const st = body.st === "refunded" ? "refunded" : "paid", uid = str(body.uid, 64), date = str(body.date, 10);
       const q = [db.prepare("UPDATE pays SET st = ?, d = json_set(d, '$.status', ?) WHERE uid = ? AND date = ?").bind(st, st, uid, date)];
-      if (st === "refunded" && body.units > 0) q.push(cred(uid, "refund-" + date + "-" + now.toString(36), { type: "refund", item: date, units: int(body.units, 1e9), coin: str(body.coin, 10) }));
-      await db.batch(q); return json({ ok: true });
+      let ru = 0;
+      if (st === "refunded") { const pr = await db.prepare("SELECT st, d FROM pays WHERE uid = ? AND date = ?").bind(uid, date).first(); const pd = pr ? J(pr.d) : {};
+        if (pr && pr.st !== "refunded") ru = pd.srv ? +pd.units || 0 : int(body.units, 1e9); }      // server-made request: give back exactly what the server took
+      if (ru > 0) q.push(cred(uid, "refund-" + date + "-" + now.toString(36), { type: "refund", item: date, units: ru, coin: str(body.coin, 10) }));
+      await db.batch(q); if (ru > 0) await walCredit(db, uid, "refund-" + date + "-" + now.toString(36), ru, now); return json({ ok: true });
     }
     if (a === "ordstat") {                                 // owner: approve / reject a purchase
       const uid = str(body.uid, 64), id = str(body.id, 60), st = body.st === "rejected" ? "rejected" : "approved";
       const q = [db.prepare("UPDATE ords SET st = ? WHERE uid = ? AND id = ?").bind(st, uid, id)];
-      if (st === "rejected") q.push(cred(uid, "rej-" + id, { type: "reject", item: id }));
+      let back = 0;
+      if (st === "rejected") { q.push(cred(uid, "rej-" + id, { type: "reject", item: id }));
+        const o = await db.prepare("SELECT st, d FROM ords WHERE uid = ? AND id = ?").bind(uid, id).first(), od = o ? J(o.d) : {};
+        if (o && o.st !== "rejected" && od.method === "balance" && od.units > 0) back = Math.min(1e8, +od.units); }   // paid with balance -> money back
       else if (body.vip) q.push(db.prepare("INSERT INTO vips (uid, until, tier, at) VALUES (?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET until = excluded.until, tier = excluded.tier, at = excluded.at").bind(uid, int(body.vip.until, 9e15), int(body.vip.tier, 4) || 1, now));
       else if (body.credit) q.push(cred(uid, id, body.credit));
-      await db.batch(q); return json({ ok: true });
+      await db.batch(q);
+      if (back > 0) await walCredit(db, uid, "rej-" + id, back, now);
+      if (st !== "rejected" && body.credit && MONEY_T[body.credit.type] && +body.credit.units > 0) await walCredit(db, uid, "c-" + id, Math.min(1e8, +body.credit.units), now);
+      return json({ ok: true });
     }
     if (a === "vipset") {                                  // owner: activate / reject a VIP payment
       const uid = str(body.uid, 64), q = [db.prepare("UPDATE vreq SET st = ? WHERE uid = ?").bind(body.ok ? "active" : "rejected", uid)];
       if (body.ok) q.push(db.prepare("INSERT INTO vips (uid, until, tier, at) VALUES (?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET until = excluded.until, tier = excluded.tier, at = excluded.at").bind(uid, int(body.until, 9e15), int(body.tier, 4) || 1, now));
       await db.batch(q); return json({ ok: true });
     }
-    if (a === "credit") { await cred(body.uid, body.id, body.d || {}).run(); return json({ ok: true }); }
+    if (a === "credit") { const d = body.d || {}; await cred(body.uid, body.id, d).run();
+      if (MONEY_T[d.type] && +d.units > 0) await walCredit(db, str(body.uid, 64), "c-" + str(body.id, 90), Math.min(1e8, +d.units), now);   // deposits etc. go into the server wallet
+      return json({ ok: true }); }
+    if (a === "seclim") {                                  // owner: read / change the anti-cheat limits
+      const cur = await getLim(db);
+      if (body.set) { const v = { ads: Math.max(50, int(body.ads, 100000) || cur.ads), pay: Math.max(0.001, Math.min(1000, +body.pay || cur.pay)) }; await metaSet(db, "lim", v).run(); await db.prepare("DELETE FROM meta WHERE k LIKE 'comp:%'").run(); return json({ ok: true, lim: v }); }
+      return json({ ok: true, lim: cur });
+    }
+    if (a === "purge") {                                   // owner: emergency clean-up (dry = only count)
+      const lim = await getLim(db), wk0 = weekKey(), wk1 = weekKey(-1);
+      const [ads, vp, vr, py] = await db.batch([
+        db.prepare("SELECT COUNT(*) AS n FROM lbw WHERE week IN (?, ?) AND ads > ?").bind(wk0, wk1, lim.ads),
+        db.prepare("SELECT COUNT(*) AS n FROM vips WHERE uid != ?").bind(me.uid),
+        db.prepare("SELECT COUNT(*) AS n FROM vreq WHERE uid != ? AND st IN ('pending', 'active')").bind(me.uid),
+        db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(CAST(json_extract(d, '$.amountUsd') AS REAL)), 0) AS usd FROM pays WHERE st = 'pending' AND CAST(json_extract(d, '$.amountUsd') AS REAL) > ?").bind(lim.pay + 1e-9)
+      ]);
+      const c = { ads: (ads.results[0] || {}).n || 0, vips: (vp.results[0] || {}).n || 0, vreq: (vr.results[0] || {}).n || 0, pays: (py.results[0] || {}).n || 0, payUsd: (py.results[0] || {}).usd || 0, lim };
+      if (body.dry) return json({ ok: true, ...c });
+      await db.batch([
+        db.prepare("DELETE FROM vips WHERE uid != ?").bind(me.uid),
+        db.prepare("UPDATE vreq SET st = 'rejected', d = json_set(d, '$.status', 'rejected') WHERE uid != ? AND st IN ('pending', 'active')").bind(me.uid),
+        db.prepare("UPDATE pays SET st = 'rejected', d = json_set(d, '$.status', 'rejected') WHERE st = 'pending' AND CAST(json_extract(d, '$.amountUsd') AS REAL) > ?").bind(lim.pay + 1e-9),
+        db.prepare("DELETE FROM meta WHERE k LIKE 'comp:%'")
+      ]);
+      return json({ ok: true, done: true, ...c });
+    }
     if (a === "adjust") {                                  // owner: add (+) or remove (-) balance from one player
       const uid = str(body.uid, 64), u = Math.max(-1e9, Math.min(1e9, Math.round(+body.units || 0)));
       if (!uid || !u) return json({ ok: false, error: "bad" }, 400);
       const ok = await db.prepare("SELECT 1 AS x FROM lb WHERE uid = ?").bind(uid).first(); if (!ok) return json({ ok: false, error: "no_player" }, 404);
       const id = "adj-" + now.toString(36) + Math.random().toString(36).slice(2, 6);
       await cred(uid, id, { type: "adj", units: u, note: str(body.note, 120) }).run();
+      await walCredit(db, uid, id, u, now);
       return json({ ok: true, id });
     }
     if (a === "prizes") {                                  // which weekly / 15-day / monthly prizes were already credited
@@ -513,13 +722,16 @@ async function d1(request, env) {
       const k = "prize:" + str(body.k, 20), id = str(body.id, 20), old = (await metaGet(db, k)) || { v: {} };
       if (old.v[id]) return json({ ok: true, already: true });
       await db.batch([metaSet(db, k, { ...old.v, [id]: true }), cred(body.uid, "prize_" + str(body.k, 20) + "_" + id, { type: "deposit", units: int(body.units, 1e9), note: "weekly prize" })]);
+      await walCredit(db, str(body.uid, 64), "prize_" + str(body.k, 20) + "_" + id, int(body.units, 1e9), now);
       return json({ ok: true });
     }
     if (a === "acct") {                                    // accounting from D1
       const [o, p, c, x] = await db.batch([db.prepare("SELECT st, d FROM ords"), db.prepare("SELECT st, d FROM pays"),
         db.prepare("SELECT d FROM creds WHERE d LIKE '%weekly prize%'"), db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(bal), 0) AS bal, COALESCE(SUM(staked), 0) AS st, COALESCE(SUM(dmt), 0) AS dmt, COALESCE(SUM(fx), 0) AS fx, COALESCE(SUM(fxn), 0) AS fxn, COALESCE(SUM(fm), 0) AS fm, COALESCE(SUM(fmn), 0) AS fmn FROM lbx")]);
       return json({ ok: true, ords: (o.results || []).map(r => ({ ...J(r.d), status: r.st })), pays: (p.results || []).map(r => ({ amountUsd: J(r.d).amountUsd, status: r.st })),
-        prizes: (c.results || []).reduce((s, r) => s + (+J(r.d).units || 0), 0), lbx: (x.results || [])[0] || {} });
+        prizes: (c.results || []).reduce((s, r) => s + (+J(r.d).units || 0), 0), lbx: await (async () => { const L = (x.results || [])[0] || {};
+          const w = await db.batch([db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(bal), 0) AS bal FROM wal"), db.prepare("SELECT COALESCE(SUM(amt), 0) AS st FROM wstk WHERE asset = 'USD'")]);
+          const W = (w[0].results || [])[0] || {}; if (W.n) { L.bal = W.bal; L.st = ((w[1].results || [])[0] || {}).st || 0; } return L; })() });   // what players hold now = the server wallets
     }
     if (a === "imp2") {                                    // owner, once: copy the old Firebase withdrawals / purchases / VIP into D1
       const q = [];
@@ -584,12 +796,14 @@ async function d1(request, env) {
       ...mq.map(m => db.prepare("WITH c AS (SELECT uid, SUM(n) AS n FROM visits WHERE day >= ? AND day < ? GROUP BY uid HAVING SUM(n) > 0) SELECT COALESCE((SELECT n FROM c WHERE uid = ?), 0) AS n, (SELECT COUNT(*) FROM c WHERE n > COALESCE((SELECT n FROM c WHERE uid = ?), 0)) + 1 AS rank, (SELECT COUNT(*) FROM c) AS of").bind(m.a, m.b, u, u)),
       db.prepare("SELECT id, at, d FROM creds WHERE uid = ? AND id LIKE 'prize_%' ORDER BY at DESC LIMIT 60").bind(u)
     ]);
+    const [wa, ws] = await db.batch([db.prepare("SELECT bal, hold, inc, out, spent, mig, n, day FROM wal WHERE uid = ?").bind(u), db.prepare("SELECT asset, amt, rew, endt FROM wstk WHERE uid = ?").bind(u)]);
+    const wal = one(wa) ? { ...one(wa), hold: J(one(wa).hold), stakes: R(ws) } : null;
     const comp = { weeks: R(cq[0]), forts: fq.map((f, i) => ({ key: f.key, fs: f.fs, fe: f.fe, ...(one(cq[1 + i]) || {}) })), months: mq.map((m, i) => ({ mo: m.mo, ...(one(cq[1 + fq.length + i]) || {}) })),
       prizes: R(cq[cq.length - 1]).map(c => ({ id: c.id, at: c.at, ...J(c.d) })) };
     return json({ ok: true, uid: u, lb: one(lb), x: L ? { ...L, stk: J(L.stk) } : null, cl: Math.max((one(lc) || {}).cl || 0, wsum), vip: one(vp),
       weeks: R(wk), days: R(dy), by: one(by), refs: R(rf), same: R(sd), pays: R(py).map(p => ({ date: p.date, st: p.st, ...J(p.d) })),
       ords: R(od).map(o => ({ id: o.id, st: o.st, at: o.at, ...J(o.d) })), creds: R(cr).map(c => ({ id: c.id, at: c.at, ...J(c.d) })), ctot: R(ct),
-      refearn: one(re), refsEarn: one(rs), visits: (one(vs) || {}).n || 0, nfts: (one(nf) || {}).n || 0, comp });
+      refearn: one(re), refsEarn: one(rs), visits: (one(vs) || {}).n || 0, nfts: (one(nf) || {}).n || 0, comp, wal });
   }
   if (a === "msgfind" || a === "msgsend" || a === "msglist" || a === "msgdel") {
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
