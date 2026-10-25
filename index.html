@@ -1111,7 +1111,7 @@ main{overscroll-behavior-y:contain}
     <div class="seg admseg" id="adminTabs"></div>
     <div class="panel livebox" id="liveBox"><span class="livedot"></span><b id="liveN">…</b><span id="liveTxt"> jugadores activos ahora</span><small id="liveCoins"></small></div>
     <div id="adminStats"></div>
-    <div class="panel" id="adminPanel" hidden><div id="secAdm"></div><div id="spyAdm"></div><div id="msgAdm"></div><h2 data-t="admin"></h2><div id="adminList"></div></div>
+    <div class="panel" id="adminPanel" hidden><div id="secAdm"></div><div id="spyAdm"></div><div id="nftAdm"></div><div id="msgAdm"></div><h2 data-t="admin"></h2><div id="adminList"></div></div>
     <div class="panel" id="acctPanel" hidden></div>
     <div class="panel" id="calcPanel" hidden></div>
     <div id="adminCfg" hidden></div><div id="adminAds" hidden></div>
@@ -3510,7 +3510,7 @@ function renderAdmin(){
   const show={ads:"#adminAds",stats:"#adminStats",pays:"#adminPanel",acct:"#acctPanel",calc:"#calcPanel",cfg:"#adminCfg"};
   Object.entries(show).forEach(([k,sel])=>{ const el=$(sel); if(el) el.hidden=adminTab!==k; });
   if(adminTab==="stats") loadStats();
-  if(adminTab==="pays"){ try{ secAdmin(); }catch(e){} try{ spyAdmin(); }catch(e){} try{ msgAdmin(); }catch(e){} }
+  if(adminTab==="pays"){ try{ secAdmin(); }catch(e){} try{ spyAdmin(); }catch(e){} try{ nftAdmin(); }catch(e){} try{ msgAdmin(); }catch(e){} }
   if(adminTab==="pays") loadAdmin().then(()=>{ $("#acctPanel").hidden=true; $("#calcPanel").hidden=true; });
   if(adminTab==="acct") loadAccounting();
   if(adminTab==="calc") renderCalc();
@@ -3591,8 +3591,8 @@ function showTerms(){ const c=CONTACT?escapeHtml(CONTACT):t("termsNoContact"); s
 function applyCfg(c){
   if(!c) return;
   if(c.gameUrl&&/^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+\/?$/i.test(c.gameUrl.trim())&&!/claude\.ai|netlify|workers\.dev/.test(c.gameUrl)) GAME_URL=c.gameUrl.trim().replace(/\/?$/,"/");
-  if(c.fp) OWNER_PAY.faucetpay=c.fp; if(c.cw) OWNER_PAY.cwallet=c.cw;
-  ["BTC","USDT","ETH","BNB","LTC","SOL"].forEach(k=>{ if(typeof c[k]==="string"&&c[k].trim()&&OWNER_WALLETS[k]) OWNER_WALLETS[k].addr=c[k].trim(); });
+  /* SECURITY: the deposit wallets (crypto, FaucetPay, Cwallet) are fixed in the code. Saved settings can't change them,
+     so even someone who gets into the panel can never redirect players' payments to another wallet. */
   if(typeof c.contact==="string"&&c.contact.trim()) CONTACT=c.contact.trim();
   if(c.USDTnet) OWNER_WALLETS.USDT.net=c.USDTnet;
 }
@@ -3815,6 +3815,22 @@ function secAdmin(){ const box=$("#secAdm"); if(!box||box.dataset.on) return; bo
   $("#paidSave").onclick=async()=>{ const v=parseFloat(String($("#paidUsd").value).replace(",",".").replace(/[^0-9.]/g,"")), m=$("#paidMsg"); if(!(v>=0)){ m.textContent=es?"⚠️ Escribe un número, ej. 104":"⚠️ Enter a number"; return; }
     try{ const r=await d1Post("setpaid",{set:true,paidUsd:v}); m.textContent=(es?"✅ Guardado. Ahora dice: $":"✅ Saved: $")+r.paidUsd; toast(m.textContent,"pay"); try{ loadProofs(); }catch(e){} }catch(e){ m.textContent="⚠️ "+String(e&&e.message||e); } };
   info(); }
+/* ---------- Owner: NFT sales + take NFTs back ---------- */
+function nftAdmin(force){ const box=$("#nftAdm"); if(!box||(box.dataset.on&&!force)) return; box.dataset.on="1"; const es=S.lang==="es", E=escapeHtml;
+  box.innerHTML=`<div style="border:2px solid #A78BFA;border-radius:16px;padding:12px;margin-bottom:14px"><h2 style="margin-top:0">🖼️ ${es?"NFT vendidos · recuperar":"NFT sales · take back"}</h2><div id="nftAdmIn"><p class="hint">${t("mkLoading")}</p></div></div>`;
+  (async()=>{ try{ const d=await d1Post("nftsales",{days:30}), B=d.banned||{}, L=(d.sales||[]);
+    const who=(nk,cd,uid,bn)=>`${E(nk||"Hero-"+(cd||codeOf(uid)))} · ${E(cd||codeOf(uid))}${bn?" 🚫":""}`;
+    $("#nftAdmIn").innerHTML=`<div class="req" style="display:block"><b>🚫 ${es?"En cuentas bloqueadas":"In blocked accounts"}:</b> ${B.nfts} NFT · ${B.wnft} ${es?"NFT de mundo":"world NFT"} · ${B.listings} ${es?"en venta":"listed"}
+        <button class="mini" id="nftBanBack" ${B.nfts+B.wnft+B.listings?"":"disabled"} style="width:100%;margin-top:6px">↩️ ${es?"Recuperar todos esos NFT":"Take them all back"}</button>
+        <p class="hint" style="margin:4px 0 0">${es?"Si el bloqueado lo compró, vuelve a quien se lo vendió. Si lo sacó de un cofre, queda libre otra vez para los cofres.":"Bought ones go back to the seller; chest ones become free again."}</p></div>
+      <p class="hint" style="margin:10px 0 4px"><b>${es?`Ventas de los últimos 30 días (${L.length})`:`Sales, last 30 days (${L.length})`}</b> · ${es?"vendedor → comprador":"seller → buyer"}</p>
+      ${L.length?L.map(x=>{ const can=x.owner===x.buyer; return `<div class="req" style="align-items:center"><div class="grow"><b>NFT #${String(x.nft).padStart(3,"0")}</b> · ${usd(x.units||0)}<br><span style="font-size:12.5px">${who(x.sn,x.sc,x.seller,x.sb)} → ${who(x.bnk,x.bc,x.buyer,x.bb)}</span><br><span style="color:var(--muted);font-size:12px">${new Date(x.at).toLocaleString()}</span></div>
+        ${can?`<button class="mini nftundo" data-s="${x.id}" data-n="${x.nft}" style="background:#5B21B6">↩️ ${es?"Devolver al vendedor":"Back to seller"}</button>`:`<span class="hint" style="font-size:11.5px">${es?"ya cambió de dueño":"owner changed"}</span>`}</div>`; }).join(""):`<p class="hint">${es?"No hubo ventas.":"No sales."}</p>`}`;
+    const bb=$("#nftBanBack"); if(bb) bb.onclick=async()=>{ if(!confirm(es?`¿Recuperar ${B.nfts} NFT, ${B.wnft} NFT de mundo y quitar ${B.listings} de la venta?`:"Take them back?")) return; bb.disabled=true;
+      try{ const r=await d1Post("nftfix",{op:"banned"}); toast(es?`↩️ ${r.back} devueltos a su dueño anterior · ${r.free} libres otra vez · ${r.wnft} de mundo · ${r.listings} quitados de la venta`:"Done","gem"); NFT_SNAP_AT=0; nftAdmin(true); }catch(e){ bb.disabled=false; toast("⚠️ "+String(e&&e.message||e)); } };
+    $("#nftAdmIn").querySelectorAll(".nftundo").forEach(b=>b.onclick=async()=>{ if(!confirm(es?`¿Devolver el NFT #${b.dataset.n} a quien lo vendió?`:"Give it back to the seller?")) return; b.disabled=true;
+      try{ const r=await d1Post("nftfix",{op:"undo",sale:+b.dataset.s}); toast(r.done?(es?"↩️ NFT devuelto al vendedor":"↩️ Returned"):(es?"Ese NFT ya cambió de dueño":"Owner changed"),"gem"); NFT_SNAP_AT=0; nftAdmin(true); }catch(e){ b.disabled=false; toast("⚠️ "+String(e&&e.message||e)); } });
+  }catch(e){ $("#nftAdmIn").innerHTML=`<p class="hint">⚠️ ${E(String(e&&e.message||e))}</p>`; } })(); }
 /* ---------- Owner: investigate one player (by ID or ranking name) ---------- */
 function spyAdmin(){ const box=$("#spyAdm"); if(!box||box.dataset.on) return; box.dataset.on="1"; const es=S.lang==="es";
   box.innerHTML=`<div style="border:2px solid #38BDF8;border-radius:16px;padding:12px;margin-bottom:14px"><h2 style="margin-top:0">🔎 ${es?"Investigar jugador":"Investigate player"}</h2>
@@ -3944,7 +3960,9 @@ function renderCfg(){ renderCfg0(); try{ dlAdmin(); }catch(e){} }
 function renderCfg0(){
   const box=$("#adminCfg"); if(!box) return; const c=cfgNow();
   box.innerHTML=`<div class="panel"><h2>${ic("heroes",28)} ${t("admCfg")}</h2><p class="hint" style="margin-top:0">${t("cfgSub")}</p>
-    ${CFG_FIELDS.map(([k,l])=>`<label class="cfgf"><span>${t(l)}</span><input class="field" data-k="${k}" value="${escapeHtml(c[k]||"")}" autocomplete="off" spellcheck="false"></label>`).join("")}
+    ${CFG_FIELDS.map(([k,l])=>{ const lock=/^(fp|cw|BTC|USDT|USDTnet|ETH|BNB|LTC|SOL)$/.test(k), v=lock?(cfgNow()[k]||""):(c[k]||"");
+      return `<label class="cfgf"><span>${t(l)}${lock?" 🔒":""}</span><input class="field" ${lock?"readonly disabled style=\"opacity:.7\"":`data-k="${k}"`} value="${escapeHtml(v)}" autocomplete="off" spellcheck="false"></label>`; }).join("")}
+    <p class="hint">🔒 ${S.lang==="es"?"Las billeteras de depósito están fijas en el código por seguridad: nadie puede cambiarlas desde el panel.":"Deposit wallets are fixed in the code for security."}</p>
     <button class="claimbtn" id="cfgSave" style="margin-top:12px">${t("save")}</button><p class="msg" id="cfgMsg"></p></div>`;
   $("#cfgSave").onclick=async()=>{
     const n={}; box.querySelectorAll("input[data-k]").forEach(i=>n[i.dataset.k]=i.value.trim());

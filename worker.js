@@ -638,7 +638,7 @@ async function d1(request, env) {
     const r = await db.prepare("SELECT id, at, d FROM creds WHERE uid = ? AND at >= ? ORDER BY at LIMIT 200").bind(me.uid, Math.max(0, +body.since || 0)).all();
     return json({ ok: true, list: (r.results || []).map(x => ({ id: x.id, at: x.at, ...J(x.d) })) });
   }
-  if (["adm", "paystat", "ordstat", "vipset", "credit", "adjust", "seclim", "purge", "setpaid", "ban", "prizes", "prizeset", "acct", "imp2", "risk", "assignrefs"].includes(a)) {
+  if (["adm", "paystat", "ordstat", "vipset", "credit", "adjust", "seclim", "purge", "setpaid", "ban", "nftsales", "nftfix", "prizes", "prizeset", "acct", "imp2", "risk", "assignrefs"].includes(a)) {
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
     const cred = (uid, id, d) => db.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(str(uid, 64), str(id, 90), now, JSON.stringify({ ...d, at: now }).slice(0, 3000));
     if (a === "adm") {                                     // everything waiting for the owner
@@ -715,6 +715,34 @@ async function d1(request, env) {
       }
       q.push(db.prepare("DELETE FROM meta WHERE k LIKE 'comp:%' OR k LIKE 'vis:%'"));
       await db.batch(q); return json({ ok: true, n: L.length, list: L });
+    }
+    if (a === "nftsales") {                                // owner: recent NFT sales + NFTs held by blocked accounts
+      const since = now - Math.min(90, Math.max(1, int(body.days, 90) || 30)) * 86400000;
+      const [sl, bn, bw, bm] = await db.batch([
+        db.prepare("SELECT s.id, s.nft, s.seller, s.buyer, s.units, s.gets, s.at, n.owner, ls.code AS sc, ls.nick AS sn, lb2.code AS bc, lb2.nick AS bnk, (SELECT 1 FROM ban WHERE uid = s.buyer) AS bb, (SELECT 1 FROM ban WHERE uid = s.seller) AS sb FROM sales s LEFT JOIN nfts n ON n.id = s.nft LEFT JOIN lb ls ON ls.uid = s.seller LEFT JOIN lb lb2 ON lb2.uid = s.buyer WHERE s.at >= ? ORDER BY s.at DESC LIMIT 300").bind(since),
+        db.prepare("SELECT COUNT(*) AS n FROM nfts WHERE owner IN (SELECT uid FROM ban)"),
+        db.prepare("SELECT COUNT(*) AS n FROM wnft WHERE owner IN (SELECT uid FROM ban)"),
+        db.prepare("SELECT COUNT(*) AS n FROM market WHERE status = 'open' AND seller IN (SELECT uid FROM ban)")
+      ]);
+      return json({ ok: true, sales: sl.results || [], banned: { nfts: (bn.results[0] || {}).n || 0, wnft: (bw.results[0] || {}).n || 0, listings: (bm.results[0] || {}).n || 0 } });
+    }
+    if (a === "nftfix") {                                  // owner: give an NFT back to who sold it / take back NFTs from blocked accounts
+      if (body.op === "undo") {
+        const x = await db.prepare("SELECT nft, seller, buyer FROM sales WHERE id = ?").bind(int(body.sale, 1e12)).first(); if (!x) return json({ ok: false, error: "gone" }, 404);
+        const r = await db.batch([db.prepare("UPDATE nfts SET owner = ?, prev = ?, at = ? WHERE id = ? AND owner = ?").bind(x.seller, x.buyer, now, x.nft, x.buyer),
+          db.prepare("UPDATE market SET status = 'cancelled' WHERE nft = ? AND status = 'open' AND seller = ?").bind(x.nft, x.buyer), db.prepare("DELETE FROM meta WHERE k = 'nft'")]);
+        return json({ ok: true, done: (r[0].meta && r[0].meta.changes) || 0 });
+      }
+      if (body.op === "banned") {                            // NFTs of blocked accounts: back to whoever had it before (if not blocked), else free again
+        const r = await db.batch([
+          db.prepare("UPDATE nfts SET owner = prev, prev = owner, at = ? WHERE owner IN (SELECT uid FROM ban) AND prev IS NOT NULL AND prev != '' AND prev NOT IN (SELECT uid FROM ban)").bind(now),
+          db.prepare("UPDATE nfts SET owner = NULL, at = ? WHERE owner IN (SELECT uid FROM ban)").bind(now),
+          db.prepare("DELETE FROM wnft WHERE owner IN (SELECT uid FROM ban)"),
+          db.prepare("UPDATE market SET status = 'cancelled' WHERE status = 'open' AND seller IN (SELECT uid FROM ban)"),
+          db.prepare("DELETE FROM meta WHERE k = 'nft'")]);
+        return json({ ok: true, back: (r[0].meta && r[0].meta.changes) || 0, free: (r[1].meta && r[1].meta.changes) || 0, wnft: (r[2].meta && r[2].meta.changes) || 0, listings: (r[3].meta && r[3].meta.changes) || 0 });
+      }
+      return json({ ok: false, error: "bad" }, 400);
     }
     if (a === "setpaid") {                                 // owner: fix the "total paid" the players see
       const st = (await metaGet(db, "stats")) || { v: {} }, s0 = { ...st.v };
