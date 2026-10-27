@@ -36,13 +36,17 @@ async function fsSet(tok, path, obj) {
   const r = await fetch(FS + path, { method: "PATCH", headers: { "content-type": "application/json", authorization: "Bearer " + tok }, body: JSON.stringify({ fields }) });
   if (!r.ok) throw new Error("firestore " + r.status + " " + (await r.text()).slice(0, 120));
 }
+/* every AdsLab notice is written down, so the owner can see if they arrive and why one failed */
+async function tlog(env, uid, txid, st, reward) { try { if (!env.DB) return; await d1Init(env.DB);
+  await env.DB.prepare("INSERT INTO tlog (at, uid, txid, st, reward) VALUES (?, ?, ?, ?, ?)").bind(Date.now(), str(uid, 64), str(txid, 80), str(st, 120), +reward || 0).run();
+  if (Math.random() < 0.02) await env.DB.prepare("DELETE FROM tlog WHERE at < ?").bind(Date.now() - 30 * 86400000).run(); } catch (e) {} }
 async function tasksPostback(request, env, token) {
-  if (!env.TASKS_TOKEN || token !== env.TASKS_TOKEN) return new Response("forbidden", { status: 403 });
+  if (!env.TASKS_TOKEN || token !== env.TASKS_TOKEN) { await tlog(env, "", "", "clave incorrecta en el link de AdsLab", 0); return new Response("forbidden", { status: 403 }); }
   const q = new URL(request.url).searchParams;
   const uid = (q.get("uid") || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 64);
   const txid = (q.get("txid") || "").replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 80);
   const reward = parseFloat(q.get("reward") || "0") || 0, vcur = parseFloat(q.get("vCurrency") || "0") || 0;
-  if (!uid || !txid) return new Response("missing uid/txid", { status: 400 });
+  if (!uid || !txid) { await tlog(env, uid, txid, "faltan uid o txid", reward); return new Response("missing uid/txid", { status: 400 }); }
   const share = Math.min(1, Math.max(0, parseFloat(env.TASK_SHARE || "0.7") || 0.7));
   const usd = Math.min(reward, 1) * share;                    // safety cap: max $1 per task
   const units = Math.max(0, Math.round(usd * 1e5));            // game units ($0.00001)
@@ -50,8 +54,11 @@ async function tasksPostback(request, env, token) {
   const rec = { type: "task", units, reward, vCurrency: vcur, txid, pid: q.get("pid") || "", ttype: q.get("type") || "", sig: q.get("signature") || "", at: now };
   if (env.DB) {                                               // D1 (does not use the Firebase quota)
     await d1Init(env.DB);
-    await env.DB.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(uid, "task_" + txid, now, JSON.stringify(rec)).run();
-    if (units > 0) await walCredit(env.DB, uid, "task_" + txid, units, now);   // straight into the server wallet
+    const ins = await env.DB.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(uid, "task_" + txid, now, JSON.stringify(rec)).run();
+    let st = ins.meta && ins.meta.changes ? "ok" : "repetida";
+    if (units > 0) { try { await walCredit(env.DB, uid, "task_" + txid, units, now); } catch (e) { st = "guardada, error al sumar saldo: " + String(e && e.message || e).slice(0, 60); } }   // straight into the server wallet
+    else if (st === "ok") st = "ok (premio $0)";
+    await tlog(env, uid, txid, st, reward);
     return new Response("OK");
   }
   const tok = await fbToken(env);
@@ -141,7 +148,8 @@ async function d1Init(db) {
     "CREATE TABLE IF NOT EXISTS wled (uid TEXT, id TEXT, u REAL, at INTEGER, PRIMARY KEY (uid, id))",
     "CREATE TABLE IF NOT EXISTS wstk (uid TEXT, id TEXT, asset TEXT, amt REAL, rew REAL, p INTEGER, start INTEGER, endt INTEGER, PRIMARY KEY (uid, id))",
     "CREATE TABLE IF NOT EXISTS wmig (uid TEXT PRIMARY KEY, bal REAL, stk TEXT)",
-    "CREATE TABLE IF NOT EXISTS ban (uid TEXT PRIMARY KEY, why TEXT, bal REAL, hold TEXT, at INTEGER)",      // blocked players (money kept aside, given back if unblocked)
+    "CREATE TABLE IF NOT EXISTS ban (uid TEXT PRIMARY KEY, why TEXT, bal REAL, hold TEXT, at INTEGER)",
+    "CREATE TABLE IF NOT EXISTS tlog (at INTEGER, uid TEXT, txid TEXT, st TEXT, reward REAL)",      // blocked players (money kept aside, given back if unblocked)
     "CREATE TABLE IF NOT EXISTS newacc (uid TEXT PRIMARY KEY, iph TEXT, at INTEGER)",                      // new accounts by connection (max 3 a day)
     "CREATE INDEX IF NOT EXISTS newacc_iph ON newacc (iph, at)"
   ].map(q => db.prepare(q)));
@@ -642,6 +650,7 @@ async function d1(request, env) {
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
     const cred = (uid, id, d) => db.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(str(uid, 64), str(id, 90), now, JSON.stringify({ ...d, at: now }).slice(0, 3000));
     if (a === "adm") {                                     // everything waiting for the owner
+      const tg = await db.prepare("SELECT at, uid, st, reward FROM tlog ORDER BY at DESC, rowid DESC LIMIT 8").all();
       const [p, o, v, tk, tl] = await db.batch([
         db.prepare("SELECT uid, date, at, d FROM pays WHERE st = 'pending' ORDER BY at LIMIT 300"),
         db.prepare("SELECT uid, id, at, d FROM ords WHERE st = 'pending' ORDER BY at LIMIT 300"),
@@ -653,7 +662,7 @@ async function d1(request, env) {
       await namesFor(db, [...(p.results || []), ...(o.results || []), ...(v.results || []), ...(tl.results || [])].map(x => x.uid), snap);
       return json({ ok: true, pays: (p.results || []).map(x => ({ ...J(x.d), uid: x.uid, id: x.date, date: x.date, status: "pending", src: "d1" })),
         ords: (o.results || []).map(x => ({ ...J(x.d), uid: x.uid, id: x.id, status: "pending", src: "d1" })),
-        vreq: (v.results || []).map(x => ({ ...J(x.d), uid: x.uid, status: "pending", src: "d1" })), names: snap.names, tasks: (tk.results || [])[0] || {}, tlist: (tl.results || []).map(x => ({ ...J(x.d), uid: x.uid, at: x.at })), imp3: !!(await metaGet(db, "imp3")), imp2: !!(await metaGet(db, "imp2")) });
+        vreq: (v.results || []).map(x => ({ ...J(x.d), uid: x.uid, status: "pending", src: "d1" })), names: snap.names, tasks: (tk.results || [])[0] || {}, tlist: (tl.results || []).map(x => ({ ...J(x.d), uid: x.uid, at: x.at })), tlog: tg.results || [], imp3: !!(await metaGet(db, "imp3")), imp2: !!(await metaGet(db, "imp2")) });
     }
     if (a === "assignrefs") {                              // owner: "buy referrals" order -> give N recent players with no referrer
       const buyer = str(body.buyer, 64), n = int(body.n, 500), my = await db.prepare("SELECT by FROM refs WHERE uid = ?").bind(buyer).first();
