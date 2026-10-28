@@ -2789,9 +2789,10 @@ function nftSVG(n,cls=""){
 let MY_NFTS=[], MARKET=[], NFT_TAKEN=0, marketLoaded=false;
 /* ---- NFT market in Cloudflare D1 (once the owner's copy is done; until then the old Firebase way) ---- */
 let NFT_SNAP=null, NFT_SNAP_AT=0, NFT_IMP=0;
-async function nftSnap(force){ if(D1_OK===false) return null; if(!force&&NFT_SNAP&&Date.now()-NFT_SNAP_AT<60000) return NFT_SNAP;
+async function nftSnap(force){ if(D1_OK===false) return null; if(!force&&NFT_SNAP&&Date.now()-NFT_SNAP_AT<5*60000) return NFT_SNAP;
   try{ const d=await d1Get("nft"); NFT_SNAP=d; NFT_SNAP_AT=Date.now(); if(!d.imp&&OWNER) nftImport(); return d; }catch(e){ return NFT_SNAP; } }
-const nftD1=async()=>{ const d=await nftSnap(); return !!(d&&d.imp); };
+let NFT_IMP_OK=false;
+const nftD1=async()=>{ if(NFT_IMP_OK) return true; const d=await nftSnap(); NFT_IMP_OK=!!(d&&d.imp); return NFT_IMP_OK; };   /* once the market is on Cloudflare it stays there: no need to ask again */
 function creditSold(list){ if((list||[]).length) setTimeout(()=>{ try{ wCall(); }catch(e){} },300); for(const x of list||[]){ const g=+x.gets||0; if(!g) continue; incAdd(g);   /* the server already paid it into the wallet */ toast(fmt(t("soldToast"),{n:String(x.nft).padStart(3,"0")}),"gem"); }
   if((list||[]).length){ save(); renderPay(); } }
 async function nftImport(){   /* owner, once: copy NFT owners, open listings, unpaid sales and world NFTs from Firebase */
@@ -3192,7 +3193,7 @@ async function wSpend(u,why){ u=Math.round(u); if(!(u>0)) return false;
   catch(e){ toast(S.lang==="es"?"Sin conexión con el servidor. Intenta de nuevo.":"No connection to the server. Try again."); return false; } }
 async function wOp(op){ try{ const d=await wCall(op); if(d.op&&d.op.error){ toast(d.op.error==="min"?t("mkErr"):noBalTxt()); return null; } return d.op||{}; }
   catch(e){ toast(S.lang==="es"?"Sin conexión con el servidor. Intenta de nuevo.":"No connection to the server. Try again."); return null; } }
-setInterval(()=>{ try{ if(!document.hidden&&UID&&isReg()) wFlush(); }catch(e){} },4*60000);
+setInterval(()=>{ try{ if(!document.hidden&&UID&&isReg()) wFlush(); }catch(e){} },10*60000);   /* ads are sent every 8 claims anyway */
 document.addEventListener("visibilitychange",()=>{ try{ if(document.hidden&&(S.wq||[]).length&&UID) wFlush(); }catch(e){} });
 /* purchases / credits now live in Cloudflare D1; Firebase is only the backup if D1 can't be reached */
 async function saveOrder(id,ord){ try{ await d1Post("order",{ord:{...ord,id}}); return true; }catch(e){}
@@ -3201,8 +3202,8 @@ async function fbCredit(uid,id,d){ await DB.doc("credits/"+uid).set({updatedAt:D
 async function giveCredit(uid,id,d){ try{ await d1Post("credit",{uid,id,d}); return; }catch(e){} await fbCredit(uid,id,d); }
 async function d1Push(force){   /* weekly ads + profile + "online"; at most every 2.5 min (all the ads of that time go together) */
   if(!(UID&&isReg())||D1_OK===false) return; const w=wkAds(), now=Date.now();
-  if(!force&&w.ads===D1P.ads&&now-D1P.at<170000) return;
-  if(!force&&now-D1P.at<150000){ if(!D1P.tm) D1P.tm=setTimeout(()=>{ D1P.tm=null; d1Push(); },150000-(now-D1P.at)); return; }
+  if(!force&&w.ads===D1P.ads&&now-D1P.at<590000) return;
+  if(!force&&now-D1P.at<300000){ if(!D1P.tm) D1P.tm=setTimeout(()=>{ D1P.tm=null; d1Push(); },300000-(now-D1P.at)); return; }
   clearTimeout(D1P.tm); D1P.tm=null;
   const prof={nick:myNick().slice(0,20),code:myCode(),hero:curHero(),vip:vipTier(),coin:S.payCoin||""}, sig=JSON.stringify(prof);
   const stUsd=(S.stakes||[]).filter(s=>(s.asset||"USD")==="USD").reduce((a,s)=>a+s.amt+s.rew,0);
@@ -3217,7 +3218,7 @@ async function pushLb(force){
   const stUsd=(S.stakes||[]).filter(s=>(s.asset||"USD")==="USD").reduce((a,s)=>a+s.amt+s.rew,0);
   try{ await DB.doc("lbads/"+UID).set({week:w.week,ads:w.ads,nick:myNick().slice(0,20),code:myCode(),hero:curHero(),at:Date.now(),bal:Math.round(S.bal||0),staked:Math.round(stUsd),dmt:S.dmtPre||0,day:bogota().key,td:S.doneDate===bogota().key?(S.done||0):0,stk:(S.stakes||[]).filter(x=>(x.end||0)>Date.now()).slice(0,20).map(x=>({a:x.asset||"USD",amt:x.amt,rew:x.rew||0,end:x.end})),seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier(),fx:S.feeEx||0,fxn:S.feeExN||0,fm:S.feeMk||0,fmn:S.feeMkN||0,dev:DEV}); }catch(e){}
 }
-function countAd(){ claimMark(); const before=lvlInfo().L; wkAds().ads++; S.claims=(S.claims||0)+1; save(); pushLb(); renderLevel(); const v=lvlInfo(); if(v.L>before) setTimeout(()=>toast(fmt(t("levelUp"),{n:v.L,p:v.pct}),"trophy"),900); }
+function countAd(){ claimMark(); const before=lvlInfo().L; wkAds().ads++; S.claims=(S.claims||0)+1; save(); pushLb(); renderLevel(); try{ if($("#v-comp").classList.contains("on")) renderComp(); }catch(e){} const v=lvlInfo(); if(v.L>before) setTimeout(()=>toast(fmt(t("levelUp"),{n:v.L,p:v.pct}),"trophy"),900); }
 /* ---- Firestore read savers: the free plan allows 50,000 reads/day, so big lists are cached on the phone ---- */
 const cacheGet=(k,ttl)=>{ try{ const v=JSON.parse(localStorage.getItem("dc-"+k)||"null"); if(v&&Date.now()-v.at<ttl) return v.d; }catch(e){} return null; };
 /* Firestore keeps retrying when the daily limit is hit, so we stop waiting after a few seconds */
@@ -3297,7 +3298,9 @@ function renderComp(){
   if(!(DB&&UID)){ box.innerHTML=html+`<div class="empty">${t("compOffline")}</div>`; return; }
   if(COMP.err||COMP.stale){ const es=S.lang==="es", mine=compBoard==="ads"?(wkAds().ads||0):(REF_COUNT||0);
     html+=`<div class="panel" style="text-align:center;border:1px solid rgba(253,224,71,.4)"><b>⏳ ${es?"El ranking se está actualizando":"The ranking is updating"}</b><p class="hint" style="margin:6px 0 0">${es?`Tranquilo: ${compBoard==="ads"?"tus anuncios":"tus referidos"} se siguen contando. Llevas <b>${mine}</b> ${compBoard==="ads"?"anuncios esta semana":"referidos"}. La tabla vuelve en unas horas.`:`Don't worry: your ${compBoard==="ads"?"ads":"referrals"} keep counting. You have <b>${mine}</b> so far. The table will be back in a few hours.`}</p></div>`; }
-  const list=compBoard==="ads"?COMP.ads:vb?(COMP.vis||[]):COMP.refs, unit=compBoard==="ads"?t("adsW"):vb?(S.lang==="es"?"visitas":"visits"):t("refsW");
+  let list=compBoard==="ads"?COMP.ads:vb?(COMP.vis||[]):COMP.refs; const unit=compBoard==="ads"?t("adsW"):vb?(S.lang==="es"?"visitas":"visits"):t("refsW");
+  if(compBoard==="ads"&&UID){ const mine=wkAds().ads||0, cur=list.find(r=>r.uid===UID);   /* my own ads show up right away (the server copy is refreshed every few minutes) */
+    if(mine>0&&(!cur||mine>cur.n)){ list=[...list.filter(r=>r.uid!==UID),{uid:UID,n:mine}].sort((a,b)=>b.n-a.n); } }
   const myIdx=list.findIndex(r=>r.uid===UID);
   html+=`<div class="seg three"><button class="${compBoard==="ads"?"on":""}" data-b="ads">${ic("ad",24)}<span>${t("boardAds")}</span></button><button class="${compBoard==="refs"?"on":""}" data-b="refs">${ic("heroes",24)}<span>${t("boardRefs")}</span></button><button class="${vb?"on":""}" data-b="vis">${VIS_IC(26)}<span>${S.lang==="es"?"Visitas · mes":"Visits · month"}</span></button></div>`;
   html+=`<div class="panel lb">${!COMP.loaded?`<p class="hint">${t("mkLoading")}</p>`:list.length?list.slice(0,10).map((r,i)=>{const hsrc=heroImg(COMP.heroes[r.uid]||"princess");
@@ -3452,7 +3455,7 @@ const LEVELS=[[0,0],[100,.05],[500,.25],[1000,.5],[1500,1],[2000,1.5],[5000,2.5]
 function lvlInfo(){ const c=S.claims||0; let L=0; LEVELS.forEach(([th],i)=>{ if(c>=th) L=i; }); const nx=LEVELS[L+1]; return {L,pct:LEVELS[L][1],claims:c,next:nx?nx[0]:null,nextPct:nx?nx[1]:null,from:LEVELS[L][0]}; }
 const lvlPct=()=>lvlInfo().pct;
 /* level backup in Cloudflare: if this phone shows fewer faucet claims than the server has, put them back */
-async function lvlRestore(){ try{ if(!(UID&&isReg())) return; const r=await d1Post("mylvl",{}); const n=Math.floor(+(r&&r.cl)||0);
+async function lvlRestore(){ try{ if(!(UID&&isReg())) return; if(Date.now()-(S.lvlChk||0)<20*3600000&&(S.claims||0)>0) return; S.lvlChk=Date.now(); const r=await d1Post("mylvl",{}); const n=Math.floor(+(r&&r.cl)||0);
   if(n>(S.claims||0)){ const before=lvlInfo().L; S.claims=n; save(); renderLevel(); const v=lvlInfo(); if(v.L>before) toast(fmt(t("levelUp"),{n:v.L,p:v.pct}),"trophy"); }
   else if((S.claims||0)>n) d1Push(true); }catch(e){} }
 function renderLevel(){
@@ -4498,7 +4501,7 @@ const startDB=(async()=>{
     if(!window.claude||!window.claude.use){ loadMarket(); return; }
     const [db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")]);
     if(!db||!user){ loadMarket(); return; }
-    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; lvlRestore(); setTimeout(()=>{ try{ wCall().catch(()=>{}); }catch(e){} },1200);   /* real balance from the server wallet */ try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); window.__OWNER=!!OWNER; if(OWNER){ try{ renderVip(); renderText(); }catch(e){} } loadCfg(); loadAds(); setTimeout(beat,4000); setTimeout(inboxCheck,7000); setInterval(()=>{ if(!document.hidden) inboxCheck(); },10*60000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },10*60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
+    DB=db; UID=await user.id(); renderAcc(); if(await cloudLoad()) return; lvlRestore(); setTimeout(()=>{ try{ wCall().catch(()=>{}); }catch(e){} },1200);   /* real balance from the server wallet */ try{ const cu=FA()&&FA().currentUser; if(cu&&!cu.isAnonymous&&!cu.emailVerified){ await cu.reload(); if(FA().currentUser.emailVerified) await FA().currentUser.getIdToken(true); } }catch(e){} OWNER=await user.isOwner(); window.__OWNER=!!OWNER; if(OWNER){ try{ renderVip(); renderText(); }catch(e){} } loadCfg(); loadAds(); setTimeout(beat,4000); setTimeout(inboxCheck,7000); setInterval(()=>{ if(!document.hidden) inboxCheck(); },20*60000); setInterval(()=>{ if(!document.hidden){ loadAds(); } },30*60000); if(OWNER){ $("#adminBtn").hidden=false; $("#adminBtn").onclick=()=>goView("admin"); }
     let fullStarted=false;
     const startFull=async()=>{ if(fullStarted||!UID||!isReg()) return; fullStarted=true;
       for(const p of (S.payouts||[]).filter(p=>!p.synced)){
@@ -4508,7 +4511,7 @@ const startDB=(async()=>{
             await DB.doc(`payouts/${UID}`).collection("requests").doc(p.date).set(body); p.synced=true;}catch(e){break;}
       }
       save(); renderPay(); refreshPayouts();
-      if(S.welcomePending&&!S.welcomeNft) setTimeout(welcomeGift,2200); loadMarket(); loadVip(); collectSales(); collectCredits(); pushLb().then(async()=>{ if(S.pendingRef&&!S.refBy) await applyRefCode(S.pendingRef,true); loadComp(); }); loadRefBy(); collectRef(); loadProofs(); setInterval(()=>{ if(!document.hidden){ loadComp(); loadProofs(); } },10*60000); setInterval(()=>{ if(!document.hidden){ collectSales(); collectCredits(); collectRef(); } },120000);
+      if(S.welcomePending&&!S.welcomeNft) setTimeout(welcomeGift,2200); loadMarket(); loadVip(); collectSales(); collectCredits(); pushLb().then(async()=>{ if(S.pendingRef&&!S.refBy) await applyRefCode(S.pendingRef,true); loadComp(); }); loadRefBy(); collectRef(); loadProofs(); setInterval(()=>{ if(!document.hidden){ loadComp(); loadProofs(); } },20*60000); setInterval(()=>{ if(!document.hidden){ collectSales(); collectCredits(); collectRef(); } },10*60000);
     };
     window.__startFull=startFull;
     if(UID&&isReg()) startFull(); else if(UID){ loadProofs(); }   /* not registered yet: only the payment proofs (1 read); the rest starts when they register */
@@ -4627,7 +4630,7 @@ window.addEventListener("click",e=>{
 },true);
 
 /* ---------- Live players + external banners ---------- */
-const LIVE_MS=240000;   // players send a heartbeat every 3 min
+const LIVE_MS=720000;   // players send a heartbeat every 10 min
 async function beat(){ if(!(DB&&UID)||document.hidden||!isReg()) return; if(D1_OK!==false){ d1Push(); return; } try{ await DB.doc("lbads/"+UID).set({seen:Date.now(),coinNow:S.payCoin||"",vipNow:vipTier()},{merge:true}); }catch(e){} }
 async function liveCount(){
   if(!(DB&&OWNER)) return; const v=$("#v-admin"); if(!v||!v.classList.contains("on")||document.hidden) return;
@@ -4638,7 +4641,7 @@ async function liveCount(){
     $("#liveCoins").textContent=(Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,n])=>k+" "+n).join(" · "))+(vip?` · VIP ${vip}`:"");
   }catch(e){ $("#liveN").textContent="?"; }
 }
-setInterval(beat,180000); setInterval(liveCount,60000);
+setInterval(beat,600000); setInterval(liveCount,60000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ beat(); liveCount(); } });
 const DIRECT_TAG="<!--direct-->";
 const isDirect=c=>!/a-ads\.com|aads\.com|data-aa=/i.test(c||"")&&(/^\s*<!--direct-->/.test(c||"")||/ytrgt\(/.test(c||""));   // header-bidding banners need the real page (not a frame) to get bids
@@ -4671,7 +4674,7 @@ function openTasks(){
   modal.addEventListener("close",()=>{ document.getElementById("modal").classList.remove("wide"); clearInterval(taskPoll); },{once:true});
   clearInterval(taskPoll); taskPoll=setInterval(()=>{ try{ collectCredits(true); }catch(e){} },45000);
 }
-setInterval(()=>{ try{ if(!document.hidden) collectCredits(); }catch(e){} },300000);
+setInterval(()=>{ try{ if(!document.hidden) collectCredits(); }catch(e){} },15*60000);
 
 
 /* ===== Referral panel: % by VIP, my referrals, buy referrals ===== */

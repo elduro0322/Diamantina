@@ -56,6 +56,7 @@ async function tasksPostback(request, env, token) {
     await d1Init(env.DB);
     const ins = await env.DB.prepare("INSERT OR IGNORE INTO creds (uid, id, at, d) VALUES (?, ?, ?, ?)").bind(uid, "task_" + txid, now, JSON.stringify(rec)).run();
     let st = ins.meta && ins.meta.changes ? "ok" : "repetida";
+    if (st === "ok") await env.DB.prepare("DELETE FROM meta WHERE k = 'taskstat'").run();   // new task: the panel summary is counted again
     if (units > 0) { try { await walCredit(env.DB, uid, "task_" + txid, units, now); } catch (e) { st = "guardada, error al sumar saldo: " + String(e && e.message || e).slice(0, 60); } }   // straight into the server wallet
     else if (st === "ok") st = "ok (premio $0)";
     await tlog(env, uid, txid, st, reward);
@@ -149,7 +150,9 @@ async function d1Init(db) {
     "CREATE TABLE IF NOT EXISTS wstk (uid TEXT, id TEXT, asset TEXT, amt REAL, rew REAL, p INTEGER, start INTEGER, endt INTEGER, PRIMARY KEY (uid, id))",
     "CREATE TABLE IF NOT EXISTS wmig (uid TEXT PRIMARY KEY, bal REAL, stk TEXT)",
     "CREATE TABLE IF NOT EXISTS ban (uid TEXT PRIMARY KEY, why TEXT, bal REAL, hold TEXT, at INTEGER)",
-    "CREATE TABLE IF NOT EXISTS tlog (at INTEGER, uid TEXT, txid TEXT, st TEXT, reward REAL)",      // blocked players (money kept aside, given back if unblocked)
+    "CREATE TABLE IF NOT EXISTS tlog (at INTEGER, uid TEXT, txid TEXT, st TEXT, reward REAL)",
+    "CREATE INDEX IF NOT EXISTS tlog_at ON tlog (at)",
+    "CREATE INDEX IF NOT EXISTS lb_seen ON lb (seen)",      // blocked players (money kept aside, given back if unblocked)
     "CREATE TABLE IF NOT EXISTS newacc (uid TEXT PRIMARY KEY, iph TEXT, at INTEGER)",                      // new accounts by connection (max 3 a day)
     "CREATE INDEX IF NOT EXISTS newacc_iph ON newacc (iph, at)"
   ].map(q => db.prepare(q)));
@@ -170,7 +173,7 @@ async function namesFor(db, uids, snap) {
 /* monthly board (most visits): added up at most every 15 min, so it stays cheap even with thousands of visits */
 async function visBoard(db, mo) {
   const key = "vis:" + mo, old = await metaGet(db, key), cur = mo === today(Date.now()).slice(0, 7);
-  if (old && (Date.now() - old.at < 15 * 60000 || (!cur && old.v.final))) return old.v.list;
+  if (old && (Date.now() - old.at < 60 * 60000 || (!cur && old.v.final))) return old.v.list;   // monthly visits board: rebuilt at most once an hour
   const [y, m] = mo.split("-").map(Number), next = m === 12 ? (y + 1) + "-01" : y + "-" + String(m + 1).padStart(2, "0");
   const v = await db.prepare("SELECT uid, SUM(n) AS n FROM visits WHERE day >= ? AND day < ? AND uid NOT IN (SELECT uid FROM ban) GROUP BY uid ORDER BY n DESC LIMIT 150").bind(mo + "-01", next + "-01").all();
   const list = (v.results || []).filter(x => x.n > 0).map(x => ({ uid: x.uid, n: x.n }));
@@ -196,7 +199,7 @@ const NFT_FEE = 5, NFT_MAX = 600;   // 500 silver-chest NFTs + 100 of the new co
 const dropNft = db => db.prepare("DELETE FROM meta WHERE k = 'nft'");
 async function nftSnap(db) {
   const old = await metaGet(db, "nft");
-  if (old && Date.now() - old.at < 60000) return { ...old.v, at: old.at };
+  if (old && Date.now() - old.at < 15 * 60000) return { ...old.v, at: old.at };   // every NFT change clears this copy, so it can live 15 min
   const [own, mk, w, fee, imp] = await db.batch([
     db.prepare("SELECT id, trades FROM nfts WHERE owner IS NOT NULL AND owner != ''"),
     db.prepare("SELECT nft, seller, units, promo AS promotedUntil, at FROM market WHERE status = 'open'"),
@@ -476,14 +479,14 @@ async function d1(request, env) {
     const key = "comp:" + week + ":" + fs + ":" + mo, old = await metaGet(db, key), cur = week === weekKey() && (!mo || mo === today(Date.now()).slice(0, 7));
     const moEnd = mo ? Date.parse((mo.slice(5) === "12" ? (+mo.slice(0, 4) + 1) + "-01" : mo.slice(0, 5) + String(+mo.slice(5) + 1).padStart(2, "0")) + "-01") + BOG : 0;
     const fin = Math.max(Date.parse(week) + 7 * 86400000 + BOG, fe, moEnd) + 600000;   // a past week/month is final 10 min after it ends
-    if (old && (cur ? Date.now() - old.at < 120000 : old.at > fin)) return json({ ok: true, ...old.v, at: old.at, imp: !!(await metaGet(db, "imported")) });
+    if (old && (cur ? Date.now() - old.at < 600000 : old.at > fin)) return json({ ok: true, ...old.v, at: old.at, imp: !!(await metaGet(db, "imported")) });
     const snap = await buildComp(db, week, fs, fe, mo);
     await metaSet(db, key, snap).run();
     return json({ ok: true, ...snap, at: Date.now(), imp: !!(await metaGet(db, "imported")) });
   }
   if (a === "proofs") {
     const old = await metaGet(db, "proofs");
-    if (old && Date.now() - old.at < 10 * 60000) return json({ ok: true, ...old.v, at: old.at });
+    if (old && Date.now() - old.at < 30 * 60000) return json({ ok: true, ...old.v, at: old.at });   // a new payment clears it right away
     const cut = Date.now() - 30 * 86400000;
     const p = await db.prepare("SELECT at, coin, method, usd, amt, who, code FROM proofs WHERE at >= ? ORDER BY at DESC LIMIT 40").bind(cut).all();
     const st = await metaGet(db, "stats"), n = await db.prepare("SELECT COUNT(*) AS n FROM lb").first();
@@ -522,8 +525,9 @@ async function d1(request, env) {
       .bind(me.uid, int(body.x.bal, 1e12), int(body.x.staked, 1e12), Math.max(0, Math.min(1e12, Math.round((+body.x.dmt || 0) * 100) / 100)), str(body.x.dev, 40), JSON.stringify(Array.isArray(body.x.stk) ? body.x.stk.slice(0, 20) : []).slice(0, 4000), now,
         Math.max(0, Math.min(1e6, +body.x.fx || 0)), int(body.x.fxn, 1e9), int(body.x.fm, 1e12), int(body.x.fmn, 1e9)));
     if (body.x && body.x.cl > 0) q.push(db.prepare("INSERT INTO lbc (uid, cl, at) VALUES (?, ?, ?) ON CONFLICT(uid) DO UPDATE SET cl = MAX(lbc.cl, excluded.cl), at = excluded.at").bind(me.uid, int(body.x.cl, 1e7), now));
-    q.push(db.prepare("SELECT COALESCE(SUM(n - paid), 0) AS v FROM visits WHERE uid = ? AND n > paid").bind(me.uid));
-    q.push(db.prepare("UPDATE visits SET paid = n WHERE uid = ? AND n > paid").bind(me.uid));
+    const d7 = today(now - 7 * 86400000);
+    q.push(db.prepare("SELECT COALESCE(SUM(n - paid), 0) AS v FROM visits WHERE uid = ? AND day >= ? AND n > paid").bind(me.uid, d7));
+    q.push(db.prepare("UPDATE visits SET paid = n WHERE uid = ? AND day >= ? AND n > paid").bind(me.uid, d7));
     const res = await db.batch(q), vr = res[res.length - 2], vis = ((vr.results || [])[0] || {}).v || 0;
     if (vis > 0) await walCredit(db, me.uid, "vis-" + now, vis, now);    // paid visits go straight into the wallet
     return json({ ok: true, vis });
@@ -655,9 +659,15 @@ async function d1(request, env) {
         db.prepare("SELECT uid, date, at, d FROM pays WHERE st = 'pending' ORDER BY at LIMIT 300"),
         db.prepare("SELECT uid, id, at, d FROM ords WHERE st = 'pending' ORDER BY at LIMIT 300"),
         db.prepare("SELECT uid, at, d FROM vreq WHERE st = 'pending' ORDER BY at LIMIT 100"),
-        db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(json_extract(d, '$.units')), 0) AS u, COALESCE(SUM(json_extract(d, '$.reward')), 0) AS r, COALESCE(SUM(CASE WHEN at > ? THEN 1 ELSE 0 END), 0) AS today FROM creds WHERE id LIKE 'task_%'").bind(now - 86400000),
-        db.prepare("SELECT uid, at, d FROM creds WHERE id LIKE 'task_%' ORDER BY at DESC LIMIT 15")
+        db.prepare("SELECT 0 AS n"), db.prepare("SELECT 0 AS n")
       ]);
+      let tsm = await metaGet(db, "taskstat");                // the tasks summary reads the whole credits table: at most once every 10 min
+      if (!tsm || now - tsm.at > 600000) {
+        const [a1, a2] = await db.batch([db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(json_extract(d, '$.units')), 0) AS u, COALESCE(SUM(json_extract(d, '$.reward')), 0) AS r, COALESCE(SUM(CASE WHEN at > ? THEN 1 ELSE 0 END), 0) AS today FROM creds WHERE id LIKE 'task_%'").bind(now - 86400000),
+          db.prepare("SELECT uid, at, d FROM creds WHERE id LIKE 'task_%' ORDER BY at DESC LIMIT 15")]);
+        tsm = { v: { s: (a1.results || [])[0] || {}, l: a2.results || [] } }; await metaSet(db, "taskstat", tsm.v).run();
+      }
+      tk.results = [tsm.v.s]; tl.results = tsm.v.l;
       const snap = { names: {}, heroes: {}, vips: {} };
       await namesFor(db, [...(p.results || []), ...(o.results || []), ...(v.results || []), ...(tl.results || [])].map(x => x.uid), snap);
       return json({ ok: true, pays: (p.results || []).map(x => ({ ...J(x.d), uid: x.uid, id: x.date, date: x.date, status: "pending", src: "d1" })),
@@ -939,7 +949,7 @@ async function d1(request, env) {
   }
   if (a === "live") {                                      // owner: players online now
     if (!me.owner) return json({ ok: false, error: "owner" }, 403);
-    const r = await db.prepare("SELECT coin, vip FROM lb WHERE seen > ?").bind(now - 240000).all();
+    const r = await db.prepare("SELECT coin, vip FROM lb WHERE seen > ?").bind(now - 720000).all();
     return json({ ok: true, list: r.results || [] });
   }
   if (a === "proof") {                                     // owner marks a payout as paid
